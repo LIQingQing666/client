@@ -1,0 +1,44 @@
+# IDE
+*.iml
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Flutter / Dart
+**/doc/api/
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+build/
+*.log
+
+# Android
+android/app/debug
+android/app/profile
+android/app/release
+android/.gradle
+android/local.properties
+android/key.properties
+
+# iOS
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+
+# Node.js
+node_modules/
+dist/
+.env
+.env.local
+
+# Database
+*.db
+*.db-shm
+*.db-wal

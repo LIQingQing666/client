@@ -1,0 +1,58 @@
+name: mobile
+description: "移动端直播/短视频带货App"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # 视频播放
+  video_player: ^2.9.0
+  chewie: ^1.8.0
+
+  # 状态管理
+  flutter_riverpod: ^2.6.0
+
+  # 路由
+  go_router: ^14.0.0
+
+  # 图片缓存
+  cached_network_image: ^3.4.0
+
+  # 网络请求
+  dio: ^5.7.0
+
+  # WebSocket
+  socket_io_client: ^2.0.0
+
+  # 本地存储
+  shared_preferences: ^2.3.0
+  hive: ^2.2.0
+  hive_flutter: ^1.1.0
+
+  # 工具
+  json_annotation: ^4.9.0
+  intl: ^0.19.0
+
+  # 分享
+  share_plus: ^10.0.0
+
+  # 图片选择
+  image_picker: ^1.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^5.0.0
+  build_runner: ^2.4.0
+  json_serializable: ^6.8.0
+
+flutter:
+  uses-material-design: true
