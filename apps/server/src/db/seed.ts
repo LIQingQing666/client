@@ -45,17 +45,12 @@ function seed() {
   const db = getDb();
   initDb();
 
-  // Clean existing data
-  db.exec('DELETE FROM user_likes');
-  db.exec('DELETE FROM user_coupons');
-  db.exec('DELETE FROM comments');
-  db.exec('DELETE FROM follows');
-  db.exec('DELETE FROM orders');
-  db.exec('DELETE FROM cart_items');
-  db.exec('DELETE FROM products');
-  db.exec('DELETE FROM videos');
-  db.exec('DELETE FROM coupons');
-  db.exec('DELETE FROM users');
+  // Only seed when database is empty (idempotent)
+  const userCount = (db.prepare('SELECT COUNT(*) as cnt FROM users').get() as { cnt: number }).cnt;
+  if (userCount > 0) {
+    console.log(`Database already has ${userCount} users, skipping seed.`);
+    return;
+  }
 
   // ---- Users ----
   const defaultHash = hashPassword('123456');

@@ -9,6 +9,7 @@ import '../../models/product_model.dart';
 import '../../models/video_model.dart';
 import '../../provider/cart_provider.dart';
 import '../../provider/feed_provider.dart';
+import '../../provider/favorite_provider.dart';
 import '../../provider/follow_provider.dart';
 import '../../provider/service_providers.dart';
 import '../../utils/toast.dart';
@@ -74,6 +75,17 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
                 Navigator.of(context).pop();
               }
             : null,
+        onFavorite: () {
+          ref.read(favoriteProvider.notifier).toggleProductFavorite(
+            id: product.id,
+            name: product.name,
+            coverUrl: product.coverUrl,
+            price: product.price,
+            videoId: product.videoId,
+            highlightTime: product.highlightTime,
+          );
+        },
+        isFavorited: ref.read(favoriteProvider).isFavorited(product.id),
         onRefreshAi: () async {
           final api = ProductApi(client: ref.read(dioClientProvider));
           try {
@@ -108,6 +120,17 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
                       Navigator.of(context).pop();
                     }
                   : null,
+              onFavorite: () {
+                ref.read(favoriteProvider.notifier).toggleProductFavorite(
+                  id: product.id,
+                  name: product.name,
+                  coverUrl: product.coverUrl,
+                  price: product.price,
+                  videoId: product.videoId,
+                  highlightTime: product.highlightTime,
+                );
+              },
+              isFavorited: ref.read(favoriteProvider).isFavorited(product.id),
             );
           } on Exception {
             showToast('AI 卖点生成失败，请重试');
@@ -131,6 +154,65 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
     Share.share('${video.title}\n\n一起来看精彩视频！');
   }
 
+  void _onAuthorTap(VideoModel video) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(AppDimens.paddingLg),
+        decoration: const BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(AppDimens.radiusXl)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Center(
+              child: Container(
+                width: 36, height: 4,
+                margin: const EdgeInsets.only(bottom: AppDimens.paddingLg),
+                decoration: BoxDecoration(color: AppColors.textHint, borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            CircleAvatar(
+              radius: 36,
+              backgroundColor: AppColors.card,
+              child: Text(
+                video.authorName.isNotEmpty ? video.authorName[0].toUpperCase() : '?',
+                style: const TextStyle(fontSize: 28, color: Colors.white),
+              ),
+            ),
+            const SizedBox(height: AppDimens.paddingMd),
+            Text(video.authorName, style: AppTextStyles.titleLarge),
+            const SizedBox(height: AppDimens.paddingXs),
+            Text('ID: ${video.authorId}', style: AppTextStyles.bodySmall),
+            const SizedBox(height: AppDimens.paddingLg),
+            SizedBox(
+              width: 120,
+              child: ElevatedButton(
+                onPressed: () {
+                  _onFollowTap(video.authorId);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: ref.read(followProvider).followingIds.contains(video.authorId)
+                      ? AppColors.card
+                      : AppColors.primary,
+                  foregroundColor: ref.read(followProvider).followingIds.contains(video.authorId)
+                      ? AppColors.textSecondary
+                      : Colors.white,
+                ),
+                child: Text(
+                  ref.read(followProvider).followingIds.contains(video.authorId) ? '已关注' : '关注',
+                ),
+              ),
+            ),
+            const SizedBox(height: AppDimens.paddingLg),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final feedState = ref.watch(feedProvider);
@@ -138,6 +220,8 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
     final pool = ref.read(playerPoolProvider);
     final followState = ref.watch(followProvider);
     final tabIndex = ref.watch(currentTabIndexProvider);
+    final isMuted = ref.watch(muteStateProvider);
+    final favoriteState = ref.watch(favoriteProvider);
     final isTabActive = tabIndex == 0;
     final currentTab = feedState.tab;
 
@@ -220,6 +304,7 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
                 video: video,
                 pool: pool,
                 isActive: isActive,
+                isMuted: isMuted,
                 onLike: () => notifier.toggleLike(video.id),
                 onProductTap: () => _onProductTap(video),
                 onShare: () => _onShare(video),
@@ -228,6 +313,17 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
                   videoId: video.id,
                 ),
                 onFollow: () => _onFollowTap(video.authorId),
+                onMuteToggle: () => ref.read(muteStateProvider.notifier).state = !isMuted,
+                onAuthorTap: () => _onAuthorTap(video),
+                onFavorite: () {
+                  ref.read(favoriteProvider.notifier).toggleVideoFavorite(
+                    id: video.id,
+                    title: video.title,
+                    coverUrl: video.coverUrl,
+                    authorName: video.authorName,
+                  );
+                },
+                isFavorited: favoriteState.isFavorited(video.id),
                 isFollowing: isFollowing,
                 seekTrigger: _seekTrigger,
               );

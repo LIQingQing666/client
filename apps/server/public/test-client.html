@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>直播间测试客户端</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#0a0a0a; color:#fff; font-family:'Microsoft YaHei',sans-serif; display:flex; height:100vh; }
+.video-area { flex:1; background:#1a1a2e; position:relative; overflow:hidden; display:flex; align-items:center; justify-content:center; }
+.video-placeholder { text-align:center; color:#666; }
+.video-placeholder h2 { font-size:24px; margin-bottom:8px; }
+.danmaku-area { position:absolute; top:0; left:0; right:0; bottom:0; pointer-events:none; overflow:hidden; }
+.danmaku-item { position:absolute; white-space:nowrap; font-size:14px; padding:4px 10px; border-radius:12px; animation:fly linear forwards; }
+.danmaku-user { background:rgba(0,0,0,0.7); color:#fff; }
+.danmaku-system { background:rgba(255,107,53,0.8); color:#fff; font-weight:bold; }
+@keyframes fly { 0% { transform:translateX(100vw); } 100% { transform:translateX(-100%); } }
+.sidebar { width:320px; background:#12121a; display:flex; flex-direction:column; border-left:1px solid #2a2a3a; }
+.sidebar-header { padding:16px; border-bottom:1px solid #2a2a3a; display:flex; align-items:center; gap:12px; }
+.avatar { width:40px; height:40px; border-radius:50%; background:#333; display:flex; align-items:center; justify-content:center; font-size:18px; }
+.online-badge { background:#ff4757; color:#fff; padding:2px 8px; border-radius:10px; font-size:12px; margin-left:auto; }
+.product-card { margin:12px; padding:12px; background:#1e1e2e; border:1px solid #ff6b35; border-radius:8px; display:none; }
+.product-card.show { display:flex; gap:12px; align-items:center; }
+.product-card img { width:60px; height:60px; border-radius:6px; object-fit:cover; background:#333; }
+.product-info { flex:1; }
+.product-info .label { font-size:11px; color:#ff6b35; margin-bottom:4px; }
+.product-info .name { font-size:14px; font-weight:600; }
+.product-info .price { font-size:16px; color:#ff6b35; margin-top:4px; }
+.messages { flex:1; overflow-y:auto; padding:12px; }
+.message { margin-bottom:6px; font-size:13px; line-height:1.5; }
+.message .nick { color:#ff6b35; font-weight:600; }
+.message.system { color:#ffa502; text-align:center; font-size:12px; }
+.message-input { padding:12px; border-top:1px solid #2a2a3a; display:flex; gap:8px; }
+.message-input input { flex:1; background:#1e1e2e; border:1px solid #333; color:#fff; padding:8px 12px; border-radius:6px; outline:none; }
+.message-input button { background:#ff6b35; color:#fff; border:none; padding:8px 16px; border-radius:6px; cursor:pointer; font-weight:600; }
+.controls { padding:12px; border-top:1px solid #2a2a3a; display:flex; flex-wrap:wrap; gap:8px; }
+.controls button { background:#2a2a3a; color:#ccc; border:1px solid #444; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:12px; }
+.controls button:hover { background:#3a3a4a; }
+.controls input { width:100%; background:#1e1e2e; border:1px solid #333; color:#fff; padding:6px 10px; border-radius:4px; font-size:12px; }
+.status { padding:8px 16px; font-size:11px; color:#888; }
+.status.connected { color:#2ed573; }
+</style>
+</head>
+<body>
+
+<div class="video-area">
+  <div class="video-placeholder">
+    <h2>直播画面区域</h2>
+    <p>视频播放器占位</p>
+  </div>
+  <div class="danmaku-area" id="danmakuArea"></div>
+</div>
+
+<div class="sidebar">
+  <div class="sidebar-header">
+    <div class="avatar">主</div>
+    <div>
+      <div style="font-weight:600;">主播直播间</div>
+      <div style="font-size:12px;color:#888;" id="roomIdDisplay">-</div>
+    </div>
+    <div class="online-badge" id="onlineBadge">0 在线</div>
+  </div>
+
+  <div class="status" id="status">连接中...</div>
+
+  <div class="product-card" id="productCard">
+    <img id="productImg" src="" alt="">
+    <div class="product-info">
+      <div class="label">主播正在讲解</div>
+      <div class="name" id="productName">-</div>
+      <div class="price" id="productPrice">-</div>
+    </div>
+  </div>
+
+  <div class="messages" id="messages"></div>
+
+  <div class="message-input">
+    <input type="text" id="msgInput" placeholder="发送消息...">
+    <button id="sendBtn">发送</button>
+  </div>
+
+  <div class="controls">
+    <label style="font-size:11px;color:#888;width:100%;">讲解商品切换 (输入 product_id)</label>
+    <input type="text" id="productIdInput" placeholder="商品ID..." style="flex:1;">
+    <button id="switchProductBtn">切换</button>
+  </div>
+</div>
+
+<script>
+// Auto-fetch latest room list from API, then connect to the first room
+let ROOM = '';
+const USER_ID = 'web-' + Math.random().toString(36).slice(2,8);
+const USER_NAME = '浏览器用户' + Math.floor(Math.random()*1000);
+let socket = null;
+
+async function init() {
+  try {
+    const res = await fetch('/api/live/rooms');
+    const json = await res.json();
+    const rooms = json.data.list;
+    if (rooms.length > 0) {
+      ROOM = rooms[0].id;
+      document.getElementById('roomIdDisplay').textContent = rooms[0].title;
+    } else {
+      document.getElementById('roomIdDisplay').textContent = '无可用直播间';
+      document.getElementById('status').textContent = '无可用直播间';
+      return;
+    }
+  } catch (e) {
+    document.getElementById('status').textContent = '获取房间列表失败: ' + e.message;
+    return;
+  }
+
+  // Connect via Socket.IO
+  socket = io({ transports: ['websocket', 'polling'] });
+
+socket.on('connect', () => {
+  document.getElementById('status').textContent = '已连接 | ID: ' + USER_NAME;
+  document.getElementById('status').className = 'status connected';
+  socket.emit('join', { room: ROOM });
+});
+
+socket.on('connect_error', (err) => {
+  document.getElementById('status').textContent = '连接失败: ' + err.message;
+  document.getElementById('status').className = 'status';
+  console.error('Socket.IO connect_error:', err);
+});
+
+socket.on('disconnect', (reason) => {
+  document.getElementById('status').textContent = '已断开: ' + reason;
+  document.getElementById('status').className = 'status';
+});
+
+socket.on('online_count', (data) => {
+  document.getElementById('onlineBadge').textContent = data.count + ' 在线';
+});
+
+socket.on('room_state', (data) => {
+  document.getElementById('onlineBadge').textContent = (data.online_count || 0) + ' 在线';
+});
+
+socket.on('danmaku', (data) => {
+  const type = data.type || 'user';
+  addDanmaku(data.user_name || '匿名', data.content, type);
+  addMessage(data.user_name || '匿名', data.content, type);
+});
+
+socket.on('explaining_product', (data) => {
+  const p = data.product || {};
+  updateProduct(p);
+});
+
+function sendMsg() {
+    if (!socket) return;
+    const input = document.getElementById('msgInput');
+    const content = input.value.trim();
+    if (!content) return;
+    socket.emit('send_message', { room: ROOM, user_id: USER_ID, content: content });
+    addMessage(USER_NAME, content, 'user');
+    addDanmaku(USER_NAME, content, 'user');
+    input.value = '';
+  }
+
+  function switchProduct() {
+    if (!socket) return;
+    const pid = document.getElementById('productIdInput').value.trim();
+    if (!pid) return alert('请输入商品ID');
+    socket.emit('set_explaining_product', { room: ROOM, product_id: pid });
+  }
+
+  // Wire up button event listeners
+  document.getElementById('sendBtn').addEventListener('click', sendMsg);
+  document.getElementById('switchProductBtn').addEventListener('click', switchProduct);
+  document.getElementById('msgInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') sendMsg();
+  });
+} // end init()
+
+function addDanmaku(name, text, type) {
+  const el = document.createElement('div');
+  el.className = 'danmaku-item ' + (type === 'system' ? 'danmaku-system' : 'danmaku-user');
+  el.textContent = type === 'system' ? text : (name + ': ' + text);
+  el.style.top = (20 + Math.random() * 60) + '%';
+  el.style.animationDuration = (4 + Math.random() * 3) + 's';
+  document.getElementById('danmakuArea').appendChild(el);
+  setTimeout(() => el.remove(), 8000);
+}
+
+function addMessage(name, text, type) {
+  const el = document.createElement('div');
+  el.className = 'message ' + (type === 'system' ? 'system' : '');
+  el.innerHTML = type === 'system' ? text : '<span class="nick">' + name + '</span> ' + text;
+  const container = document.getElementById('messages');
+  container.appendChild(el);
+  container.scrollTop = container.scrollHeight;
+}
+
+function updateProduct(p) {
+  const card = document.getElementById('productCard');
+  card.className = 'product-card show';
+  document.getElementById('productName').textContent = p.name || p.title || '';
+  document.getElementById('productPrice').textContent = '¥' + (p.price || 0);
+  if (p.cover_url || p.image) {
+    document.getElementById('productImg').src = p.cover_url || p.image || '';
+  }
+}
+
+init();
+</script>
+</body>
+</html>

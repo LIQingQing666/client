@@ -34,7 +34,7 @@ final class MinePage extends ConsumerWidget {
             avatar: user.avatar,
           ),
           const SizedBox(height: AppDimens.paddingXl),
-          _buildMenuSection(context, isLoggedIn: isLoggedIn),
+          _buildMenuSection(context, isLoggedIn: isLoggedIn, role: role),
         ],
       ),
     );
@@ -95,7 +95,7 @@ final class MinePage extends ConsumerWidget {
     );
   }
 
-  Widget _buildMenuSection(BuildContext context, {required bool isLoggedIn}) {
+  Widget _buildMenuSection(BuildContext context, {required bool isLoggedIn, required String? role}) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: AppDimens.paddingLg),
       clipBehavior: Clip.antiAlias,
@@ -114,6 +114,14 @@ final class MinePage extends ConsumerWidget {
                 title: '我的关注',
                 subtitle: '查看关注的主播和用户',
                 onTap: () => context.pushNamed('following'),
+              ),
+              _buildDivider(),
+              _buildMenuItem(
+                context,
+                icon: Icons.bookmark_outline,
+                title: '我的收藏',
+                subtitle: '收藏的视频和商品',
+                onTap: () => context.pushNamed('favorites'),
               ),
               _buildDivider(),
               _buildMenuItem(

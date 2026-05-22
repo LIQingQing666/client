@@ -17,6 +17,7 @@ import '../pages/live/live_room_page.dart';
 import '../pages/message/message_detail_page.dart';
 import '../pages/message/message_page.dart';
 import '../pages/mine/edit_profile_page.dart';
+import '../pages/mine/favorites_page.dart';
 import '../pages/mine/following_page.dart';
 import '../pages/mine/mine_page.dart';
 import '../pages/mine/settings_page.dart';
@@ -167,6 +168,11 @@ final class AppRouter {
         builder: (context, state) => MessageDetailPage(
           messageId: state.pathParameters['id']!,
         ),
+      ),
+      GoRoute(
+        path: '/favorites',
+        name: 'favorites',
+        builder: (context, state) => const FavoritesPage(),
       ),
       GoRoute(
         path: '/following',

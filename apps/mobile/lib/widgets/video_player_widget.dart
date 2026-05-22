@@ -15,11 +15,16 @@ final class VideoPlayerWidget extends StatefulWidget {
     required this.video,
     required this.pool,
     this.isActive = false,
+    this.isMuted = false,
     this.onLike,
     this.onMessage,
     this.onShare,
     this.onProductTap,
     this.onFollow,
+    this.onMuteToggle,
+    this.onAuthorTap,
+    this.onFavorite,
+    this.isFavorited = false,
     this.isFollowing = false,
     this.seekTrigger,
   });
@@ -27,11 +32,16 @@ final class VideoPlayerWidget extends StatefulWidget {
   final VideoModel video;
   final PlayerPool pool;
   final bool isActive;
+  final bool isMuted;
   final VoidCallback? onLike;
   final VoidCallback? onMessage;
   final VoidCallback? onShare;
   final VoidCallback? onProductTap;
   final VoidCallback? onFollow;
+  final VoidCallback? onMuteToggle;
+  final VoidCallback? onAuthorTap;
+  final VoidCallback? onFavorite;
+  final bool isFavorited;
   final bool isFollowing;
   final ValueNotifier<int>? seekTrigger;
 
@@ -76,6 +86,9 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
       _releasePlayer();
       _initPlayer();
     }
+    if (widget.isMuted != oldWidget.isMuted) {
+      _applyMuteState();
+    }
     _syncPlayState();
   }
 
@@ -91,6 +104,7 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
       }
 
       _controller = controller;
+      _applyMuteState();
       controller.addListener(_onControllerUpdate);
 
       if (controller.value.isInitialized) {
@@ -153,6 +167,7 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
         return;
       }
       _controller!.play();
+      _applyMuteState();
     } else {
       _controller?.pause();
       _releasePlayer(dispose: true);
@@ -162,6 +177,12 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
         });
         _fadeController.value = 0;
       }
+    }
+  }
+
+  void _applyMuteState() {
+    if (_controller != null && _isInitialized) {
+      _controller!.setVolume(widget.isMuted ? 0.0 : 1.0);
     }
   }
 
@@ -220,6 +241,7 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
           _VideoInfoSection(
             video: widget.video,
             onFollow: widget.onFollow,
+            onAuthorTap: widget.onAuthorTap,
             isFollowing: widget.isFollowing,
           ),
 
@@ -230,7 +252,10 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
             onMessage: widget.onMessage,
             onShare: widget.onShare,
             onProductTap: widget.onProductTap,
-            onMusicTap: () => showToast('音乐详情'),
+            onMuteToggle: widget.onMuteToggle,
+            isMuted: widget.isMuted,
+            onFavorite: widget.onFavorite,
+            isFavorited: widget.isFavorited,
           ),
 
           // Progress bar
@@ -299,10 +324,11 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
 }
 
 final class _VideoInfoSection extends StatelessWidget {
-  const _VideoInfoSection({required this.video, this.onFollow, this.isFollowing = false});
+  const _VideoInfoSection({required this.video, this.onFollow, this.onAuthorTap, this.isFollowing = false});
 
   final VideoModel video;
   final VoidCallback? onFollow;
+  final VoidCallback? onAuthorTap;
   final bool isFollowing;
 
   @override
@@ -317,14 +343,17 @@ final class _VideoInfoSection extends StatelessWidget {
         children: [
           Row(
             children: [
-              CircleAvatar(
-                radius: 18,
-                backgroundColor: AppColors.card,
-                child: Text(
-                  video.authorName.isNotEmpty
-                      ? video.authorName[0]
-                      : '?',
-                  style: AppTextStyles.bodySmall,
+              GestureDetector(
+                onTap: onAuthorTap,
+                child: CircleAvatar(
+                  radius: 18,
+                  backgroundColor: AppColors.card,
+                  child: Text(
+                    video.authorName.isNotEmpty
+                        ? video.authorName[0]
+                        : '?',
+                    style: AppTextStyles.bodySmall,
+                  ),
                 ),
               ),
               const SizedBox(width: AppDimens.paddingSm),
@@ -398,7 +427,10 @@ final class _VideoActionBar extends StatelessWidget {
     this.onMessage,
     this.onShare,
     this.onProductTap,
-    this.onMusicTap,
+    this.onMuteToggle,
+    this.onFavorite,
+    this.isMuted = false,
+    this.isFavorited = false,
   });
 
   final VideoModel video;
@@ -406,7 +438,10 @@ final class _VideoActionBar extends StatelessWidget {
   final VoidCallback? onMessage;
   final VoidCallback? onShare;
   final VoidCallback? onProductTap;
-  final VoidCallback? onMusicTap;
+  final VoidCallback? onMuteToggle;
+  final VoidCallback? onFavorite;
+  final bool isMuted;
+  final bool isFavorited;
 
   @override
   Widget build(BuildContext context) {
@@ -416,6 +451,13 @@ final class _VideoActionBar extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          _ActionButton(
+            icon: isMuted ? Icons.volume_off : Icons.volume_up,
+            iconColor: isMuted ? AppColors.textHint : null,
+            label: isMuted ? '已静音' : '音量',
+            onTap: onMuteToggle,
+          ),
+          const SizedBox(height: AppDimens.paddingLg),
           _ActionButton(
             icon: video.isLiked ? Icons.favorite : Icons.favorite_border,
             iconColor: video.isLiked ? AppColors.primary : null,
@@ -441,13 +483,10 @@ final class _VideoActionBar extends StatelessWidget {
             onTap: onProductTap,
           ),
           const SizedBox(height: AppDimens.paddingLg),
-          GestureDetector(
-            onTap: onMusicTap,
-            child: const CircleAvatar(
-              radius: 22,
-              backgroundColor: AppColors.card,
-              child: Icon(Icons.music_note, color: AppColors.primary, size: 24),
-            ),
+          _ActionButton(
+            icon: isFavorited ? Icons.bookmark : Icons.bookmark_border,
+            label: isFavorited ? '已收藏' : '收藏',
+            onTap: onFavorite,
           ),
         ],
       ),

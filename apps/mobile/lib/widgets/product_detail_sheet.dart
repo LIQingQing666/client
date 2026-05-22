@@ -12,6 +12,8 @@ final class ProductDetailSheet extends StatefulWidget {
     this.onBuyNow,
     this.onRefreshAi,
     this.onSeekToTime,
+    this.onFavorite,
+    this.isFavorited = false,
   });
 
   final ProductModel product;
@@ -19,6 +21,8 @@ final class ProductDetailSheet extends StatefulWidget {
   final VoidCallback? onBuyNow;
   final VoidCallback? onRefreshAi;
   final VoidCallback? onSeekToTime;
+  final VoidCallback? onFavorite;
+  final bool isFavorited;
 
   @override
   State<ProductDetailSheet> createState() => _ProductDetailSheetState();
@@ -159,9 +163,21 @@ final class _ProductDetailSheetState extends State<ProductDetailSheet> {
                       style: AppTextStyles.titleMedium,
                     ),
                     const SizedBox(height: AppDimens.paddingXs),
-                    Text(
-                      '已售 ${product.sales}件',
-                      style: AppTextStyles.bodyMedium,
+                    Row(
+                      children: [
+                        Text(
+                          '已售 ${product.sales}件',
+                          style: AppTextStyles.bodyMedium,
+                        ),
+                        const SizedBox(width: AppDimens.paddingMd),
+                        Text(
+                          product.stock > 0 ? '库存 ${product.stock}件' : '已售罄',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: product.stock > 0 ? AppColors.textSecondary : AppColors.primary,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -371,6 +387,8 @@ final class _ProductDetailSheetState extends State<ProductDetailSheet> {
         _BottomActionBar(
           onAddToCart: widget.onAddToCart,
           onBuyNow: widget.onBuyNow,
+          onFavorite: widget.onFavorite,
+          isFavorited: widget.isFavorited,
           price: product.price,
           bottomInset: bottomInset,
         ),
@@ -396,12 +414,16 @@ final class _BottomActionBar extends StatelessWidget {
   const _BottomActionBar({
     this.onAddToCart,
     this.onBuyNow,
+    this.onFavorite,
+    this.isFavorited = false,
     required this.price,
     required this.bottomInset,
   });
 
   final VoidCallback? onAddToCart;
   final VoidCallback? onBuyNow;
+  final VoidCallback? onFavorite;
+  final bool isFavorited;
   final double price;
   final double bottomInset;
 
@@ -420,6 +442,19 @@ final class _BottomActionBar extends StatelessWidget {
       ),
       child: Row(
         children: [
+          GestureDetector(
+            onTap: onFavorite,
+            behavior: HitTestBehavior.opaque,
+            child: Padding(
+              padding: const EdgeInsets.all(AppDimens.paddingSm),
+              child: Icon(
+                isFavorited ? Icons.bookmark : Icons.bookmark_border,
+                color: isFavorited ? AppColors.primary : AppColors.textSecondary,
+                size: 28,
+              ),
+            ),
+          ),
+          const SizedBox(width: AppDimens.paddingSm),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -505,6 +540,8 @@ Future<void> showProductDetailSheet({
   required VoidCallback onBuyNow,
   VoidCallback? onRefreshAi,
   VoidCallback? onSeekToTime,
+  VoidCallback? onFavorite,
+  bool isFavorited = false,
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -516,6 +553,8 @@ Future<void> showProductDetailSheet({
       onBuyNow: onBuyNow,
       onRefreshAi: onRefreshAi,
       onSeekToTime: onSeekToTime,
+      onFavorite: onFavorite,
+      isFavorited: isFavorited,
     ),
   );
 }

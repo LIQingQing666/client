@@ -142,9 +142,31 @@ final class OrderNotifier extends StateNotifier<OrderState> {
         address: address,
         couponId: couponId,
       );
+      // Insert new order into local list
+      final newOrder = OrderModel(
+        id: result.id,
+        userId: _userId,
+        totalAmount: result.totalAmount,
+        discountAmount: result.discountAmount,
+        payAmount: result.payAmount,
+        status: result.status,
+        address: address ?? const OrderAddress(),
+        items: items
+            .map((item) => OrderItem(
+                  productId: item.productId,
+                  productName: item.productName,
+                  productCover: item.productCover,
+                  productPrice: item.productPrice,
+                  spec: item.spec,
+                  quantity: item.quantity,
+                  subtotal: item.productPrice * item.quantity,
+                ))
+            .toList(),
+        createdAt: DateTime.now().toIso8601String(),
+      );
+      state = state.copyWith(orders: [newOrder, ...state.orders]);
       return result;
-    }
-    on Exception {
+    } on Exception {
       showToast('下单失败，请重试');
       return null;
     }
@@ -153,14 +175,34 @@ final class OrderNotifier extends StateNotifier<OrderState> {
   Future<String?> payOrder(String orderId) async {
     try {
       final status = await api.payOrder(orderId);
-      // Refresh list
-      await loadOrders(status: state.activeStatus);
+      // Update local order status
+      final updated = state.orders.map((o) {
+        if (o.id != orderId) return o;
+        return OrderModel(
+          id: o.id,
+          userId: o.userId,
+          totalAmount: o.totalAmount,
+          discountAmount: o.discountAmount,
+          payAmount: o.payAmount,
+          status: status,
+          address: o.address,
+          items: o.items,
+          createdAt: o.createdAt,
+        );
+      }).toList();
+      state = state.copyWith(orders: updated);
       return status;
-    }
-    on Exception {
+    } on Exception {
       showToast('支付失败，请重试');
       return null;
     }
+  }
+
+  void deleteOrder(String orderId) {
+    state = state.copyWith(
+      orders: state.orders.where((o) => o.id != orderId).toList(),
+    );
+    showToast('订单已删除');
   }
 }
 

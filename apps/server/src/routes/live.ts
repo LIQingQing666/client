@@ -1,5 +1,6 @@
 import { FastifyInstance, FastifyRequest } from 'fastify';
 import { getDb } from '../db/schema.js';
+import { getIO } from '../websocket/live.js';
 
 export async function liveRoutes(app: FastifyInstance) {
   // GET /api/live/rooms - 直播间列表
@@ -67,6 +68,33 @@ export async function liveRoutes(app: FastifyInstance) {
           end_time: c.end_time,
         })),
       },
+    };
+  });
+
+  // PUT /api/live/rooms/:roomId/explaining_product - 切换当前讲解商品（Admin/主播触发）
+  app.put('/api/live/rooms/:roomId/explaining_product', async (req, res) => {
+    const { roomId } = req.params as { roomId: string };
+    const { product_id } = req.body as { product_id: string };
+    const db = getDb();
+
+    const product = db.prepare(
+      'SELECT id, name, cover_url, price, original_price, sales, ai_sales_point FROM products WHERE id = ?'
+    ).get(product_id) as Record<string, unknown> | undefined;
+
+    if (!product) {
+      return res.status(404).send({ code: 404, message: '商品不存在' });
+    }
+
+    // Broadcast to all clients in the room via Socket.IO
+    getIO().to(roomId).emit('explaining_product', {
+      product,
+      timestamp: new Date().toISOString(),
+    });
+
+    return {
+      code: 0,
+      data: { room_id: roomId, product_id, product_name: product.name },
+      message: '讲解商品已切换',
     };
   });
 

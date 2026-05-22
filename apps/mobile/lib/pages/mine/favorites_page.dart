@@ -1,0 +1,236 @@
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../core/app_constants.dart';
+import '../../models/product_model.dart';
+import '../../provider/cart_provider.dart';
+import '../../provider/favorite_provider.dart';
+import '../../widgets/product_detail_sheet.dart';
+
+final class FavoritesPage extends ConsumerStatefulWidget {
+  const FavoritesPage({super.key});
+
+  @override
+  ConsumerState<FavoritesPage> createState() => _FavoritesPageState();
+}
+
+final class _FavoritesPageState extends ConsumerState<FavoritesPage>
+    with SingleTickerProviderStateMixin {
+  late final _tabController = TabController(length: 2, vsync: this);
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(favoriteProvider);
+    final videos = state.videos;
+    final products = state.products;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('我的收藏'),
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: AppColors.primary,
+          labelColor: AppColors.primary,
+          unselectedLabelColor: AppColors.textHint,
+          tabs: [
+            Tab(text: '视频 (${videos.length})'),
+            Tab(text: '商品 (${products.length})'),
+          ],
+        ),
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _buildVideoList(videos),
+          _buildProductList(products),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVideoList(List<FavoriteItem> videos) {
+    if (videos.isEmpty) {
+      return const Center(
+        child: Text('暂无收藏视频', style: AppTextStyles.bodyMedium),
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: AppDimens.paddingSm),
+      itemCount: videos.length,
+      itemBuilder: (context, index) {
+        final item = videos[index];
+        return _FavoriteVideoTile(
+          item: item,
+          onTap: () => context.pushNamed('playVideo', pathParameters: {'videoId': item.id}),
+          onRemove: () => ref.read(favoriteProvider.notifier).removeFavorite(item.id),
+        );
+      },
+    );
+  }
+
+  Widget _buildProductList(List<FavoriteItem> products) {
+    if (products.isEmpty) {
+      return const Center(
+        child: Text('暂无收藏商品', style: AppTextStyles.bodyMedium),
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: AppDimens.paddingSm),
+      itemCount: products.length,
+      itemBuilder: (context, index) {
+        final item = products[index];
+        return _FavoriteProductTile(
+          item: item,
+          onTap: () {
+            final raw = item.rawData;
+            final product = ProductModel(
+              id: item.id,
+              name: item.title,
+              description: '',
+              coverUrl: item.coverUrl,
+              images: [item.coverUrl],
+              price: double.tryParse(item.subtitle.replaceFirst('¥', '')) ?? 0,
+              originalPrice: 0,
+              stock: 0,
+              sales: 0,
+              category: '',
+              tags: [],
+              specs: [],
+              videoId: (raw['video_id'] as String?) ?? '',
+              aiSalesPoint: '',
+              highlightTime: (raw['highlight_time'] as num?)?.toInt() ?? 0,
+            );
+            showProductDetailSheet(
+              context: context,
+              product: product,
+              onAddToCart: () {
+                ref.read(cartProvider.notifier).addToCart(productId: product.id);
+              },
+              onBuyNow: () {
+                ref.read(cartProvider.notifier).addToCart(productId: product.id);
+                context.pushNamed('orderConfirm', queryParameters: <String, String>{
+                  'total': product.price.toString(), 'count': '1',
+                });
+              },
+              onFavorite: () {
+                ref.read(favoriteProvider.notifier).toggleProductFavorite(
+                  id: product.id,
+                  name: product.name,
+                  coverUrl: product.coverUrl,
+                  price: product.price,
+                );
+              },
+              isFavorited: true,
+            );
+          },
+          onRemove: () => ref.read(favoriteProvider.notifier).removeFavorite(item.id),
+        );
+      },
+    );
+  }
+}
+
+final class _FavoriteVideoTile extends StatelessWidget {
+  const _FavoriteVideoTile({required this.item, this.onTap, this.onRemove});
+
+  final FavoriteItem item;
+  final VoidCallback? onTap;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(
+        horizontal: AppDimens.paddingLg,
+        vertical: AppDimens.paddingXs,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+      ),
+      child: ListTile(
+        onTap: onTap,
+        leading: ClipRRect(
+          borderRadius: BorderRadius.circular(AppDimens.radiusSm),
+          child: CachedNetworkImage(
+            imageUrl: item.coverUrl,
+            width: 56,
+            height: 72,
+            fit: BoxFit.cover,
+            placeholder: (_, __) => Container(
+              width: 56, height: 72, color: AppColors.surface,
+            ),
+            errorWidget: (_, __, ___) => Container(
+              width: 56, height: 72, color: AppColors.surface,
+            ),
+          ),
+        ),
+        title: Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis,
+            style: AppTextStyles.bodyLarge),
+        subtitle: Text(item.subtitle, style: AppTextStyles.bodySmall),
+        trailing: IconButton(
+          icon: const Icon(Icons.bookmark, color: AppColors.primary),
+          onPressed: onRemove,
+          tooltip: '取消收藏',
+        ),
+      ),
+    );
+  }
+}
+
+final class _FavoriteProductTile extends StatelessWidget {
+  const _FavoriteProductTile({required this.item, this.onTap, this.onRemove});
+
+  final FavoriteItem item;
+  final VoidCallback? onTap;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(
+        horizontal: AppDimens.paddingLg,
+        vertical: AppDimens.paddingXs,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+      ),
+      child: ListTile(
+        onTap: onTap,
+        leading: ClipRRect(
+          borderRadius: BorderRadius.circular(AppDimens.radiusSm),
+          child: CachedNetworkImage(
+            imageUrl: item.coverUrl,
+            width: 56,
+            height: 56,
+            fit: BoxFit.cover,
+            placeholder: (_, __) => Container(
+              width: 56, height: 56, color: AppColors.surface,
+            ),
+            errorWidget: (_, __, ___) => Container(
+              width: 56, height: 56, color: AppColors.surface,
+            ),
+          ),
+        ),
+        title: Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: AppTextStyles.bodyLarge),
+        subtitle: Text(item.subtitle,
+            style: const TextStyle(fontSize: 14, color: AppColors.primary, fontWeight: FontWeight.w600)),
+        trailing: IconButton(
+          icon: const Icon(Icons.bookmark, color: AppColors.primary),
+          onPressed: onRemove,
+          tooltip: '取消收藏',
+        ),
+      ),
+    );
+  }
+}

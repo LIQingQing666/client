@@ -44,6 +44,7 @@ final class _LivePageState extends ConsumerState<LivePage> {
       final api = LiveApi(client: ref.read(dioClientProvider));
       final rooms = await api.getRooms();
       if (!mounted) return;
+      ref.read(roomListProvider.notifier).state = rooms;
       setState(() {
         _rooms = rooms;
         _isLoading = false;
