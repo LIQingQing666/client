@@ -23,6 +23,7 @@ import '../pages/mine/settings_page.dart';
 import '../pages/order/order_confirm_page.dart';
 import '../pages/order/order_detail_page.dart';
 import '../pages/order/order_page.dart';
+import '../pages/order/payment_detail_page.dart';
 import '../pages/order/payment_result_page.dart';
 import '../pages/search/search_page.dart';
 import '../provider/auth_provider.dart';
@@ -121,6 +122,14 @@ final class AppRouter {
         name: 'liveRoom',
         builder: (context, state) => LiveRoomPage(
           roomId: state.pathParameters['roomId']!,
+        ),
+      ),
+      GoRoute(
+        path: '/payment/detail/:orderId',
+        name: 'paymentDetail',
+        builder: (context, state) => PaymentDetailPage(
+          orderId: state.pathParameters['orderId']!,
+          amount: double.parse(state.uri.queryParameters['amount'] ?? '0'),
         ),
       ),
       GoRoute(

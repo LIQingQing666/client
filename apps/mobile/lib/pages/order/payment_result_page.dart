@@ -99,12 +99,15 @@ final class _PaymentResultPageState extends ConsumerState<PaymentResultPage> {
 
   Widget _buildResult() {
     final isSuccess = _payStatus == 'paid';
+    final isTimeout = _payStatus == 'timeout';
     final icon = isSuccess ? Icons.check_circle : Icons.error_outline;
     final iconColor = isSuccess ? AppColors.success : AppColors.error;
-    final title = isSuccess ? '支付成功' : '支付失败';
+    final title = isSuccess ? '支付成功' : (isTimeout ? '支付超时' : '支付失败');
     final subtitle = isSuccess
         ? '订单已提交，我们将尽快为您发货'
-        : '支付未完成，您可以重新支付';
+        : (isTimeout
+            ? '支付超时，订单已自动取消，请重新下单'
+            : '支付未完成，您可以重新支付');
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -128,7 +131,7 @@ final class _PaymentResultPageState extends ConsumerState<PaymentResultPage> {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            if (!isSuccess)
+            if (!isSuccess && !isTimeout)
               OutlinedButton(
                 onPressed: _doPay,
                 style: OutlinedButton.styleFrom(
@@ -141,11 +144,25 @@ final class _PaymentResultPageState extends ConsumerState<PaymentResultPage> {
                 ),
                 child: const Text('重新支付'),
               ),
-            if (!isSuccess) const SizedBox(width: AppDimens.paddingLg),
+            if (!isSuccess && !isTimeout) const SizedBox(width: AppDimens.paddingLg),
+            if (isTimeout)
+              OutlinedButton(
+                onPressed: () => context.goNamed('cart'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: const BorderSide(color: AppColors.divider),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 32,
+                    vertical: AppDimens.paddingMd,
+                  ),
+                ),
+                child: const Text('返回购物车'),
+              ),
+            if (isTimeout) const SizedBox(width: AppDimens.paddingLg),
             ElevatedButton(
               onPressed: () => context.goNamed('order'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: isSuccess ? AppColors.primary : AppColors.card,
+                backgroundColor: (isSuccess || isTimeout) ? AppColors.primary : AppColors.card,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 32,
                   vertical: AppDimens.paddingMd,
