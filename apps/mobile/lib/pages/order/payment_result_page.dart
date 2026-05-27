@@ -45,7 +45,7 @@ final class _PaymentResultPageState extends ConsumerState<PaymentResultPage> {
       return;
     }
 
-    final status = await ref.read(orderProvider.notifier).payOrder(widget.orderId);
+    final result = await ref.read(orderProvider.notifier).payOrder(widget.orderId);
 
     if (!mounted) {
       return;
@@ -53,7 +53,7 @@ final class _PaymentResultPageState extends ConsumerState<PaymentResultPage> {
 
     setState(() {
       _isPaying = false;
-      _payStatus = status;
+      _payStatus = result?['status'] as String?;
     });
   }
 

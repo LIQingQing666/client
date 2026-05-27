@@ -153,8 +153,8 @@ export async function orderRoutes(app: FastifyInstance) {
     };
   });
 
-  // POST /api/orders/:id/pay - 模拟支付
-  app.post('/api/orders/:id/pay', async (req: FastifyRequest<{ Params: { id: string } }>) => {
+  // POST /api/orders/:id/pay - 模拟支付（支持微信、支付宝、抖币）
+  app.post('/api/orders/:id/pay', async (req: FastifyRequest<{ Params: { id: string }; Body: { payment_method?: string } }>) => {
     const db = getDb();
     const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id) as Record<string, unknown> | undefined;
 
@@ -165,12 +165,44 @@ export async function orderRoutes(app: FastifyInstance) {
       return { code: 422, message: '订单状态不允许支付' };
     }
 
+    const paymentMethod = req.body?.payment_method || 'wechat';
+    const payAmount = order.pay_amount as number;
+
+    // 抖币支付处理
+    if (paymentMethod === 'coin') {
+      const user = db.prepare('SELECT id, coin_balance FROM users WHERE id = ?').get(order.user_id as string) as { id: string; coin_balance: number } | undefined;
+      if (!user) {
+        return { code: 404, message: '用户不存在' };
+      }
+      // coin_balance 单位是抖币（1:1对应人民币），需足够支付
+      if (user.coin_balance < payAmount) {
+        return { code: 422, message: '抖币余额不足', data: { balance: user.coin_balance, need: payAmount } };
+      }
+      // 扣减余额
+      db.prepare('UPDATE users SET coin_balance = coin_balance - ?, updated_at = datetime(\'now\') WHERE id = ?').run(payAmount, order.user_id as string);
+    }
+
     // Simulate payment: 90% success
     const success = Math.random() > 0.1;
     const status = success ? 'paid' : 'payment_failed';
 
     db.prepare('UPDATE orders SET status = ?, updated_at = datetime(\'now\') WHERE id = ?').run(status, req.params.id);
 
-    return { code: 0, data: { status, message: success ? '支付成功' : '支付失败，请重试' } };
+    // 如果支付失败且是抖币支付，退还扣减的余额
+    if (!success && paymentMethod === 'coin') {
+      db.prepare('UPDATE users SET coin_balance = coin_balance + ?, updated_at = datetime(\'now\') WHERE id = ?').run(payAmount, order.user_id as string);
+    }
+
+    // 获取更新后的余额
+    const updatedUser = db.prepare('SELECT coin_balance FROM users WHERE id = ?').get(order.user_id as string) as { coin_balance: number };
+
+    return {
+      code: 0,
+      data: {
+        status,
+        message: success ? '支付成功' : '支付失败，请重试',
+        new_balance: updatedUser.coin_balance,
+      },
+    };
   });
 }

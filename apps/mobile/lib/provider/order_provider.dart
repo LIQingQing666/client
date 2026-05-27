@@ -150,12 +150,12 @@ final class OrderNotifier extends StateNotifier<OrderState> {
     }
   }
 
-  Future<String?> payOrder(String orderId) async {
+  Future<Map<String, dynamic>?> payOrder(String orderId, {String paymentMethod = 'wechat'}) async {
     try {
-      final status = await api.payOrder(orderId);
+      final result = await api.payOrder(orderId, paymentMethod: paymentMethod);
       // Refresh list
       await loadOrders(status: state.activeStatus);
-      return status;
+      return result;
     }
     on Exception {
       showToast('支付失败，请重试');

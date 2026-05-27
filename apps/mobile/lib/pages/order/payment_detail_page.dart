@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/app_constants.dart';
 import '../../models/order_model.dart';
 import '../../provider/order_provider.dart';
+import '../../provider/user_provider.dart';
 
 final class PaymentDetailPage extends ConsumerStatefulWidget {
   const PaymentDetailPage({
@@ -22,11 +23,11 @@ final class PaymentDetailPage extends ConsumerStatefulWidget {
 }
 
 final class _PaymentDetailPageState extends ConsumerState<PaymentDetailPage> {
-  int _countdownSeconds = 180; // 3 minutes
+  int _countdownSeconds = 180;
   bool _isPaying = false;
   OrderModel? _order;
   bool _isLoadingOrder = true;
-  String _selectedPayment = 'wechat'; // 'wechat' or 'alipay'
+  String _selectedPayment = 'wechat';
 
   @override
   void initState() {
@@ -85,24 +86,135 @@ final class _PaymentDetailPageState extends ConsumerState<PaymentDetailPage> {
 
   Future<void> _doPay() async {
     if (_isPaying) return;
+
+    // 如果是抖币支付，先检查余额
+    if (_selectedPayment == 'coin') {
+      final userState = ref.read(userProvider);
+      if (userState.coinBalance < widget.amount) {
+        _showInsufficientBalanceDialog();
+        return;
+      }
+    }
+
     setState(() => _isPaying = true);
 
-    final status = await ref.read(orderProvider.notifier).payOrder(widget.orderId);
-
-    if (!mounted) return;
-
-    if (status != null) {
-      context.pushReplacementNamed(
-        'paymentResult',
-        pathParameters: <String, String>{'orderId': widget.orderId},
-        queryParameters: <String, String>{
-          'status': status,
-          'amount': widget.amount.toString(),
-        },
+    try {
+      final result = await ref.read(orderProvider.notifier).payOrder(
+        widget.orderId,
+        paymentMethod: _selectedPayment,
       );
-    } else {
-      setState(() => _isPaying = false);
+
+      if (!mounted) return;
+
+      if (result != null) {
+        // 如果抖币支付成功，更新本地余额（服务端已扣减）
+        if (_selectedPayment == 'coin' && result['new_balance'] != null) {
+          ref.read(userProvider.notifier).updateCoinBalance(
+            (result['new_balance'] as num).toDouble(),
+          );
+        }
+
+        context.pushReplacementNamed(
+          'paymentResult',
+          pathParameters: <String, String>{'orderId': widget.orderId},
+          queryParameters: <String, String>{
+            'status': result['status'] as String,
+            'amount': widget.amount.toString(),
+          },
+        );
+      } else {
+        setState(() => _isPaying = false);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isPaying = false);
+      }
     }
+  }
+
+  void _showInsufficientBalanceDialog() {
+    final userState = ref.read(userProvider);
+    final diff = (widget.amount - userState.coinBalance).toStringAsFixed(0);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppDimens.radiusLg),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Color(0xFFFFA500), size: 24),
+            SizedBox(width: AppDimens.paddingSm),
+            Text('余额不足', style: AppTextStyles.titleMedium),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '当前抖币余额：${userState.coinBalance.toStringAsFixed(0)} 抖币',
+              style: AppTextStyles.bodyLarge,
+            ),
+            const SizedBox(height: AppDimens.paddingSm),
+            Text(
+              '还需充值约：${diff} 抖币',
+              style: AppTextStyles.bodyMedium,
+            ),
+            const SizedBox(height: AppDimens.paddingMd),
+            Container(
+              padding: const EdgeInsets.all(AppDimens.paddingSm),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFD700).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(AppDimens.radiusSm),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.card_giftcard, size: 16, color: Color(0xFFFFA500)),
+                  SizedBox(width: AppDimens.paddingSm),
+                  Text(
+                    '充值有额外赠送抖币',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFFFFA500),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+            },
+            child: Text(
+              '取消支付',
+              style: TextStyle(color: AppColors.textHint),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              context.pushNamed('coinRecharge');
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+              ),
+            ),
+            child: const Text('去充值'),
+          ),
+        ],
+      ),
+    );
   }
 
   String get _formattedTime {
@@ -114,6 +226,9 @@ final class _PaymentDetailPageState extends ConsumerState<PaymentDetailPage> {
   @override
   Widget build(BuildContext context) {
     final isUrgent = _countdownSeconds <= 30;
+    final userState = ref.watch(userProvider);
+    final isCoinSelected = _selectedPayment == 'coin';
+    final balanceEnough = userState.coinBalance >= widget.amount;
 
     return Scaffold(
       appBar: AppBar(
@@ -370,6 +485,28 @@ final class _PaymentDetailPageState extends ConsumerState<PaymentDetailPage> {
                           onTap: () =>
                               setState(() => _selectedPayment = 'alipay'),
                         ),
+                        const SizedBox(height: AppDimens.paddingSm),
+
+                        // 抖币支付
+                        _PaymentMethodTile(
+                          icon: Icons.monetization_on,
+                          title: '抖币支付',
+                          subtitle: isCoinSelected
+                              ? (balanceEnough
+                                  ? '余额充足 ✓'
+                                  : '余额不足')
+                              : '可用抖币 ${userState.coinBalance.toStringAsFixed(0)}',
+                          isSelected: isCoinSelected,
+                          trailingColor: isCoinSelected && !balanceEnough
+                              ? AppColors.error
+                              : null,
+                          onTap: () =>
+                              setState(() => _selectedPayment = 'coin'),
+                          trailing: isCoinSelected && !balanceEnough
+                              ? const Icon(Icons.error_outline,
+                                  size: 18, color: AppColors.error)
+                              : null,
+                        ),
                       ],
                     ),
                   ),
@@ -413,9 +550,11 @@ final class _PaymentDetailPageState extends ConsumerState<PaymentDetailPage> {
                                       color: Colors.white,
                                     ),
                                   )
-                                : const Text(
-                                    '确认支付',
-                                    style: TextStyle(
+                                : Text(
+                                    _selectedPayment == 'coin'
+                                        ? '确认支付（抖币 ${widget.amount.toStringAsFixed(0)}）'
+                                        : '确认支付',
+                                    style: const TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -478,6 +617,8 @@ final class _PaymentMethodTile extends StatelessWidget {
     required this.subtitle,
     required this.isSelected,
     required this.onTap,
+    this.trailingColor,
+    this.trailing,
   });
 
   final IconData icon;
@@ -485,6 +626,8 @@ final class _PaymentMethodTile extends StatelessWidget {
   final String subtitle;
   final bool isSelected;
   final VoidCallback onTap;
+  final Color? trailingColor;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -521,16 +664,21 @@ final class _PaymentMethodTile extends StatelessWidget {
                   if (subtitle.isNotEmpty)
                     Text(
                       subtitle,
-                      style: AppTextStyles.bodySmall,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: trailingColor ?? AppColors.textHint,
+                      ),
                     ),
                 ],
               ),
             ),
-            Icon(
-              isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
-              size: 20,
-              color: isSelected ? AppColors.primary : AppColors.textHint,
-            ),
+            if (trailing != null) trailing!,
+            if (trailing == null)
+              Icon(
+                isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
+                size: 20,
+                color: isSelected ? AppColors.primary : AppColors.textHint,
+              ),
           ],
         ),
       ),

@@ -60,12 +60,14 @@ final class OrderApi {
     );
   }
 
-  Future<String> payOrder(String orderId) async {
+  Future<Map<String, dynamic>> payOrder(String orderId, {String paymentMethod = 'wechat'}) async {
     final response = await client.post<Map<String, dynamic>>(
       '/orders/$orderId/pay',
+      data: <String, dynamic>{
+        'payment_method': paymentMethod,
+      },
     );
-    final data = response.data!['data'] as Map<String, dynamic>;
-    return data['status'] as String;
+    return response.data!['data'] as Map<String, dynamic>;
   }
 }
 
