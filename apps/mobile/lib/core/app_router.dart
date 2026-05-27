@@ -192,7 +192,14 @@ final class AppRouter {
       GoRoute(
         path: '/recharge',
         name: 'coinRecharge',
-        builder: (context, state) => const CoinRechargePage(),
+        builder: (context, state) {
+          final query = state.uri.queryParameters;
+          return CoinRechargePage(
+            from: query['from'],
+            orderId: query['order_id'],
+            payAmount: query['amount'] != null ? double.tryParse(query['amount']!) : null,
+          );
+        },
       ),
       GoRoute(
         path: '/recharge/result',
@@ -204,6 +211,9 @@ final class AppRouter {
             bonus: double.parse(query['bonus'] ?? '0'),
             total: double.parse(query['total'] ?? '0'),
             newBalance: double.parse(query['new_balance'] ?? '0'),
+            from: query['from'],
+            orderId: query['order_id'],
+            payAmount: query['pay_amount'] != null ? double.tryParse(query['pay_amount']!) : null,
           );
         },
       ),

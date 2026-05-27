@@ -202,7 +202,14 @@ final class _PaymentDetailPageState extends ConsumerState<PaymentDetailPage> {
           ElevatedButton(
             onPressed: () {
               Navigator.of(ctx).pop();
-              context.pushNamed('coinRecharge');
+              context.pushNamed(
+                'coinRecharge',
+                queryParameters: <String, String>{
+                  'from': 'payment',
+                  'order_id': widget.orderId,
+                  'amount': widget.amount.toString(),
+                },
+              );
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,

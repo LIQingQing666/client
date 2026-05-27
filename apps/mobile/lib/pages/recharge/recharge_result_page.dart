@@ -10,12 +10,24 @@ final class RechargeResultPage extends StatelessWidget {
     required this.bonus,
     required this.total,
     required this.newBalance,
+    this.from,
+    this.orderId,
+    this.payAmount,
   });
 
   final double amount;
   final double bonus;
   final double total;
   final double newBalance;
+
+  /// 来源标识：'payment' 表示从支付页面跳转过来
+  final String? from;
+
+  /// 从支付页面跳转时携带的订单 ID
+  final String? orderId;
+
+  /// 从支付页面跳转时携带的待支付金额
+  final double? payAmount;
 
   @override
   Widget build(BuildContext context) {
@@ -159,8 +171,19 @@ final class RechargeResultPage extends StatelessWidget {
                 height: 48,
                 child: ElevatedButton(
                   onPressed: () {
-                    // 跳转到个人中心
-                    context.go('/mine');
+                    // 从支付页面跳转过来的，回支付页面
+                    if (from == 'payment' && orderId != null) {
+                      context.pushReplacementNamed(
+                        'paymentDetail',
+                        pathParameters: <String, String>{'orderId': orderId!},
+                        queryParameters: <String, String>{
+                          'amount': (payAmount ?? 0).toString(),
+                        },
+                      );
+                    } else {
+                      // 从个人中心跳转过来的，回个人中心
+                      context.go('/mine');
+                    }
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
@@ -168,9 +191,9 @@ final class RechargeResultPage extends StatelessWidget {
                       borderRadius: BorderRadius.circular(AppDimens.radiusMd),
                     ),
                   ),
-                  child: const Text(
-                    '返回个人中心',
-                    style: TextStyle(
+                  child: Text(
+                    from == 'payment' ? '返回支付页面' : '返回个人中心',
+                    style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
                     ),

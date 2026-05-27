@@ -8,7 +8,21 @@ import '../../provider/service_providers.dart';
 import '../../provider/user_provider.dart';
 
 final class CoinRechargePage extends ConsumerStatefulWidget {
-  const CoinRechargePage({super.key});
+  const CoinRechargePage({
+    super.key,
+    this.from,
+    this.orderId,
+    this.payAmount,
+  });
+
+  /// 来源标识：'payment' 表示从支付页面跳转过来
+  final String? from;
+
+  /// 从支付页面跳转时携带的订单 ID
+  final String? orderId;
+
+  /// 从支付页面跳转时携带的待支付金额
+  final double? payAmount;
 
   @override
   ConsumerState<CoinRechargePage> createState() => _CoinRechargePageState();
@@ -60,15 +74,19 @@ final class _CoinRechargePageState extends ConsumerState<CoinRechargePage> {
 
       if (mounted) {
         // 跳转到结果页，传递充值金额和赠送金额
-        context.pushReplacementNamed(
-          'rechargeResult',
-          queryParameters: {
-            'amount': amount.toString(),
-            'bonus': (result['bonus_amount'] as num).toString(),
-            'total': (result['total_coins'] as num).toString(),
-            'new_balance': newBalance.toString(),
-          },
-        );
+        // 如果是从支付页面跳转过来，传递来源信息以便结果页返回支付页
+        final queryParams = <String, String>{
+          'amount': amount.toString(),
+          'bonus': (result['bonus_amount'] as num).toString(),
+          'total': (result['total_coins'] as num).toString(),
+          'new_balance': newBalance.toString(),
+        };
+        if (widget.from == 'payment' && widget.orderId != null) {
+          queryParams['from'] = 'payment';
+          queryParams['order_id'] = widget.orderId!;
+          queryParams['pay_amount'] = (widget.payAmount ?? 0).toString();
+        }
+        context.pushReplacementNamed('rechargeResult', queryParameters: queryParams);
       }
     } catch (e) {
       if (mounted) {
