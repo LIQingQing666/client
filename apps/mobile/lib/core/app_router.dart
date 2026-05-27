@@ -20,6 +20,8 @@ import '../pages/mine/edit_profile_page.dart';
 import '../pages/mine/following_page.dart';
 import '../pages/mine/mine_page.dart';
 import '../pages/mine/settings_page.dart';
+import '../pages/recharge/coin_recharge_page.dart';
+import '../pages/recharge/recharge_result_page.dart';
 import '../pages/order/order_confirm_page.dart';
 import '../pages/order/order_detail_page.dart';
 import '../pages/order/order_page.dart';
@@ -186,6 +188,24 @@ final class AppRouter {
         path: '/edit-profile',
         name: 'editProfile',
         builder: (context, state) => const EditProfilePage(),
+      ),
+      GoRoute(
+        path: '/recharge',
+        name: 'coinRecharge',
+        builder: (context, state) => const CoinRechargePage(),
+      ),
+      GoRoute(
+        path: '/recharge/result',
+        name: 'rechargeResult',
+        builder: (context, state) {
+          final query = state.uri.queryParameters;
+          return RechargeResultPage(
+            amount: double.parse(query['amount'] ?? '0'),
+            bonus: double.parse(query['bonus'] ?? '0'),
+            total: double.parse(query['total'] ?? '0'),
+            newBalance: double.parse(query['new_balance'] ?? '0'),
+          );
+        },
       ),
       GoRoute(
         path: '/search',

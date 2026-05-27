@@ -28,24 +28,28 @@ final class MinePage extends ConsumerWidget {
         children: [
           _buildUserHeader(
             context,
+            ref,
             isLoggedIn: isLoggedIn,
             userId: userId,
             nickname: user.nickname,
             avatar: user.avatar,
+            coinBalance: user.coinBalance,
           ),
           const SizedBox(height: AppDimens.paddingXl),
-          _buildMenuSection(context, isLoggedIn: isLoggedIn),
+          _buildMenuSection(context, isLoggedIn: isLoggedIn, role: role),
         ],
       ),
     );
   }
 
   Widget _buildUserHeader(
-    BuildContext context, {
+    BuildContext context,
+    WidgetRef ref, {
     required bool isLoggedIn,
     required String userId,
     String? nickname,
     String? avatar,
+    required double coinBalance,
   }) {
     return Column(
       children: [
@@ -91,11 +95,46 @@ final class MinePage extends ConsumerWidget {
           isLoggedIn ? 'ID: $userId' : '登录后享受更多功能',
           style: AppTextStyles.bodySmall,
         ),
+        if (isLoggedIn) ...[
+          const SizedBox(height: AppDimens.paddingMd),
+          GestureDetector(
+            onTap: () => context.pushNamed('coinRecharge'),
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppDimens.paddingLg,
+                vertical: AppDimens.paddingSm,
+              ),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFFD700), Color(0xFFFFA500)],
+                ),
+                borderRadius: BorderRadius.circular(AppDimens.radiusXl),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.monetization_on, size: 20, color: Colors.white),
+                  const SizedBox(width: AppDimens.paddingSm),
+                  Text(
+                    '抖币 ${coinBalance.toStringAsFixed(0)}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(width: AppDimens.paddingSm),
+                  const Icon(Icons.chevron_right, size: 18, color: Colors.white70),
+                ],
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
 
-  Widget _buildMenuSection(BuildContext context, {required bool isLoggedIn}) {
+  Widget _buildMenuSection(BuildContext context, {required bool isLoggedIn, String? role}) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: AppDimens.paddingLg),
       clipBehavior: Clip.antiAlias,

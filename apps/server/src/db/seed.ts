@@ -46,6 +46,7 @@ function seed() {
   initDb();
 
   // Clean existing data
+  db.exec('DELETE FROM recharge_records');
   db.exec('DELETE FROM user_likes');
   db.exec('DELETE FROM user_coupons');
   db.exec('DELETE FROM comments');
@@ -67,11 +68,19 @@ function seed() {
     { id: 'u5', nickname: '数码控小王', avatar: '', phone: '', password: defaultHash, role: 'merchant' },
   ];
 
+  // Add coin_balance column if not exists (migration for existing databases)
+  db.exec("SELECT CASE WHEN COUNT(*) = 0 THEN 0 ELSE 1 END FROM pragma_table_info('users') WHERE name='coin_balance'");
+  try {
+    db.exec("ALTER TABLE users ADD COLUMN coin_balance REAL NOT NULL DEFAULT 0");
+  } catch (_) {
+    // Column already exists, ignore
+  }
+
   const insertUser = db.prepare(
-    'INSERT INTO users (id, nickname, avatar, phone, password, role) VALUES (@id, @nickname, @avatar, @phone, @password, @role)'
+    'INSERT INTO users (id, nickname, avatar, phone, password, role, coin_balance) VALUES (@id, @nickname, @avatar, @phone, @password, @role, @coin_balance)'
   );
   for (const u of users) {
-    insertUser.run(u);
+    insertUser.run({ ...u, coin_balance: 0 });
   }
 
   // ---- Videos (10) ----
