@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS users (
   phone TEXT DEFAULT '',
   password TEXT NOT NULL DEFAULT '',
   role TEXT NOT NULL DEFAULT 'user',
+  coin_balance REAL NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -158,6 +159,18 @@ CREATE TABLE IF NOT EXISTS follows (
   UNIQUE(follower_id, following_id)
 );
 
+CREATE TABLE IF NOT EXISTS recharge_records (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  amount REAL NOT NULL,
+  bonus_amount REAL NOT NULL,
+  total_coins REAL NOT NULL,
+  payment_method TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'success',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_videos_status ON videos(status);
 CREATE INDEX IF NOT EXISTS idx_videos_created ON videos(created_at);
 CREATE INDEX IF NOT EXISTS idx_products_status ON products(status);
@@ -167,6 +180,8 @@ CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id);
 CREATE INDEX IF NOT EXISTS idx_comments_video ON comments(video_id);
 CREATE INDEX IF NOT EXISTS idx_comments_product ON comments(product_id);
 CREATE INDEX IF NOT EXISTS idx_user_likes_user ON user_likes(user_id);
+CREATE INDEX IF NOT EXISTS idx_recharge_user ON recharge_records(user_id);
+CREATE INDEX IF NOT EXISTS idx_recharge_created ON recharge_records(created_at);
 `;
 
 export function initDb(): Database.Database {

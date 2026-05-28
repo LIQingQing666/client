@@ -4,7 +4,7 @@ import 'package:hive/hive.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/dio_client.dart';
-import '../models/live_model.dart';
+import '../api/recharge_api.dart';
 import '../services/storage_service.dart';
 import '../services/websocket_service.dart';
 
@@ -56,8 +56,9 @@ final webSocketServiceProvider = Provider<WebSocketService>((ref) {
   return WebSocketService(storage: storage);
 });
 
+final rechargeApiProvider = Provider<RechargeApi>((ref) {
+  final client = ref.watch(dioClientProvider);
+  return RechargeApi(client: client);
+});
+
 final currentTabIndexProvider = StateProvider<int>((ref) => 0);
-
-final muteStateProvider = StateProvider<bool>((ref) => false);
-
-final roomListProvider = StateProvider<List<LiveRoomInfo>>((ref) => []);

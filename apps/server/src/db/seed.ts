@@ -45,12 +45,18 @@ function seed() {
   const db = getDb();
   initDb();
 
-  // Only seed when database is empty (idempotent)
-  const userCount = (db.prepare('SELECT COUNT(*) as cnt FROM users').get() as { cnt: number }).cnt;
-  if (userCount > 0) {
-    console.log(`Database already has ${userCount} users, skipping seed.`);
-    return;
-  }
+  // Clean existing data
+  db.exec('DELETE FROM recharge_records');
+  db.exec('DELETE FROM user_likes');
+  db.exec('DELETE FROM user_coupons');
+  db.exec('DELETE FROM comments');
+  db.exec('DELETE FROM follows');
+  db.exec('DELETE FROM orders');
+  db.exec('DELETE FROM cart_items');
+  db.exec('DELETE FROM products');
+  db.exec('DELETE FROM videos');
+  db.exec('DELETE FROM coupons');
+  db.exec('DELETE FROM users');
 
   // ---- Users ----
   const defaultHash = hashPassword('123456');
@@ -62,11 +68,19 @@ function seed() {
     { id: 'u5', nickname: '数码控小王', avatar: '', phone: '', password: defaultHash, role: 'merchant' },
   ];
 
+  // Add coin_balance column if not exists (migration for existing databases)
+  db.exec("SELECT CASE WHEN COUNT(*) = 0 THEN 0 ELSE 1 END FROM pragma_table_info('users') WHERE name='coin_balance'");
+  try {
+    db.exec("ALTER TABLE users ADD COLUMN coin_balance REAL NOT NULL DEFAULT 0");
+  } catch (_) {
+    // Column already exists, ignore
+  }
+
   const insertUser = db.prepare(
-    'INSERT INTO users (id, nickname, avatar, phone, password, role) VALUES (@id, @nickname, @avatar, @phone, @password, @role)'
+    'INSERT INTO users (id, nickname, avatar, phone, password, role, coin_balance) VALUES (@id, @nickname, @avatar, @phone, @password, @role, @coin_balance)'
   );
   for (const u of users) {
-    insertUser.run(u);
+    insertUser.run({ ...u, coin_balance: 0 });
   }
 
   // ---- Videos (10) ----

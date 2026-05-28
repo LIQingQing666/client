@@ -68,10 +68,9 @@ final class _OrderConfirmPageState extends ConsumerState<OrderConfirmPage> {
 
     if (result != null) {
       context.pushReplacementNamed(
-        'paymentResult',
+        'paymentDetail',
         pathParameters: <String, String>{'orderId': result.id},
         queryParameters: <String, String>{
-          'status': result.status,
           'amount': result.payAmount.toString(),
         },
       );

@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../api/api_exception.dart';
 import '../api/order_api.dart';
 import '../models/cart_model.dart';
 import '../models/order_model.dart';
@@ -20,6 +21,7 @@ final class OrderState {
     this.page = 1,
     this.activeStatus,
     this.errorMessage,
+    this.pendingTabIndex,
   });
 
   final List<OrderModel> orders;
@@ -29,6 +31,7 @@ final class OrderState {
   final int page;
   final String? activeStatus;
   final String? errorMessage;
+  final int? pendingTabIndex;
 
   OrderState copyWith({
     List<OrderModel>? orders,
@@ -38,6 +41,8 @@ final class OrderState {
     int? page,
     String? activeStatus,
     String? errorMessage,
+    int? pendingTabIndex,
+    bool clearPendingTab = false,
   }) {
     return OrderState(
       orders: orders ?? this.orders,
@@ -47,6 +52,7 @@ final class OrderState {
       page: page ?? this.page,
       activeStatus: activeStatus,
       errorMessage: errorMessage,
+      pendingTabIndex: clearPendingTab ? null : (pendingTabIndex ?? this.pendingTabIndex),
     );
   }
 }
@@ -142,67 +148,49 @@ final class OrderNotifier extends StateNotifier<OrderState> {
         address: address,
         couponId: couponId,
       );
-      // Insert new order into local list
-      final newOrder = OrderModel(
-        id: result.id,
-        userId: _userId,
-        totalAmount: result.totalAmount,
-        discountAmount: result.discountAmount,
-        payAmount: result.payAmount,
-        status: result.status,
-        address: address ?? const OrderAddress(),
-        items: items
-            .map((item) => OrderItem(
-                  productId: item.productId,
-                  productName: item.productName,
-                  productCover: item.productCover,
-                  productPrice: item.productPrice,
-                  spec: item.spec,
-                  quantity: item.quantity,
-                  subtotal: item.productPrice * item.quantity,
-                ))
-            .toList(),
-        createdAt: DateTime.now().toIso8601String(),
-      );
-      state = state.copyWith(orders: [newOrder, ...state.orders]);
       return result;
-    } on Exception {
+    }
+    on Exception {
       showToast('下单失败，请重试');
       return null;
     }
   }
 
-  Future<String?> payOrder(String orderId) async {
+  /// 支付订单，成功后返回 true
+  Future<bool> payOrder(String orderId, {String paymentMethod = 'wechat'}) async {
     try {
-      final status = await api.payOrder(orderId);
-      // Update local order status
-      final updated = state.orders.map((o) {
-        if (o.id != orderId) return o;
-        return OrderModel(
-          id: o.id,
-          userId: o.userId,
-          totalAmount: o.totalAmount,
-          discountAmount: o.discountAmount,
-          payAmount: o.payAmount,
-          status: status,
-          address: o.address,
-          items: o.items,
-          createdAt: o.createdAt,
-        );
-      }).toList();
-      state = state.copyWith(orders: updated);
-      return status;
-    } on Exception {
+      await api.payOrder(orderId, paymentMethod: paymentMethod);
+      return true;
+    }
+    on Exception {
       showToast('支付失败，请重试');
-      return null;
+      return false;
     }
   }
 
-  void deleteOrder(String orderId) {
-    state = state.copyWith(
-      orders: state.orders.where((o) => o.id != orderId).toList(),
-    );
-    showToast('订单已删除');
+  /// 请求页面切换到指定 tab（页面消费后会自动清空）
+  void requestSwitchTab(int index) {
+    state = state.copyWith(pendingTabIndex: index);
+  }
+
+  /// 清空待切换 tab 标记（页面消费后调用）
+  void clearPendingTab() {
+    state = state.copyWith(clearPendingTab: true);
+  }
+
+  /// 确认收货，成功后返回 true
+  Future<bool> confirmOrder(String orderId) async {
+    try {
+      await api.confirmOrder(orderId);
+      showToast('确认收货成功');
+      return true;
+    } on ApiException catch (e) {
+      showToast(e.message, isError: true);
+      return false;
+    } on Exception {
+      showToast('确认收货失败，请重试', isError: true);
+      return false;
+    }
   }
 }
 

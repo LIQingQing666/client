@@ -4,15 +4,17 @@ import '../services/storage_service.dart';
 import 'service_providers.dart';
 
 final class UserState {
-  const UserState({this.nickname, this.avatar});
+  const UserState({this.nickname, this.avatar, this.coinBalance = 0});
 
   final String? nickname;
   final String? avatar;
+  final double coinBalance;
 
-  UserState copyWith({String? nickname, String? avatar}) {
+  UserState copyWith({String? nickname, String? avatar, double? coinBalance}) {
     return UserState(
       nickname: nickname ?? this.nickname,
       avatar: avatar ?? this.avatar,
+      coinBalance: coinBalance ?? this.coinBalance,
     );
   }
 }
@@ -48,8 +50,13 @@ final class UserNotifier extends StateNotifier<UserState> {
       state = UserState(
         nickname: profile['nickname'] as String?,
         avatar: profile['avatar'] as String?,
+        coinBalance: (profile['coin_balance'] as num?)?.toDouble() ?? 0,
       );
     }
+  }
+
+  void updateCoinBalance(double balance) {
+    state = state.copyWith(coinBalance: balance);
   }
 }
 

@@ -96,7 +96,7 @@ export async function userRoutes(app: FastifyInstance) {
   // GET /api/users/:id - 用户信息
   app.get('/api/users/:id', async (req) => {
     const db = getDb();
-    const user = db.prepare('SELECT id, nickname, avatar, phone FROM users WHERE id = ?').get(
+    const user = db.prepare('SELECT id, nickname, avatar, phone, coin_balance FROM users WHERE id = ?').get(
       (req.params as Record<string, string>).id
     ) as Record<string, unknown> | undefined;
 

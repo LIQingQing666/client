@@ -21,9 +21,12 @@ import '../pages/mine/favorites_page.dart';
 import '../pages/mine/following_page.dart';
 import '../pages/mine/mine_page.dart';
 import '../pages/mine/settings_page.dart';
+import '../pages/recharge/coin_recharge_page.dart';
+import '../pages/recharge/recharge_result_page.dart';
 import '../pages/order/order_confirm_page.dart';
 import '../pages/order/order_detail_page.dart';
 import '../pages/order/order_page.dart';
+import '../pages/order/payment_detail_page.dart';
 import '../pages/order/payment_result_page.dart';
 import '../pages/search/search_page.dart';
 import '../provider/auth_provider.dart';
@@ -125,6 +128,14 @@ final class AppRouter {
         ),
       ),
       GoRoute(
+        path: '/payment/detail/:orderId',
+        name: 'paymentDetail',
+        builder: (context, state) => PaymentDetailPage(
+          orderId: state.pathParameters['orderId']!,
+          amount: double.parse(state.uri.queryParameters['amount'] ?? '0'),
+        ),
+      ),
+      GoRoute(
         path: '/payment/:orderId',
         name: 'paymentResult',
         builder: (context, state) => PaymentResultPage(
@@ -183,6 +194,34 @@ final class AppRouter {
         path: '/edit-profile',
         name: 'editProfile',
         builder: (context, state) => const EditProfilePage(),
+      ),
+      GoRoute(
+        path: '/recharge',
+        name: 'coinRecharge',
+        builder: (context, state) {
+          final query = state.uri.queryParameters;
+          return CoinRechargePage(
+            from: query['from'],
+            orderId: query['order_id'],
+            payAmount: query['amount'] != null ? double.tryParse(query['amount']!) : null,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/recharge/result',
+        name: 'rechargeResult',
+        builder: (context, state) {
+          final query = state.uri.queryParameters;
+          return RechargeResultPage(
+            amount: double.parse(query['amount'] ?? '0'),
+            bonus: double.parse(query['bonus'] ?? '0'),
+            total: double.parse(query['total'] ?? '0'),
+            newBalance: double.parse(query['new_balance'] ?? '0'),
+            from: query['from'],
+            orderId: query['order_id'],
+            payAmount: query['pay_amount'] != null ? double.tryParse(query['pay_amount']!) : null,
+          );
+        },
       ),
       GoRoute(
         path: '/search',

@@ -13,6 +13,7 @@ import { userRoutes } from './routes/users.js';
 import { commentRoutes } from './routes/comments.js';
 import { adminRoutes } from './routes/admin.js';
 import { liveRoutes } from './routes/live.js';
+import { rechargeRoutes } from './routes/recharge.js';
 import { createWebSocketServer } from './websocket/live.js';
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
@@ -40,6 +41,7 @@ async function main() {
   await app.register(commentRoutes);
   await app.register(liveRoutes);
   await app.register(adminRoutes);
+  await app.register(rechargeRoutes);
 
   // Health check
   app.get('/api/health', async () => ({ code: 0, message: 'ok', timestamp: new Date().toISOString() }));

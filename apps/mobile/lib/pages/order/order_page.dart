@@ -51,6 +51,20 @@ final class _OrderPageState extends ConsumerState<OrderPage>
   Widget build(BuildContext context) {
     final state = ref.watch(orderProvider);
 
+    // 处理外部请求的 tab 切换（支付成功后从 paymentResult 返回）
+    final pendingTab = state.pendingTabIndex;
+    if (pendingTab != null && pendingTab >= 0 && pendingTab < _tabs.length) {
+      // 使用 post-frame callback 避免在 build 中触发 setState
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ref.read(orderProvider.notifier).clearPendingTab();
+          _tabController.animateTo(pendingTab);
+          final statusMap = <int, String?>{0: null, 1: 'pending', 2: 'paid', 3: 'completed'};
+          ref.read(orderProvider.notifier).loadOrders(status: statusMap[pendingTab]);
+        }
+      });
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('我的订单'),
@@ -86,17 +100,24 @@ final class _OrderPageState extends ConsumerState<OrderPage>
                   padding: const EdgeInsets.all(AppDimens.paddingLg),
                   itemCount: state.orders.length,
                   itemBuilder: (context, index) {
-                    return _OrderCard(order: state.orders[index]);
+                    return _OrderCard(
+                      order: state.orders[index],
+                      onConfirmSuccess: () {
+                        _tabController.animateTo(3);
+                        ref.read(orderProvider.notifier).loadOrders(status: 'completed');
+                      },
+                    );
                   },
                 ),
     );
   }
 }
 
-final class _OrderCard extends StatelessWidget {
-  const _OrderCard({required this.order});
+final class _OrderCard extends ConsumerWidget {
+  const _OrderCard({required this.order, required this.onConfirmSuccess});
 
   final OrderModel order;
+  final VoidCallback onConfirmSuccess;
 
   Color get _statusColor {
     return switch (order.status) {
@@ -108,8 +129,50 @@ final class _OrderCard extends StatelessWidget {
     };
   }
 
+  void _confirmOrder(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppDimens.radiusLg),
+        ),
+        title: const Text('确认收货', style: AppTextStyles.titleMedium),
+        content: const Text('是否确认已收到所有商品？确认后订单将标记为已完成。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text('再想想', style: TextStyle(color: AppColors.textHint)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              final success = await ref.read(orderProvider.notifier).confirmOrder(order.id);
+              if (success) {
+                onConfirmSuccess();
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+            child: const Text('确认收到'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAfterSaleNotAvailable(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('客服功能正在开发中，敬请期待'),
+        backgroundColor: AppColors.textHint,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return GestureDetector(
       onTap: () => context.pushNamed(
         'orderDetail',
@@ -209,10 +272,9 @@ final class _OrderCard extends StatelessWidget {
                 OutlinedButton(
                   onPressed: () {
                     context.pushNamed(
-                      'paymentResult',
+                      'paymentDetail',
                       pathParameters: <String, String>{'orderId': order.id},
                       queryParameters: <String, String>{
-                        'status': order.status,
                         'amount': order.payAmount.toString(),
                       },
                     );
@@ -228,6 +290,67 @@ final class _OrderCard extends StatelessWidget {
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                   child: const Text('去支付', style: TextStyle(fontSize: 13)),
+                ),
+              ],
+            ),
+          ],
+          if (order.status == 'paid') ...[
+            const SizedBox(height: AppDimens.paddingSm),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: () => _confirmOrder(context, ref),
+                  icon: const Icon(Icons.check_circle_outline, size: 16),
+                  label: const Text('确认收货', style: TextStyle(fontSize: 13)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    side: const BorderSide(color: AppColors.primary),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: AppDimens.paddingSm,
+                    ),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (order.status == 'completed') ...[
+            const SizedBox(height: AppDimens.paddingSm),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Icon(
+                  Icons.verified,
+                  size: 16,
+                  color: AppColors.success,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '已确认收到',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.success,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const Spacer(),
+                OutlinedButton.icon(
+                  onPressed: () => _showAfterSaleNotAvailable(context),
+                  icon: const Icon(Icons.headset_mic_outlined, size: 16),
+                  label: const Text('售后', style: TextStyle(fontSize: 13)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textSecondary,
+                    side: const BorderSide(color: AppColors.divider),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: AppDimens.paddingSm,
+                    ),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
                 ),
               ],
             ),

@@ -28,10 +28,12 @@ final class MinePage extends ConsumerWidget {
         children: [
           _buildUserHeader(
             context,
+            ref,
             isLoggedIn: isLoggedIn,
             userId: userId,
             nickname: user.nickname,
             avatar: user.avatar,
+            coinBalance: user.coinBalance,
           ),
           const SizedBox(height: AppDimens.paddingXl),
           _buildMenuSection(context, isLoggedIn: isLoggedIn, role: role),
@@ -41,11 +43,13 @@ final class MinePage extends ConsumerWidget {
   }
 
   Widget _buildUserHeader(
-    BuildContext context, {
+    BuildContext context,
+    WidgetRef ref, {
     required bool isLoggedIn,
     required String userId,
     String? nickname,
     String? avatar,
+    required double coinBalance,
   }) {
     return Column(
       children: [
@@ -91,11 +95,46 @@ final class MinePage extends ConsumerWidget {
           isLoggedIn ? 'ID: $userId' : '登录后享受更多功能',
           style: AppTextStyles.bodySmall,
         ),
+        if (isLoggedIn) ...[
+          const SizedBox(height: AppDimens.paddingMd),
+          GestureDetector(
+            onTap: () => context.pushNamed('coinRecharge'),
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppDimens.paddingLg,
+                vertical: AppDimens.paddingSm,
+              ),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFFD700), Color(0xFFFFA500)],
+                ),
+                borderRadius: BorderRadius.circular(AppDimens.radiusXl),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.monetization_on, size: 20, color: Colors.white),
+                  const SizedBox(width: AppDimens.paddingSm),
+                  Text(
+                    '抖币 ${coinBalance.toStringAsFixed(0)}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(width: AppDimens.paddingSm),
+                  const Icon(Icons.chevron_right, size: 18, color: Colors.white70),
+                ],
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
 
-  Widget _buildMenuSection(BuildContext context, {required bool isLoggedIn, required String? role}) {
+  Widget _buildMenuSection(BuildContext context, {required bool isLoggedIn, String? role}) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: AppDimens.paddingLg),
       clipBehavior: Clip.antiAlias,
@@ -114,14 +153,6 @@ final class MinePage extends ConsumerWidget {
                 title: '我的关注',
                 subtitle: '查看关注的主播和用户',
                 onTap: () => context.pushNamed('following'),
-              ),
-              _buildDivider(),
-              _buildMenuItem(
-                context,
-                icon: Icons.bookmark_outline,
-                title: '我的收藏',
-                subtitle: '收藏的视频和商品',
-                onTap: () => context.pushNamed('favorites'),
               ),
               _buildDivider(),
               _buildMenuItem(
