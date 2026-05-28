@@ -69,6 +69,16 @@ final class OrderApi {
     );
     return response.data!['data'] as Map<String, dynamic>;
   }
+
+  /// 确认收货（仅已支付订单可操作）
+  Future<OrderModel> confirmOrder(String orderId) async {
+    final response = await client.post<Map<String, dynamic>>(
+      '/orders/$orderId/confirm',
+    );
+    return OrderModel.fromJson(
+      response.data!['data'] as Map<String, dynamic>,
+    );
+  }
 }
 
 final class CreateOrderResult {

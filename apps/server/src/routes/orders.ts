@@ -2,6 +2,14 @@ import { FastifyInstance, FastifyRequest } from 'fastify';
 import { getDb } from '../db/schema.js';
 import crypto from 'node:crypto';
 
+function processOrder(row: Record<string, unknown>) {
+  return {
+    ...row,
+    items: JSON.parse(row.items as string),
+    address: JSON.parse(row.address as string),
+  };
+}
+
 export async function orderRoutes(app: FastifyInstance) {
   // POST /api/orders - 创建订单
   app.post('/api/orders', async (req: FastifyRequest<{ Body: {
@@ -203,6 +211,28 @@ export async function orderRoutes(app: FastifyInstance) {
         message: success ? '支付成功' : '支付失败，请重试',
         new_balance: updatedUser.coin_balance,
       },
+    };
+  });
+
+  // POST /api/orders/:id/confirm - 确认收货
+  app.post('/api/orders/:id/confirm', async (req: FastifyRequest<{ Params: { id: string } }>) => {
+    const db = getDb();
+    const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id) as Record<string, unknown> | undefined;
+
+    if (!order) {
+      return { code: 404, message: '订单不存在' };
+    }
+    if (order.status !== 'paid') {
+      return { code: 422, message: '仅已支付订单可以确认收货' };
+    }
+
+    db.prepare('UPDATE orders SET status = ?, updated_at = datetime(\'now\') WHERE id = ?').run('completed', req.params.id);
+
+    const updated = db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id) as Record<string, unknown>;
+
+    return {
+      code: 0,
+      data: processOrder(updated),
     };
   });
 }

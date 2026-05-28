@@ -162,6 +162,18 @@ final class OrderNotifier extends StateNotifier<OrderState> {
       return null;
     }
   }
+
+  /// 确认收货，成功后刷新列表
+  Future<OrderModel?> confirmOrder(String orderId) async {
+    try {
+      final order = await api.confirmOrder(orderId);
+      await loadOrders(status: state.activeStatus);
+      return order;
+    } on Exception {
+      showToast('确认收货失败，请重试', isError: true);
+      return null;
+    }
+  }
 }
 
 final orderProvider =

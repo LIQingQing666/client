@@ -93,7 +93,7 @@ final class _OrderPageState extends ConsumerState<OrderPage>
   }
 }
 
-final class _OrderCard extends StatelessWidget {
+final class _OrderCard extends ConsumerWidget {
   const _OrderCard({required this.order});
 
   final OrderModel order;
@@ -108,8 +108,47 @@ final class _OrderCard extends StatelessWidget {
     };
   }
 
+  void _confirmOrder(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppDimens.radiusLg),
+        ),
+        title: const Text('确认收货', style: AppTextStyles.titleMedium),
+        content: const Text('是否确认已收到所有商品？确认后订单将标记为已完成。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text('再想想', style: TextStyle(color: AppColors.textHint)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              await ref.read(orderProvider.notifier).confirmOrder(order.id);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+            child: const Text('确认收到'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAfterSaleNotAvailable(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('客服功能正在开发中，敬请期待'),
+        backgroundColor: AppColors.textHint,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return GestureDetector(
       onTap: () => context.pushNamed(
         'orderDetail',
@@ -227,6 +266,67 @@ final class _OrderCard extends StatelessWidget {
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                   child: const Text('去支付', style: TextStyle(fontSize: 13)),
+                ),
+              ],
+            ),
+          ],
+          if (order.status == 'paid') ...[
+            const SizedBox(height: AppDimens.paddingSm),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: () => _confirmOrder(context, ref),
+                  icon: const Icon(Icons.check_circle_outline, size: 16),
+                  label: const Text('确认收货', style: TextStyle(fontSize: 13)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    side: const BorderSide(color: AppColors.primary),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: AppDimens.paddingSm,
+                    ),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (order.status == 'completed') ...[
+            const SizedBox(height: AppDimens.paddingSm),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Icon(
+                  Icons.verified,
+                  size: 16,
+                  color: AppColors.success,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '已确认收到',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.success,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const Spacer(),
+                OutlinedButton.icon(
+                  onPressed: () => _showAfterSaleNotAvailable(context),
+                  icon: const Icon(Icons.headset_mic_outlined, size: 16),
+                  label: const Text('售后', style: TextStyle(fontSize: 13)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textSecondary,
+                    side: const BorderSide(color: AppColors.divider),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: AppDimens.paddingSm,
+                    ),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
                 ),
               ],
             ),
