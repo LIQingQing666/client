@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../api/api_exception.dart';
 import '../api/order_api.dart';
 import '../models/cart_model.dart';
 import '../models/order_model.dart';
@@ -163,15 +164,18 @@ final class OrderNotifier extends StateNotifier<OrderState> {
     }
   }
 
-  /// 确认收货，成功后刷新列表
-  Future<OrderModel?> confirmOrder(String orderId) async {
+  /// 确认收货，成功后返回 true
+  Future<bool> confirmOrder(String orderId) async {
     try {
-      final order = await api.confirmOrder(orderId);
-      await loadOrders(status: state.activeStatus);
-      return order;
+      await api.confirmOrder(orderId);
+      showToast('确认收货成功');
+      return true;
+    } on ApiException catch (e) {
+      showToast(e.message, isError: true);
+      return false;
     } on Exception {
       showToast('确认收货失败，请重试', isError: true);
-      return null;
+      return false;
     }
   }
 }

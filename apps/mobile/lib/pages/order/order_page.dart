@@ -86,7 +86,13 @@ final class _OrderPageState extends ConsumerState<OrderPage>
                   padding: const EdgeInsets.all(AppDimens.paddingLg),
                   itemCount: state.orders.length,
                   itemBuilder: (context, index) {
-                    return _OrderCard(order: state.orders[index]);
+                    return _OrderCard(
+                      order: state.orders[index],
+                      onConfirmSuccess: () {
+                        _tabController.animateTo(3);
+                        ref.read(orderProvider.notifier).loadOrders(status: 'completed');
+                      },
+                    );
                   },
                 ),
     );
@@ -94,9 +100,10 @@ final class _OrderPageState extends ConsumerState<OrderPage>
 }
 
 final class _OrderCard extends ConsumerWidget {
-  const _OrderCard({required this.order});
+  const _OrderCard({required this.order, required this.onConfirmSuccess});
 
   final OrderModel order;
+  final VoidCallback onConfirmSuccess;
 
   Color get _statusColor {
     return switch (order.status) {
@@ -126,7 +133,10 @@ final class _OrderCard extends ConsumerWidget {
           ElevatedButton(
             onPressed: () async {
               Navigator.of(ctx).pop();
-              await ref.read(orderProvider.notifier).confirmOrder(order.id);
+              final success = await ref.read(orderProvider.notifier).confirmOrder(order.id);
+              if (success) {
+                onConfirmSuccess();
+              }
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
             child: const Text('确认收到'),
