@@ -15,6 +15,7 @@ import '../../utils/toast.dart';
 import '../../widgets/product_detail_sheet.dart';
 import '../../widgets/video_comments_sheet.dart';
 import '../../widgets/video_player_widget.dart';
+import '../../widgets/product_floating_card.dart';
 
 final class FeedPage extends ConsumerStatefulWidget {
   const FeedPage({super.key, this.initialVideoId});
@@ -29,6 +30,40 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
   late final PageController _pageController = PageController();
   final ValueNotifier<int> _seekTrigger = ValueNotifier<int>(0);
   String? _pendingJumpVideoId;
+  ProductModel? _currentProduct;
+  bool _isProductCardVisible = false;
+  bool _isInitialLoad = true;
+
+  //load product information and set product_card
+  Future<void> _loadCurrentVideoProduct(VideoModel video) async {
+    // 重置状态
+    if (mounted) {
+      setState(() {
+        _currentProduct = null;
+        _isProductCardVisible = false;
+      });
+    }
+
+    try {
+      // 通过 videoApi 获取视频详情，其中包含商品列表
+      final videoApi = ref.read(videoApiProvider);
+      final detail = await videoApi.getVideoDetail(video.id);
+
+      if (!mounted) return;
+
+      // detail.products 是 List<Map<String, dynamic>>
+      final products = detail.products;
+      if (products.isNotEmpty) {
+        setState(() {
+          _currentProduct = ProductModel.fromJson(products.first);
+          _isProductCardVisible = true;
+        });
+      }
+    } catch (e) {
+      debugPrint('Failed to load product for video ${video.id}: $e');
+      // 静默处理，不影响视频播放
+    }
+  }
 
   @override
   void initState() {
@@ -36,6 +71,14 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
     if (widget.initialVideoId != null) {
       _pendingJumpVideoId = widget.initialVideoId;
     }
+
+    // 初始加载第一个视频的商品
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final feedState = ref.read(feedProvider);
+      if (feedState.videos.isNotEmpty) {
+        _loadCurrentVideoProduct(feedState.videos.first);
+      }
+    });
   }
 
   @override
@@ -192,6 +235,13 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
       );
     }
 
+    if (_isInitialLoad && feedState.videos.isNotEmpty) {
+      _isInitialLoad = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadCurrentVideoProduct(feedState.videos[feedState.currentIndex]);
+      });
+    }
+
     return Scaffold(
       body: Stack(
         children: [
@@ -203,6 +253,7 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
               if (index < feedState.videos.length) {
                 notifier.setCurrentIndex(index);
               }
+              _loadCurrentVideoProduct(feedState.videos[index]);
             },
             itemBuilder: (context, index) {
               if (index >= feedState.videos.length) {
@@ -230,6 +281,7 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
                 onFollow: () => _onFollowTap(video.authorId),
                 isFollowing: isFollowing,
                 seekTrigger: _seekTrigger,
+                productCard: _buildProductCard(),
               );
             },
           ),
@@ -267,6 +319,26 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
           ),
         ],
       ),
+    );
+  }
+
+  // ✅ 确保方法有正确的缩进和括号匹配
+  Widget? _buildProductCard() {
+    if (!_isProductCardVisible || _currentProduct == null) {
+      return null;
+    }
+
+    final feedState = ref.read(feedProvider);
+    if (feedState.videos.isEmpty) return null;
+
+    final currentVideo = feedState.videos[feedState.currentIndex];
+
+    return ProductFloatingCard(
+      product: _currentProduct!,
+      delay: const Duration(milliseconds: 500),
+      onTap: () {
+        _onProductTap(currentVideo);
+      },
     );
   }
 }

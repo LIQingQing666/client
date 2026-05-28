@@ -14,6 +14,7 @@ import '../../utils/toast.dart';
 import '../../widgets/coupon_countdown.dart';
 import '../../widgets/danmaku_overlay.dart';
 import '../../widgets/product_detail_sheet.dart';
+import '../../widgets/product_floating_card.dart';
 import 'audience_list.dart';
 import 'gift_panel.dart';
 
@@ -323,12 +324,70 @@ final class _LiveRoomPageState extends ConsumerState<LiveRoomPage> {
               ),
             ),
 
+          if (state.currentProduct != null)
+            Positioned(
+              right: AppDimens.paddingLg,
+              bottom: bottomInset + 80 + AppDimens.paddingMd,
+              child: _FloatingProductCard(
+                product: state.currentProduct!,
+                onTap: () {
+                  showProductDetailSheet(
+                    context: context,
+                    product: state.currentProduct!,
+                    onAddToCart: () {
+                      ref.read(cartProvider.notifier).addToCart(
+                        productId: state.currentProduct!.id,
+                      );
+                    },
+                    onBuyNow: () {
+                      ref.read(cartProvider.notifier).addToCart(
+                        productId: state.currentProduct!.id,
+                      );
+                      context.pushNamed('orderConfirm', queryParameters: {
+                        'total': state.currentProduct!.price.toString(),
+                        'count': '1',
+                      });
+                    },
+                  );
+                },
+              ),
+            )
+          else if (state.products.isNotEmpty)
+            Positioned(
+              right: AppDimens.paddingLg,
+              bottom: bottomInset + 80 + AppDimens.paddingMd,
+              child: _FloatingProductCard(
+                product: state.products.first,
+                onTap: () {
+                  final product = state.products.first;
+                  showProductDetailSheet(
+                    context: context,
+                    product: product,
+                    onAddToCart: () {
+                      ref.read(cartProvider.notifier).addToCart(
+                        productId: product.id,
+                      );
+                    },
+                    onBuyNow: () {
+                      ref.read(cartProvider.notifier).addToCart(
+                        productId: product.id,
+                      );
+                      context.pushNamed('orderConfirm', queryParameters: {
+                        'total': product.price.toString(),
+                        'count': '1',
+                      });
+                    },
+                  );
+                },
+              ),
+            ),
+
           // Explaining product card
           if (state.currentProduct != null)
             Positioned(
               left: AppDimens.paddingLg,
               bottom: 160 + bottomInset,
-              right: AppDimens.paddingLg,
+              right: 100,
               child: _ExplainingProductCard(
                 product: state.currentProduct!,
                 onTap: () {
@@ -615,5 +674,233 @@ final class _BottomAction extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _FloatingProductCard extends StatefulWidget {
+  final ProductModel product;
+  final VoidCallback? onTap;
+  final Duration delay;
+
+  const _FloatingProductCard({
+    required this.product,
+    this.onTap,
+    this.delay = const Duration(milliseconds: 500),
+  });
+
+  @override
+  State<_FloatingProductCard> createState() => _FloatingProductCardState();
+}
+
+class _FloatingProductCardState extends State<_FloatingProductCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _opacityAnimation;
+  late final Animation<Offset> _slideAnimation;
+  bool _isVisible = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+
+    _opacityAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeIn),
+    );
+
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0.3, 0.0), // 从右侧滑入
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
+
+    // 延时显示
+    _startDelayTimer();
+  }
+
+  void _startDelayTimer() {
+    Future.delayed(widget.delay, () {
+      if (mounted) {
+        setState(() {
+          _isVisible = true;
+        });
+        _controller.forward();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // 获取屏幕宽度的三分之一
+    final screenWidth = MediaQuery.of(context).size.width;
+    final cardWidth = screenWidth / 3;
+
+    // 如果还没到显示时间，返回空容器
+    if (!_isVisible) {
+      return const SizedBox.shrink();
+    }
+
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Opacity(
+          opacity: _opacityAnimation.value,
+          child: SlideTransition(
+            position: _slideAnimation,
+            child: child,
+          ),
+        );
+      },
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Container(
+          width: cardWidth,
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.15),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 商品图片
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: AspectRatio(
+                  aspectRatio: 1, // 正方形图片
+                  child: Image.network(
+                    widget.product.coverUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        color: Colors.grey[200],
+                        child: const Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.image_not_supported_outlined,
+                              color: Colors.grey,
+                              size: 32,
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              '暂无图片',
+                              style: TextStyle(
+                                color: Colors.grey,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return Container(
+                        color: Colors.grey[100],
+                        child: const Center(
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 8),
+
+              // 商品名称
+              Text(
+                widget.product.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF333333),
+                  height: 1.3,
+                ),
+              ),
+
+              const SizedBox(height: 4),
+
+              // 价格行
+              Row(
+                children: [
+                  // 当前价格
+                  Text(
+                    '¥${widget.product.price}',
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFFFF4759),
+                    ),
+                  ),
+
+                  // 原价（如果有优惠）
+                  if (widget.product.originalPrice > widget.product.price) ...[
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        '¥${widget.product.originalPrice}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: Color(0xFF999999),
+                          decoration: TextDecoration.lineThrough,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+
+              // 可选：销量信息
+              if (widget.product.sales > 0) ...[
+                const SizedBox(height: 4),
+                Text(
+                  '已售${_formatSales(widget.product.sales)}',
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: Color(0xFF999999),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // 格式化销量数字
+  String _formatSales(int sales) {
+    if (sales >= 10000) {
+      return '${(sales / 10000).toStringAsFixed(1)}万';
+    } else if (sales >= 1000) {
+      return '${(sales / 1000).toStringAsFixed(1)}k';
+    }
+    return sales.toString();
   }
 }

@@ -27,6 +27,8 @@ final class DioClient {
   final Dio _dio;
   final StorageService _storage;
 
+  String get baseUrl => _dio.options.baseUrl;
+
   Future<Response<T>> get<T>(
     String path, {
     Map<String, dynamic>? queryParameters,

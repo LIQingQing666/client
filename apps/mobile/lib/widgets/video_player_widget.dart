@@ -22,6 +22,7 @@ final class VideoPlayerWidget extends StatefulWidget {
     this.onFollow,
     this.isFollowing = false,
     this.seekTrigger,
+    this.productCard,
   });
 
   final VideoModel video;
@@ -34,6 +35,7 @@ final class VideoPlayerWidget extends StatefulWidget {
   final VoidCallback? onFollow;
   final bool isFollowing;
   final ValueNotifier<int>? seekTrigger;
+  final Widget? productCard;
 
   @override
   State<VideoPlayerWidget> createState() => _VideoPlayerWidgetState();
@@ -223,14 +225,30 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
             isFollowing: widget.isFollowing,
           ),
 
-          // Right action bar
-          _VideoActionBar(
-            video: widget.video,
-            onLike: widget.onLike,
-            onMessage: widget.onMessage,
-            onShare: widget.onShare,
-            onProductTap: widget.onProductTap,
-            onMusicTap: () => showToast('音乐详情'),
+          //set product card position
+          Positioned(
+            right: AppDimens.paddingMd,
+            bottom: 180, // 与 _VideoActionBar 原位置一致
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                // 商品卡片（在按钮左侧）
+                if (widget.productCard != null) ...[
+                  widget.productCard!,
+                  const SizedBox(width: AppDimens.paddingSm),
+                ],
+                //  Right action bar
+                _VideoActionBar(
+                  video: widget.video,
+                  onLike: widget.onLike,
+                  onMessage: widget.onMessage,
+                  onShare: widget.onShare,
+                  onProductTap: widget.onProductTap,
+                  onMusicTap: () => showToast('音乐详情'),
+                ),
+              ],
+            ),
           ),
 
           // Progress bar
