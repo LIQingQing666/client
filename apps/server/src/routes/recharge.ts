@@ -2,6 +2,29 @@ import crypto from 'node:crypto';
 import { FastifyInstance } from 'fastify';
 import { getDb } from '../db/schema.js';
 
+// 充值套餐固定赠送规则（与前端 coin_recharge_page 的 _packages 保持一致）
+const PACKAGE_BONUS: Record<number, number> = {
+  6: 0,
+  30: 3,
+  98: 15,
+  198: 45,
+  328: 85,
+  648: 200,
+};
+
+function getBonus(amount: number): number {
+  // 如果金额匹配预置套餐，使用固定赠送
+  if (PACKAGE_BONUS[amount] !== undefined) {
+    return PACKAGE_BONUS[amount];
+  }
+  // 自定义金额：赠送比例为 5%（向下取整）
+  if (amount > 0) {
+    const bonus = Math.floor(amount * 0.05 * 100) / 100;
+    return bonus > 0 ? bonus : 0;
+  }
+  return 0;
+}
+
 export async function rechargeRoutes(app: FastifyInstance) {
   // POST /api/recharge/create - 创建充值订单
   app.post('/api/recharge/create', async (req, reply) => {
@@ -30,12 +53,8 @@ export async function rechargeRoutes(app: FastifyInstance) {
       return;
     }
 
-    // 生成随机赠送金额：不超过 amount 的 1/10
-    const maxBonus = amount * 0.1;
-    const bonusAmount = maxBonus > 0
-      ? Math.round((Math.random() * maxBonus + 0.01) * 100) / 100
-      : 0;
-
+    // 根据充值金额计算赠送（预置套餐固定赠送，自定义金额 5%）
+    const bonusAmount = getBonus(amount);
     const totalCoins = Math.round((amount + bonusAmount) * 100) / 100;
     const orderId = `R${Date.now()}${crypto.randomUUID().slice(0, 8)}`;
 
