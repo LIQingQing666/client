@@ -27,14 +27,14 @@ final class _RechargePackage {
   int get totalCoins => coins + bonus;
 }
 
-/// 预置套餐列表
+/// 预置套餐列表（¥648 赠 10%=65，其他按比例同比减少）
 const List<_RechargePackage> _packages = [
   _RechargePackage(price: 6, coins: 6, bonus: 0, isHot: false, isBest: false),
-  _RechargePackage(price: 30, coins: 30, bonus: 3, isHot: false, isBest: false),
-  _RechargePackage(price: 98, coins: 98, bonus: 15, isHot: true, isBest: false),
-  _RechargePackage(price: 198, coins: 198, bonus: 45, isHot: false, isBest: true),
-  _RechargePackage(price: 328, coins: 328, bonus: 85, isHot: false, isBest: false),
-  _RechargePackage(price: 648, coins: 648, bonus: 200, isHot: false, isBest: false),
+  _RechargePackage(price: 30, coins: 30, bonus: 1, isHot: false, isBest: false),
+  _RechargePackage(price: 98, coins: 98, bonus: 5, isHot: true, isBest: false),
+  _RechargePackage(price: 198, coins: 198, bonus: 15, isHot: false, isBest: true),
+  _RechargePackage(price: 328, coins: 328, bonus: 28, isHot: false, isBest: false),
+  _RechargePackage(price: 648, coins: 648, bonus: 65, isHot: false, isBest: false),
 ];
 
 final class CoinRechargePage extends ConsumerStatefulWidget {

@@ -3,13 +3,14 @@ import { FastifyInstance } from 'fastify';
 import { getDb } from '../db/schema.js';
 
 // 充值套餐固定赠送规则（与前端 coin_recharge_page 的 _packages 保持一致）
+// ¥648 赠送 10%=65，其他按比例同比减少
 const PACKAGE_BONUS: Record<number, number> = {
   6: 0,
-  30: 3,
-  98: 15,
-  198: 45,
-  328: 85,
-  648: 200,
+  30: 1,
+  98: 5,
+  198: 15,
+  328: 28,
+  648: 65,
 };
 
 function getBonus(amount: number): number {
