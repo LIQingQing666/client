@@ -27,7 +27,7 @@ final class _PaymentDetailPageState extends ConsumerState<PaymentDetailPage> {
   bool _isPaying = false;
   OrderModel? _order;
   bool _isLoadingOrder = true;
-  String _selectedPayment = 'wechat';
+  String _selectedPayment = 'coin';
 
   @override
   void initState() {
@@ -468,26 +468,7 @@ final class _PaymentDetailPageState extends ConsumerState<PaymentDetailPage> {
                         ),
                         const SizedBox(height: AppDimens.paddingSm),
 
-                        _PaymentMethodTile(
-                          icon: Icons.wechat,
-                          title: '微信支付',
-                          subtitle: '推荐使用',
-                          isSelected: _selectedPayment == 'wechat',
-                          onTap: () =>
-                              setState(() => _selectedPayment = 'wechat'),
-                        ),
-                        const SizedBox(height: AppDimens.paddingSm),
-                        _PaymentMethodTile(
-                          icon: Icons.payments_outlined,
-                          title: '支付宝',
-                          subtitle: '',
-                          isSelected: _selectedPayment == 'alipay',
-                          onTap: () =>
-                              setState(() => _selectedPayment = 'alipay'),
-                        ),
-                        const SizedBox(height: AppDimens.paddingSm),
-
-                        // 抖币支付
+                        // 抖币支付（优先推荐）
                         _PaymentMethodTile(
                           icon: Icons.monetization_on,
                           title: '抖币支付',
@@ -506,6 +487,24 @@ final class _PaymentDetailPageState extends ConsumerState<PaymentDetailPage> {
                               ? const Icon(Icons.error_outline,
                                   size: 18, color: AppColors.error)
                               : null,
+                        ),
+                        const SizedBox(height: AppDimens.paddingSm),
+                        _PaymentMethodTile(
+                          icon: Icons.wechat,
+                          title: '微信支付',
+                          subtitle: '推荐使用',
+                          isSelected: _selectedPayment == 'wechat',
+                          onTap: () =>
+                              setState(() => _selectedPayment = 'wechat'),
+                        ),
+                        const SizedBox(height: AppDimens.paddingSm),
+                        _PaymentMethodTile(
+                          icon: Icons.payments_outlined,
+                          title: '支付宝',
+                          subtitle: '',
+                          isSelected: _selectedPayment == 'alipay',
+                          onTap: () =>
+                              setState(() => _selectedPayment = 'alipay'),
                         ),
                       ],
                     ),
