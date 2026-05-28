@@ -21,6 +21,7 @@ final class OrderState {
     this.page = 1,
     this.activeStatus,
     this.errorMessage,
+    this.pendingTabIndex,
   });
 
   final List<OrderModel> orders;
@@ -30,6 +31,7 @@ final class OrderState {
   final int page;
   final String? activeStatus;
   final String? errorMessage;
+  final int? pendingTabIndex;
 
   OrderState copyWith({
     List<OrderModel>? orders,
@@ -39,6 +41,8 @@ final class OrderState {
     int? page,
     String? activeStatus,
     String? errorMessage,
+    int? pendingTabIndex,
+    bool clearPendingTab = false,
   }) {
     return OrderState(
       orders: orders ?? this.orders,
@@ -48,6 +52,7 @@ final class OrderState {
       page: page ?? this.page,
       activeStatus: activeStatus,
       errorMessage: errorMessage,
+      pendingTabIndex: clearPendingTab ? null : (pendingTabIndex ?? this.pendingTabIndex),
     );
   }
 }
@@ -151,17 +156,26 @@ final class OrderNotifier extends StateNotifier<OrderState> {
     }
   }
 
-  Future<Map<String, dynamic>?> payOrder(String orderId, {String paymentMethod = 'wechat'}) async {
+  /// 支付订单，成功后返回 true
+  Future<bool> payOrder(String orderId, {String paymentMethod = 'wechat'}) async {
     try {
-      final result = await api.payOrder(orderId, paymentMethod: paymentMethod);
-      // Refresh list
-      await loadOrders(status: state.activeStatus);
-      return result;
+      await api.payOrder(orderId, paymentMethod: paymentMethod);
+      return true;
     }
     on Exception {
       showToast('支付失败，请重试');
-      return null;
+      return false;
     }
+  }
+
+  /// 请求页面切换到指定 tab（页面消费后会自动清空）
+  void requestSwitchTab(int index) {
+    state = state.copyWith(pendingTabIndex: index);
+  }
+
+  /// 清空待切换 tab 标记（页面消费后调用）
+  void clearPendingTab() {
+    state = state.copyWith(clearPendingTab: true);
   }
 
   /// 确认收货，成功后返回 true

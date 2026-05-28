@@ -38,14 +38,11 @@ final class _PaymentResultPageState extends ConsumerState<PaymentResultPage> {
   Future<void> _doPay() async {
     setState(() => _isPaying = true);
 
-    // Simulate payment processing time
-    await Future<void>.delayed(const Duration(seconds: 1));
-
     if (!mounted) {
       return;
     }
 
-    final result = await ref.read(orderProvider.notifier).payOrder(widget.orderId);
+    final success = await ref.read(orderProvider.notifier).payOrder(widget.orderId);
 
     if (!mounted) {
       return;
@@ -53,7 +50,7 @@ final class _PaymentResultPageState extends ConsumerState<PaymentResultPage> {
 
     setState(() {
       _isPaying = false;
-      _payStatus = result?['status'] as String?;
+      _payStatus = success ? 'paid' : 'failed';
     });
   }
 
@@ -160,7 +157,12 @@ final class _PaymentResultPageState extends ConsumerState<PaymentResultPage> {
               ),
             if (isTimeout) const SizedBox(width: AppDimens.paddingLg),
             ElevatedButton(
-              onPressed: () => context.goNamed('order'),
+              onPressed: () {
+                if (isSuccess) {
+                  ref.read(orderProvider.notifier).requestSwitchTab(2);
+                }
+                context.goNamed('order');
+              },
               style: ElevatedButton.styleFrom(
                 backgroundColor: (isSuccess || isTimeout) ? AppColors.primary : AppColors.card,
                 padding: const EdgeInsets.symmetric(

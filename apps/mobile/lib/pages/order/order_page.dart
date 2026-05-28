@@ -51,6 +51,20 @@ final class _OrderPageState extends ConsumerState<OrderPage>
   Widget build(BuildContext context) {
     final state = ref.watch(orderProvider);
 
+    // 处理外部请求的 tab 切换（支付成功后从 paymentResult 返回）
+    final pendingTab = state.pendingTabIndex;
+    if (pendingTab != null && pendingTab >= 0 && pendingTab < _tabs.length) {
+      // 使用 post-frame callback 避免在 build 中触发 setState
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ref.read(orderProvider.notifier).clearPendingTab();
+          _tabController.animateTo(pendingTab);
+          final statusMap = <int, String?>{0: null, 1: 'pending', 2: 'paid', 3: 'completed'};
+          ref.read(orderProvider.notifier).loadOrders(status: statusMap[pendingTab]);
+        }
+      });
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('我的订单'),

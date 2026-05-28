@@ -99,26 +99,19 @@ final class _PaymentDetailPageState extends ConsumerState<PaymentDetailPage> {
     setState(() => _isPaying = true);
 
     try {
-      final result = await ref.read(orderProvider.notifier).payOrder(
+      final success = await ref.read(orderProvider.notifier).payOrder(
         widget.orderId,
         paymentMethod: _selectedPayment,
       );
 
       if (!mounted) return;
 
-      if (result != null) {
-        // 如果抖币支付成功，更新本地余额（服务端已扣减）
-        if (_selectedPayment == 'coin' && result['new_balance'] != null) {
-          ref.read(userProvider.notifier).updateCoinBalance(
-            (result['new_balance'] as num).toDouble(),
-          );
-        }
-
+      if (success) {
         context.pushReplacementNamed(
           'paymentResult',
           pathParameters: <String, String>{'orderId': widget.orderId},
           queryParameters: <String, String>{
-            'status': result['status'] as String,
+            'status': 'paid',
             'amount': widget.amount.toString(),
           },
         );
