@@ -209,10 +209,9 @@ final class _OrderCard extends StatelessWidget {
                 OutlinedButton(
                   onPressed: () {
                     context.pushNamed(
-                      'paymentResult',
+                      'paymentDetail',
                       pathParameters: <String, String>{'orderId': order.id},
                       queryParameters: <String, String>{
-                        'status': order.status,
                         'amount': order.payAmount.toString(),
                       },
                     );
