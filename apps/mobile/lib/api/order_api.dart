@@ -1,5 +1,6 @@
 import '../models/cart_model.dart';
 import '../models/order_model.dart';
+import 'api_exception.dart';
 import 'dio_client.dart';
 
 final class OrderApi {
@@ -74,9 +75,18 @@ final class OrderApi {
   Future<OrderModel> confirmOrder(String orderId) async {
     final response = await client.post<Map<String, dynamic>>(
       '/orders/$orderId/confirm',
+      data: <String, dynamic>{},
     );
+    final body = response.data!;
+    if (body['code'] != 0) {
+      throw BusinessException(
+        body['message'] as String? ?? '确认收货失败',
+        statusCode: 200,
+        data: body,
+      );
+    }
     return OrderModel.fromJson(
-      response.data!['data'] as Map<String, dynamic>,
+      body['data'] as Map<String, dynamic>,
     );
   }
 }
