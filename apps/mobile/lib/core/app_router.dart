@@ -59,10 +59,20 @@ final class AppRouter {
       GoRoute(
         path: '/order/confirm',
         name: 'orderConfirm',
-        builder: (context, state) => OrderConfirmPage(
-          total: double.parse(state.uri.queryParameters['total'] ?? '0'),
-          count: int.parse(state.uri.queryParameters['count'] ?? '0'),
-        ),
+        builder: (context, state) {
+          final q = state.uri.queryParameters;
+          return OrderConfirmPage(
+            total: double.parse(q['total'] ?? '0'),
+            count: int.parse(q['count'] ?? '0'),
+            from: q['from'] ?? 'cart',
+            productId: q['product_id'],
+            productName: q['product_name'],
+            productPrice: q['product_price'] != null ? double.tryParse(q['product_price']!) : null,
+            productCover: q['product_cover'],
+            spec: q['product_spec'],
+            quantity: int.parse(q['quantity'] ?? '1'),
+          );
+        },
       ),
       GoRoute(
         path: '/admin',
