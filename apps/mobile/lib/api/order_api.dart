@@ -3,10 +3,45 @@ import '../models/order_model.dart';
 import 'api_exception.dart';
 import 'dio_client.dart';
 
+final class DirectOrderRequest {
+  const DirectOrderRequest({
+    required this.productId,
+    this.quantity = 1,
+    this.spec = '',
+    this.address,
+  });
+
+  final String productId;
+  final int quantity;
+  final String spec;
+  final OrderAddress? address;
+
+  Map<String, dynamic> toJson(String userId) => {
+    'user_id': userId,
+    'product_id': productId,
+    'quantity': quantity,
+    'spec': spec,
+    if (address != null) 'address': address!.toJson(),
+  };
+}
+
 final class OrderApi {
   const OrderApi({required this.client});
 
   final DioClient client;
+
+  /// 直接下单（不经过购物车，从视频/直播立即购买）
+  Future<CreateOrderResult> createDirectOrder({
+    required String userId,
+    required DirectOrderRequest request,
+  }) async {
+    final response = await client.post<Map<String, dynamic>>(
+      '/orders/direct',
+      data: request.toJson(userId),
+    );
+    final data = response.data!['data'] as Map<String, dynamic>;
+    return CreateOrderResult.fromJson(data);
+  }
 
   Future<CreateOrderResult> createOrder({
     required String userId,

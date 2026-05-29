@@ -156,6 +156,23 @@ final class OrderNotifier extends StateNotifier<OrderState> {
     }
   }
 
+  /// 直接下单（不经过购物车，从视频/直播立即购买）
+  Future<CreateOrderResult?> createDirectOrder({
+    required DirectOrderRequest request,
+  }) async {
+    try {
+      final result = await api.createDirectOrder(
+        userId: _userId,
+        request: request,
+      );
+      return result;
+    }
+    on Exception {
+      showToast('下单失败，请重试');
+      return null;
+    }
+  }
+
   /// 支付订单，成功后返回 true
   Future<bool> payOrder(String orderId, {String paymentMethod = 'wechat'}) async {
     try {
