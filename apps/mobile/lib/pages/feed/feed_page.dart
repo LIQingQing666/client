@@ -105,10 +105,16 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
           ref.read(cartProvider.notifier).addToCart(productId: product.id);
         },
         onBuyNow: () {
-          ref.read(cartProvider.notifier).addToCart(productId: product.id);
           context.pushNamed('orderConfirm', queryParameters: <String, String>{
+            'from': 'buy_now',
             'total': product.price.toString(),
             'count': '1',
+            'product_id': product.id,
+            'product_name': product.name,
+            'product_price': product.price.toString(),
+            'product_cover': product.coverUrl,
+            'product_spec': '',
+            'quantity': '1',
           });
         },
         onSeekToTime: product.highlightTime > 0
@@ -140,9 +146,16 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
                 ref.read(cartProvider.notifier).addToCart(productId: product.id);
               },
               onBuyNow: () {
-                ref.read(cartProvider.notifier).addToCart(productId: product.id);
                 context.pushNamed('orderConfirm', queryParameters: <String, String>{
-                  'total': product.price.toString(), 'count': '1',
+                  'from': 'buy_now',
+                  'total': product.price.toString(),
+                  'count': '1',
+                  'product_id': product.id,
+                  'product_name': product.name,
+                  'product_price': product.price.toString(),
+                  'product_cover': product.coverUrl,
+                  'product_spec': '',
+                  'quantity': '1',
                 });
               },
               onSeekToTime: updated.highlightTime > 0

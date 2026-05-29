@@ -340,12 +340,17 @@ final class _LiveRoomPageState extends ConsumerState<LiveRoomPage> {
                       );
                     },
                     onBuyNow: () {
-                      ref.read(cartProvider.notifier).addToCart(
-                        productId: state.currentProduct!.id,
-                      );
-                      context.pushNamed('orderConfirm', queryParameters: {
-                        'total': state.currentProduct!.price.toString(),
+                      final p = state.currentProduct!;
+                      context.pushNamed('orderConfirm', queryParameters: <String, String>{
+                        'from': 'buy_now',
+                        'total': p.price.toString(),
                         'count': '1',
+                        'product_id': p.id,
+                        'product_name': p.name,
+                        'product_price': p.price.toString(),
+                        'product_cover': p.coverUrl,
+                        'product_spec': '',
+                        'quantity': '1',
                       });
                     },
                   );
@@ -369,12 +374,17 @@ final class _LiveRoomPageState extends ConsumerState<LiveRoomPage> {
                       );
                     },
                     onBuyNow: () {
-                      ref.read(cartProvider.notifier).addToCart(
-                        productId: product.id,
-                      );
-                      context.pushNamed('orderConfirm', queryParameters: {
-                        'total': product.price.toString(),
+                      final p = product;
+                      context.pushNamed('orderConfirm', queryParameters: <String, String>{
+                        'from': 'buy_now',
+                        'total': p.price.toString(),
                         'count': '1',
+                        'product_id': p.id,
+                        'product_name': p.name,
+                        'product_price': p.price.toString(),
+                        'product_cover': p.coverUrl,
+                        'product_spec': '',
+                        'quantity': '1',
                       });
                     },
                   );
@@ -398,10 +408,17 @@ final class _LiveRoomPageState extends ConsumerState<LiveRoomPage> {
                       ref.read(cartProvider.notifier).addToCart(productId: state.currentProduct!.id);
                     },
                     onBuyNow: () {
-                      ref.read(cartProvider.notifier).addToCart(productId: state.currentProduct!.id);
+                      final p = state.currentProduct!;
                       context.pushNamed('orderConfirm', queryParameters: <String, String>{
-                        'total': state.currentProduct!.price.toString(),
+                        'from': 'buy_now',
+                        'total': p.price.toString(),
                         'count': '1',
+                        'product_id': p.id,
+                        'product_name': p.name,
+                        'product_price': p.price.toString(),
+                        'product_cover': p.coverUrl,
+                        'product_spec': '',
+                        'quantity': '1',
                       });
                     },
                   );
@@ -563,9 +580,17 @@ final class _LiveRoomPageState extends ConsumerState<LiveRoomPage> {
                                 ref.read(cartProvider.notifier).addToCart(productId: product.id);
                               },
                               onBuyNow: () {
-                                ref.read(cartProvider.notifier).addToCart(productId: product.id);
+                                final p = product;
                                 context.pushNamed('orderConfirm', queryParameters: <String, String>{
-                                  'total': product.price.toString(), 'count': '1',
+                                  'from': 'buy_now',
+                                  'total': p.price.toString(),
+                                  'count': '1',
+                                  'product_id': p.id,
+                                  'product_name': p.name,
+                                  'product_price': p.price.toString(),
+                                  'product_cover': p.coverUrl,
+                                  'product_spec': '',
+                                  'quantity': '1',
                                 });
                               },
                             );
