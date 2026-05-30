@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
 
@@ -16,6 +14,9 @@ final class PipState {
   final bool isActive;
   final VideoPlayerController? videoController;
   final LiveRoomInfo? roomInfo;
+
+  /// The room to navigate back to when the user taps the floating window.
+  String? get pipRoomId => roomInfo?.id;
 
   PipState copyWith({
     bool? isActive,
@@ -36,10 +37,6 @@ final class PipState {
 /// page), the live video can be kept playing in a draggable floating window.
 final class PipNotifier extends StateNotifier<PipState> {
   PipNotifier() : super(const PipState());
-
-  /// Callback invoked when the user taps the floating window to return to
-  /// the full live room.  Set by the consumer that owns the router.
-  VoidCallback? onReturnToLive;
 
   /// Enter PIP mode with the given controller and room info.
   void enterPip(VideoPlayerController controller, LiveRoomInfo room) {

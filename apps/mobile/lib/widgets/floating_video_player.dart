@@ -85,11 +85,8 @@ final class _FloatingVideoPlayerState extends State<FloatingVideoPlayer> {
         onPanUpdate: (details) {
           if (_dragStart == null) return;
           setState(() {
-            _position = _clampPosition(
-              _dragStart! + details.localPosition - details.localPosition + details.delta,
-            );
+            _position = _clampPosition(_dragStart! + details.delta);
           });
-          // Re-calculate drag start for delta-based movement
           _dragStart = _position;
         },
         child: Container(

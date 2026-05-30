@@ -70,10 +70,20 @@ final class CommerceApp extends ConsumerWidget {
                 controller: pipState.videoController!,
                 roomInfo: pipState.roomInfo!,
                 onTap: () {
+                  final roomId = pipState.pipRoomId;
                   ref.read(pipProvider.notifier).exitPip();
-                  // Navigate back to the live room
-                  final notifier = ref.read(pipProvider.notifier);
-                  notifier.onReturnToLive?.call();
+                  if (roomId != null) {
+                    // Navigate back to the live room via the global router.
+                    // Pop any intermediate routes first, then go to the room.
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      final router = AppRouter.router;
+                      while (router.canPop()) {
+                        router.pop();
+                      }
+                      router.pushNamed('liveRoom',
+                          pathParameters: {'roomId': roomId});
+                    });
+                  }
                 },
                 onClose: () {
                   ref.read(pipProvider.notifier).closePip();

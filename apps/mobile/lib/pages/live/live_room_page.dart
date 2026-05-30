@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../core/app_constants.dart';
+import '../../core/app_router.dart';
 import '../../models/live_model.dart';
 import '../../models/product_model.dart';
 import '../../provider/cart_provider.dart';
@@ -444,9 +445,20 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
     final room = state.room!;
     final isFollowing = followState.followingIds.contains(room.authorId);
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Stack(
+    return PopScope(
+      canPop: false, // We handle back navigation ourselves.
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        // Enter PIP mode if video is playing, then pop.
+        final currentRoom = state.room;
+        if (_videoController != null && _videoReady && currentRoom != null) {
+          ref.read(pipProvider.notifier).enterPip(_videoController!, currentRoom);
+        }
+        context.pop();
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        body: Stack(
         fit: StackFit.expand,
         children: [
           // Background: video player or cover image
@@ -512,15 +524,6 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
                       final room = ref.read(liveProvider).room;
                       if (_videoController != null && _videoReady && room != null) {
                         ref.read(pipProvider.notifier).enterPip(_videoController!, room);
-                        ref.read(pipProvider.notifier).onReturnToLive = () {
-                          // Pop all current routes and re-enter the live room.
-                          final router = GoRouter.of(context);
-                          while (router.canPop()) {
-                            router.pop();
-                          }
-                          context.pushReplacementNamed('liveRoom',
-                              pathParameters: {'roomId': widget.room.id});
-                        };
                       }
                       context.pop();
                     },
@@ -736,7 +739,8 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
           ),
         ],
       ),
-    );
+    ),
+  );
   }
 }
 
