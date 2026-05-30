@@ -213,6 +213,8 @@ final class LiveNotifier extends StateNotifier<LiveState> {
   }
 }
 
+final roomListProvider = StateProvider<List<LiveRoomInfo>>((ref) => []);
+
 final liveProvider = StateNotifierProvider<LiveNotifier, LiveState>((ref) {
   final api = ref.watch(liveApiProvider);
   final ws = ref.watch(webSocketServiceProvider);

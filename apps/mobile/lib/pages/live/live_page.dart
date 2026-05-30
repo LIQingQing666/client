@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../api/live_api.dart';
 import '../../core/app_constants.dart';
 import '../../models/live_model.dart';
+import '../../provider/live_provider.dart';
 import '../../provider/service_providers.dart';
 
 final class LivePage extends ConsumerStatefulWidget {

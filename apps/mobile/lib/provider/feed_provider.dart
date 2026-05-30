@@ -187,6 +187,8 @@ final class FeedNotifier extends StateNotifier<FeedState> {
   }
 }
 
+final muteStateProvider = StateProvider<bool>((ref) => false);
+
 final feedProvider =
     StateNotifierProvider<FeedNotifier, FeedState>((ref) {
   final api = ref.watch(videoApiProvider);
