@@ -745,7 +745,6 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
               likeCount: state.likeCount,
               isLiked: state.isLiked,
               onLike: () => ref.read(liveProvider.notifier).toggleLike(),
-              onComment: _toggleChatInput,
               onShare: _onShare,
               onProduct: _showProductList,
               onGift: _showGiftPanel,
@@ -845,7 +844,6 @@ final class _LiveRoomActionBar extends StatelessWidget {
     required this.likeCount,
     required this.isLiked,
     this.onLike,
-    this.onComment,
     this.onShare,
     this.onProduct,
     this.onGift,
@@ -854,7 +852,6 @@ final class _LiveRoomActionBar extends StatelessWidget {
   final int likeCount;
   final bool isLiked;
   final VoidCallback? onLike;
-  final VoidCallback? onComment;
   final VoidCallback? onShare;
   final VoidCallback? onProduct;
   final VoidCallback? onGift;
@@ -869,12 +866,6 @@ final class _LiveRoomActionBar extends StatelessWidget {
           iconColor: isLiked ? AppColors.primary : null,
           label: likeCount > 0 ? likeCount.toString() : '点赞',
           onTap: onLike,
-        ),
-        const SizedBox(height: AppDimens.paddingLg),
-        _ActionItem(
-          icon: Icons.message,
-          label: '评论',
-          onTap: onComment,
         ),
         const SizedBox(height: AppDimens.paddingLg),
         _ActionItem(
