@@ -5,9 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 import '../core/app_constants.dart';
+import '../models/product_model.dart';
 import '../models/video_model.dart';
 import '../services/player_pool.dart';
 import '../utils/toast.dart';
+import 'floating_product_card.dart';
 
 final class VideoPlayerWidget extends StatefulWidget {
   const VideoPlayerWidget({
@@ -16,6 +18,7 @@ final class VideoPlayerWidget extends StatefulWidget {
     required this.pool,
     this.isActive = false,
     this.isMuted = false,
+    this.product,
     this.onLike,
     this.onMessage,
     this.onShare,
@@ -33,6 +36,7 @@ final class VideoPlayerWidget extends StatefulWidget {
   final PlayerPool pool;
   final bool isActive;
   final bool isMuted;
+  final ProductModel? product;
   final VoidCallback? onLike;
   final VoidCallback? onMessage;
   final VoidCallback? onShare;
@@ -290,12 +294,19 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
             onLike: widget.onLike,
             onMessage: widget.onMessage,
             onShare: widget.onShare,
-            onProductTap: widget.onProductTap,
             onMuteToggle: widget.onMuteToggle,
             isMuted: widget.isMuted,
             onFavorite: widget.onFavorite,
             isFavorited: widget.isFavorited,
           ),
+
+          // Floating product card (TikTok-style overlay)
+          if (widget.product != null)
+            FloatingProductCard(
+              product: widget.product,
+              onTap: widget.onProductTap ?? () {},
+              disableAutoFade: true,
+            ),
 
           // Progress bar
           if (widget.isActive && _controller != null && _isInitialized)
@@ -465,7 +476,6 @@ final class _VideoActionBar extends StatelessWidget {
     this.onLike,
     this.onMessage,
     this.onShare,
-    this.onProductTap,
     this.onMuteToggle,
     this.onFavorite,
     this.isMuted = false,
@@ -476,7 +486,6 @@ final class _VideoActionBar extends StatelessWidget {
   final VoidCallback? onLike;
   final VoidCallback? onMessage;
   final VoidCallback? onShare;
-  final VoidCallback? onProductTap;
   final VoidCallback? onMuteToggle;
   final VoidCallback? onFavorite;
   final bool isMuted;
@@ -514,12 +523,6 @@ final class _VideoActionBar extends StatelessWidget {
             icon: Icons.share,
             label: video.shareCount.toString(),
             onTap: onShare,
-          ),
-          const SizedBox(height: AppDimens.paddingLg),
-          _ActionButton(
-            icon: Icons.shopping_bag_outlined,
-            label: '商品',
-            onTap: onProductTap,
           ),
           const SizedBox(height: AppDimens.paddingLg),
           _ActionButton(

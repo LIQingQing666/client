@@ -30,6 +30,7 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
   late final PageController _pageController = PageController();
   final ValueNotifier<int> _seekTrigger = ValueNotifier<int>(0);
   String? _pendingJumpVideoId;
+  final Map<String, ProductModel?> _productCache = {};
 
   @override
   void initState() {
@@ -44,6 +45,59 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
     _seekTrigger.dispose();
     _pageController.dispose();
     super.dispose();
+  }
+
+  Future<ProductModel?> _fetchProductForVideo(VideoModel video) async {
+    if (_productCache.containsKey(video.id)) return _productCache[video.id];
+    try {
+      final videoApi = ref.read(videoApiProvider);
+      final detail = await videoApi.getVideoDetail(video.id);
+      final products = detail.products;
+      if (products.isEmpty) {
+        _productCache[video.id] = null;
+        return null;
+      }
+      final product = ProductModel.fromJson(products.first);
+      _productCache[video.id] = product;
+      return product;
+    } on Exception {
+      _productCache[video.id] = null;
+      return null;
+    }
+  }
+
+  void _showCachedProduct(ProductModel product) {
+    showProductDetailSheet(
+      context: context,
+      product: product,
+      onAddToCart: () {
+        ref.read(cartProvider.notifier).addToCart(productId: product.id);
+      },
+      onBuyNow: () {
+        ref.read(cartProvider.notifier).addToCart(productId: product.id);
+        context.pushNamed('orderConfirm', queryParameters: <String, String>{
+          'total': product.price.toString(),
+          'count': '1',
+        });
+      },
+      onSeekToTime: (product.highlightTime > 0 || product.segments.isNotEmpty)
+          ? (int seekTime) {
+              _seekTrigger.value = seekTime;
+              Navigator.of(context).pop();
+            }
+          : null,
+      onFavorite: () {
+        ref.read(favoriteProvider.notifier).toggleProductFavorite(
+          id: product.id,
+          name: product.name,
+          coverUrl: product.coverUrl,
+          price: product.price,
+          videoId: product.videoId,
+          highlightTime: product.highlightTime,
+        );
+      },
+      isFavorited: ref.read(favoriteProvider).isFavorited(product.id),
+    );
   }
 
   Future<void> _onProductTap(VideoModel video) async {
@@ -300,14 +354,30 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
               final isActive = isTabActive && index == feedState.currentIndex;
               final isFollowing = followState.followingIds.contains(video.authorId);
 
+              final cachedProduct = _productCache[video.id];
+
+              // Fetch product data when this video becomes active.
+              if (isActive && !_productCache.containsKey(video.id)) {
+                _fetchProductForVideo(video).then((product) {
+                  if (mounted) setState(() {});
+                });
+              }
+
               return VideoPlayerWidget(
                 key: ValueKey(video.id),
                 video: video,
                 pool: pool,
                 isActive: isActive,
                 isMuted: isMuted,
+                product: cachedProduct,
                 onLike: () => notifier.toggleLike(video.id),
-                onProductTap: () => _onProductTap(video),
+                onProductTap: () {
+                  if (cachedProduct != null) {
+                    _showCachedProduct(cachedProduct);
+                  } else {
+                    _onProductTap(video);
+                  }
+                },
                 onShare: () => _onShare(video),
                 onMessage: () => showVideoCommentsSheet(
                   context: context,

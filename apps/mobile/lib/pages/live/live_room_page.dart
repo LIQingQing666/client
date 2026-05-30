@@ -17,6 +17,7 @@ import '../../provider/pip_provider.dart';
 import '../../utils/toast.dart';
 import '../../widgets/coupon_countdown.dart';
 import '../../widgets/danmaku_overlay.dart';
+import '../../widgets/floating_product_card.dart';
 import '../../widgets/product_detail_sheet.dart';
 import 'audience_list.dart';
 import 'gift_panel.dart';
@@ -278,133 +279,6 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
         onSelect: (gift) {
           showToast('送出了 ${gift.name}');
         },
-      ),
-    );
-  }
-
-  void _showProductList() {
-    final products = ref.read(liveProvider).products;
-    if (products.isEmpty) {
-      showToast('暂无商品');
-      return;
-    }
-
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        height: MediaQuery.of(context).size.height * 0.6,
-        decoration: const BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(AppDimens.radiusXl)),
-        ),
-        child: Column(
-          children: [
-            const SizedBox(height: AppDimens.paddingSm),
-            Center(
-              child: Container(
-                width: 36, height: 4,
-                decoration: BoxDecoration(color: AppColors.textHint, borderRadius: BorderRadius.circular(2)),
-              ),
-            ),
-            const SizedBox(height: AppDimens.paddingMd),
-            const Text('商品列表', style: AppTextStyles.titleMedium),
-            const SizedBox(height: AppDimens.paddingMd),
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: AppDimens.paddingLg),
-                itemCount: products.length,
-                itemBuilder: (context, index) {
-                  final product = products[index];
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: AppDimens.paddingSm),
-                    padding: const EdgeInsets.all(AppDimens.paddingSm),
-                    decoration: BoxDecoration(
-                      color: AppColors.card,
-                      borderRadius: BorderRadius.circular(AppDimens.radiusMd),
-                    ),
-                    child: Row(
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(AppDimens.radiusSm),
-                          child: CachedNetworkImage(
-                            imageUrl: product.coverUrl, width: 64, height: 64, fit: BoxFit.cover,
-                            placeholder: (_, __) => Container(color: AppColors.card),
-                            errorWidget: (_, __, ___) => Container(color: AppColors.card),
-                          ),
-                        ),
-                        const SizedBox(width: AppDimens.paddingMd),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(product.name, style: AppTextStyles.bodyLarge, maxLines: 1, overflow: TextOverflow.ellipsis),
-                              const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  Text('¥${product.price.toStringAsFixed(0)}', style: AppTextStyles.priceSmall),
-                                  if (product.hasDiscount) ...[
-                                    const SizedBox(width: AppDimens.paddingXs),
-                                    Text('¥${product.originalPrice.toStringAsFixed(0)}',
-                                      style: const TextStyle(fontSize: 11, color: AppColors.textHint, decoration: TextDecoration.lineThrough)),
-                                  ],
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: () {
-                            Navigator.of(ctx).pop();
-                            ref.read(favoriteProvider.notifier).toggleProductFavorite(
-                              id: product.id,
-                              name: product.name,
-                              coverUrl: product.coverUrl,
-                              price: product.price,
-                              videoId: product.videoId,
-                              highlightTime: product.highlightTime,
-                            );
-                          },
-                          child: Container(
-                            width: 28, height: 28,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: AppColors.card,
-                            ),
-                            child: Icon(
-                              ref.read(favoriteProvider).isFavorited(product.id)
-                                  ? Icons.bookmark
-                                  : Icons.bookmark_border,
-                              color: ref.read(favoriteProvider).isFavorited(product.id)
-                                  ? AppColors.primary
-                                  : AppColors.textHint,
-                              size: 16,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: AppDimens.paddingSm),
-                        GestureDetector(
-                          onTap: () {
-                            Navigator.of(ctx).pop();
-                            _showProductDetail(context, product);
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: AppDimens.paddingMd, vertical: AppDimens.paddingSm),
-                            decoration: BoxDecoration(
-                              color: AppColors.surface,
-                              borderRadius: BorderRadius.circular(AppDimens.radiusMd),
-                            ),
-                            child: const Text('购买', style: TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w600)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -737,47 +611,57 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
               ),
             ),
 
-          // Right action bar (like, comment, share, product)
-          Positioned(
-            right: AppDimens.paddingMd,
-            bottom: 180 + bottomInset,
-            child: _LiveRoomActionBar(
-              likeCount: state.likeCount,
-              isLiked: state.isLiked,
-              onLike: () => ref.read(liveProvider.notifier).toggleLike(),
-              onShare: _onShare,
-              onProduct: _showProductList,
-              onGift: _showGiftPanel,
-            ),
-          ),
-
-          // Comment list (scrollable, shows recent messages)
-          Positioned(
-            left: AppDimens.paddingMd,
-            right: AppDimens.paddingLg + 56,
-            bottom: 60 + bottomInset,
-            height: 100,
-            child: _CommentList(messages: state.messages),
-          ),
-
-          // Explaining product card
-          if (state.currentProduct != null)
-            Positioned(
-              left: AppDimens.paddingLg,
-              right: AppDimens.paddingLg,
-              bottom: 160 + bottomInset,
-              child: _ExplainingProductCard(
-                product: state.currentProduct!,
-                onTap: () => _showProductDetail(context, state.currentProduct!),
-              ),
-            ),
+          // Comments (left 2/3) + product card (right 1/3) — above bottom row.
+          Builder(builder: (ctx) {
+            final hasProduct =
+                state.currentProduct != null || state.products.isNotEmpty;
+            final screenW = MediaQuery.of(context).size.width;
+            final cardW = hasProduct ? screenW / 3 : 0.0;
+            const bottomRowH = 48.0;
+            return Stack(
+              children: [
+                // Comments — left 2/3
+                Positioned(
+                  left: AppDimens.paddingMd,
+                  right: hasProduct
+                      ? cardW + AppDimens.paddingSm
+                      : AppDimens.paddingLg + 56,
+                  bottom: bottomRowH + AppDimens.paddingSm + bottomInset,
+                  height: 120,
+                  child: _CommentList(messages: state.messages),
+                ),
+                // Product card — right 1/3, bottom at bottom-row top
+                if (hasProduct)
+                  Positioned(
+                    right: AppDimens.paddingMd,
+                    bottom: bottomRowH + AppDimens.paddingSm + bottomInset,
+                    width: cardW - AppDimens.paddingSm,
+                    height: 180,
+                    child: FloatingProductCard(
+                      product: state.currentProduct ??
+                          state.products.first,
+                      onTap: () => _showProductDetail(
+                          ctx,
+                          state.currentProduct ??
+                              state.products.first),
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      disableAutoFade: true,
+                      verticalLayout: true,
+                    ),
+                  ),
+              ],
+            );
+          }),
 
           // Coupon banners
           if (state.coupons.isNotEmpty)
             Positioned(
               left: AppDimens.paddingLg,
               right: AppDimens.paddingLg,
-              bottom: state.currentProduct != null ? 220 + bottomInset : 160 + bottomInset,
+              bottom: 200 + bottomInset,
               child: CouponCountdown(
                 coupon: state.coupons.first,
                 onClaim: () {
@@ -788,47 +672,91 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
               ),
             ),
 
-          // Bottom chat bar
+          // ---- Bottom row: input (left 1/2) + actions (right 1/2) ----
           Positioned(
             bottom: bottomInset,
-            left: 0, right: AppDimens.paddingLg + 56,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(AppDimens.paddingLg, AppDimens.paddingSm, 0, AppDimens.paddingSm),
-              child: SafeArea(
-                top: false,
-                child: _showChatInput
-                    ? TextField(
-                        controller: _chatController,
-                        focusNode: _chatFocusNode,
-                        style: const TextStyle(fontSize: 14, color: Colors.white),
-                        decoration: InputDecoration(
-                          hintText: '说点什么...',
-                          hintStyle: const TextStyle(color: AppColors.textHint),
-                          filled: true,
-                          fillColor: Colors.white.withAlpha(30),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: AppDimens.paddingMd, vertical: AppDimens.paddingSm),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(AppDimens.radiusXl),
-                            borderSide: BorderSide.none,
+            left: 0,
+            right: 0,
+            child: Container(
+              height: 48,
+              margin: const EdgeInsets.symmetric(horizontal: AppDimens.paddingSm),
+              child: Row(
+                children: [
+                  // Input — left half
+                  Expanded(
+                    flex: 1,
+                    child: _showChatInput
+                        ? TextField(
+                            controller: _chatController,
+                            focusNode: _chatFocusNode,
+                            style: const TextStyle(
+                                fontSize: 13, color: Colors.white),
+                            decoration: InputDecoration(
+                              hintText: '说点什么...',
+                              hintStyle: const TextStyle(
+                                  color: AppColors.textHint, fontSize: 13),
+                              filled: true,
+                              fillColor: Colors.white.withAlpha(25),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 8),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(24),
+                                borderSide: BorderSide.none,
+                              ),
+                              suffixIcon: IconButton(
+                                icon: const Icon(Icons.send,
+                                    color: AppColors.primary, size: 18),
+                                onPressed: _sendMessage,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(
+                                    minWidth: 36, minHeight: 36),
+                              ),
+                            ),
+                            onSubmitted: (_) => _sendMessage(),
+                          )
+                        : GestureDetector(
+                            onTap: _toggleChatInput,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withAlpha(25),
+                                borderRadius: BorderRadius.circular(24),
+                              ),
+                              child: const Text('说点什么...',
+                                  style: TextStyle(
+                                      fontSize: 13,
+                                      color: AppColors.textHint)),
+                            ),
                           ),
-                          suffixIcon: IconButton(
-                            icon: const Icon(Icons.send, color: AppColors.primary, size: 20),
-                            onPressed: _sendMessage,
-                          ),
-                        ),
-                        onSubmitted: (_) => _sendMessage(),
-                      )
-                    : GestureDetector(
-                        onTap: _toggleChatInput,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: AppDimens.paddingMd, vertical: AppDimens.paddingSm + 2),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withAlpha(30),
-                            borderRadius: BorderRadius.circular(AppDimens.radiusXl),
-                          ),
-                          child: const Text('说点什么...', style: TextStyle(fontSize: 14, color: AppColors.textHint)),
-                        ),
-                      ),
+                  ),
+                  const SizedBox(width: AppDimens.paddingXs),
+                  // Action buttons — right half
+                  _BottomActionBtn(
+                    icon: Icons.shopping_cart_outlined,
+                    onTap: () => context.pushNamed('cart'),
+                  ),
+                  _BottomActionBtn(
+                    icon: state.isLiked
+                        ? Icons.favorite
+                        : Icons.favorite_border,
+                    iconColor:
+                        state.isLiked ? AppColors.primary : Colors.white70,
+                    label: state.likeCount > 0
+                        ? state.likeCount.toString()
+                        : null,
+                    onTap: () =>
+                        ref.read(liveProvider.notifier).toggleLike(),
+                  ),
+                  _BottomActionBtn(
+                    icon: Icons.card_giftcard,
+                    onTap: _showGiftPanel,
+                  ),
+                  _BottomActionBtn(
+                    icon: Icons.share_outlined,
+                    onTap: _onShare,
+                  ),
+                ],
               ),
             ),
           ),
@@ -839,68 +767,18 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
   }
 }
 
-final class _LiveRoomActionBar extends StatelessWidget {
-  const _LiveRoomActionBar({
-    required this.likeCount,
-    required this.isLiked,
-    this.onLike,
-    this.onShare,
-    this.onProduct,
-    this.onGift,
-  });
-
-  final int likeCount;
-  final bool isLiked;
-  final VoidCallback? onLike;
-  final VoidCallback? onShare;
-  final VoidCallback? onProduct;
-  final VoidCallback? onGift;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _ActionItem(
-          icon: isLiked ? Icons.favorite : Icons.favorite_border,
-          iconColor: isLiked ? AppColors.primary : null,
-          label: likeCount > 0 ? likeCount.toString() : '点赞',
-          onTap: onLike,
-        ),
-        const SizedBox(height: AppDimens.paddingLg),
-        _ActionItem(
-          icon: Icons.share,
-          label: '分享',
-          onTap: onShare,
-        ),
-        const SizedBox(height: AppDimens.paddingLg),
-        _ActionItem(
-          icon: Icons.shopping_bag_outlined,
-          label: '商品',
-          onTap: onProduct,
-        ),
-        const SizedBox(height: AppDimens.paddingLg),
-        _ActionItem(
-          icon: Icons.card_giftcard,
-          label: '礼物',
-          onTap: onGift,
-        ),
-      ],
-    );
-  }
-}
-
-final class _ActionItem extends StatelessWidget {
-  const _ActionItem({
+/// Compact action button for the bottom row.
+final class _BottomActionBtn extends StatelessWidget {
+  const _BottomActionBtn({
     required this.icon,
-    required this.label,
     this.iconColor,
+    this.label,
     this.onTap,
   });
 
   final IconData icon;
-  final String label;
   final Color? iconColor;
+  final String? label;
   final VoidCallback? onTap;
 
   @override
@@ -908,66 +786,18 @@ final class _ActionItem extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 32, color: iconColor ?? Colors.white),
-          const SizedBox(height: 2),
-          Text(label, style: const TextStyle(fontSize: 11, color: Colors.white70)),
-        ],
-      ),
-    );
-  }
-}
-
-final class _ExplainingProductCard extends StatelessWidget {
-  const _ExplainingProductCard({required this.product, this.onTap});
-
-  final ProductModel product;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(AppDimens.paddingSm),
-        decoration: BoxDecoration(
-          color: Colors.black.withAlpha(200),
-          borderRadius: BorderRadius.circular(AppDimens.radiusLg),
-          border: Border.all(color: AppColors.accent.withAlpha(150)),
-        ),
-        child: Row(
+      child: SizedBox(
+        width: 40,
+        height: 48,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(AppDimens.radiusMd),
-              child: CachedNetworkImage(
-                imageUrl: product.coverUrl, width: 56, height: 56, fit: BoxFit.cover,
-                placeholder: (_, __) => Container(color: AppColors.card),
-                errorWidget: (_, __, ___) => Container(color: AppColors.card),
-              ),
-            ),
-            const SizedBox(width: AppDimens.paddingSm),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.auto_awesome, color: AppColors.accent, size: 14),
-                      SizedBox(width: 4),
-                      Text('主播正在讲解', style: TextStyle(fontSize: 11, color: AppColors.accent, fontWeight: FontWeight.w600)),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(product.name, style: AppTextStyles.bodyMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
-                  const SizedBox(height: 2),
-                  Text('¥${product.price.toStringAsFixed(0)}', style: AppTextStyles.priceSmall),
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right, color: Colors.white70),
+            Icon(icon, size: 22, color: iconColor ?? Colors.white70),
+            if (label != null) ...[
+              const SizedBox(height: 1),
+              Text(label!, style: const TextStyle(fontSize: 9, color: Colors.white60)),
+            ],
           ],
         ),
       ),

@@ -370,17 +370,57 @@ final class _ProductDetailSheetState extends State<ProductDetailSheet> {
                 ),
               ),
 
+              // Review summary
+              const Divider(height: 1, color: AppColors.divider),
+              Padding(
+                padding: const EdgeInsets.all(AppDimens.paddingLg),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Text('商品评价', style: AppTextStyles.titleMedium),
+                        const Spacer(),
+                        const Text('好评率 ', style: AppTextStyles.bodySmall),
+                        const Text('98%',
+                            style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.success)),
+                        const Icon(Icons.chevron_right,
+                            size: 16, color: AppColors.textHint),
+                      ],
+                    ),
+                    const SizedBox(height: AppDimens.paddingMd),
+                    _ReviewTile(
+                      avatar: '匿',
+                      name: '匿名用户',
+                      content: '质量非常好，颜色和图片一样，穿上很舒服，物超所值！',
+                      rating: 5,
+                    ),
+                    const Divider(height: 1, color: AppColors.divider),
+                    _ReviewTile(
+                      avatar: '小',
+                      name: '小王同学',
+                      content: '物流很快，包装也很精致，已经是第二次购买了。',
+                      rating: 5,
+                    ),
+                  ],
+                ),
+              ),
+
               const SizedBox(height: AppDimens.paddingLg),
             ],
           ),
         ),
         _BottomActionBar(
           onAddToCart: widget.onAddToCart,
-          onBuyNow: widget.onBuyNow,
+          onBuyNow: product.stock > 0 ? widget.onBuyNow : null,
           onFavorite: widget.onFavorite,
           isFavorited: widget.isFavorited,
           price: product.price,
           bottomInset: bottomInset,
+          stock: product.stock,
         ),
       ],
     ),
@@ -528,6 +568,65 @@ final class _SegmentPickerSheet extends StatelessWidget {
   }
 }
 
+/// A single review entry for the review summary section.
+final class _ReviewTile extends StatelessWidget {
+  const _ReviewTile({
+    required this.avatar,
+    required this.name,
+    required this.content,
+    this.rating = 5,
+  });
+
+  final String avatar;
+  final String name;
+  final String content;
+  final int rating;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppDimens.paddingSm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 14,
+            backgroundColor: AppColors.card,
+            child: Text(avatar,
+                style: const TextStyle(fontSize: 11, color: Colors.white)),
+          ),
+          const SizedBox(width: AppDimens.paddingSm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(name,
+                        style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textSecondary)),
+                    const SizedBox(width: AppDimens.paddingXs),
+                    ...List.generate(
+                      rating,
+                      (_) => const Icon(Icons.star,
+                          size: 10, color: AppColors.accent),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(content,
+                    style: AppTextStyles.bodyMedium, maxLines: 2),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 final class _BottomActionBar extends StatelessWidget {
   const _BottomActionBar({
     this.onAddToCart,
@@ -536,6 +635,7 @@ final class _BottomActionBar extends StatelessWidget {
     this.isFavorited = false,
     required this.price,
     required this.bottomInset,
+    this.stock = 0,
   });
 
   final VoidCallback? onAddToCart;
@@ -544,9 +644,12 @@ final class _BottomActionBar extends StatelessWidget {
   final bool isFavorited;
   final double price;
   final double bottomInset;
+  final int stock;
 
   @override
   Widget build(BuildContext context) {
+    final soldOut = stock <= 0;
+
     return Container(
       padding: EdgeInsets.only(
         left: AppDimens.paddingLg,
@@ -577,7 +680,10 @@ final class _BottomActionBar extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('价格', style: AppTextStyles.bodySmall),
+              Text(soldOut ? '已售罄' : '价格',
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: soldOut ? AppColors.error : AppColors.textHint)),
               Text(
                 '¥${price.toStringAsFixed(0)}',
                 style: AppTextStyles.price,
@@ -585,7 +691,7 @@ final class _BottomActionBar extends StatelessWidget {
             ],
           ),
           const SizedBox(width: AppDimens.paddingMd),
-          if (onAddToCart != null) ...[
+          if (onAddToCart != null && !soldOut) ...[
             Expanded(
               child: ElevatedButton(
                 onPressed: onAddToCart,
@@ -597,23 +703,30 @@ final class _BottomActionBar extends StatelessWidget {
                     borderRadius: BorderRadius.circular(AppDimens.radiusMd),
                   ),
                 ),
-                child: const Text('加入购物车', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black)),
+                child: const Text('加入购物车',
+                    style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black)),
               ),
             ),
             const SizedBox(width: AppDimens.paddingSm),
           ],
           Expanded(
             child: ElevatedButton(
-              onPressed: onBuyNow,
+              onPressed: soldOut ? null : onBuyNow,
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
+                backgroundColor: soldOut ? AppColors.card : AppColors.primary,
+                foregroundColor: soldOut ? AppColors.textHint : Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: AppDimens.paddingMd),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(AppDimens.radiusMd),
                 ),
               ),
-              child: const Text('立即购买', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white)),
+              child: Text(
+                soldOut ? '已售罄' : '立即购买',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: soldOut ? AppColors.textHint : Colors.white,
+                ),
+              ),
             ),
           ),
         ],

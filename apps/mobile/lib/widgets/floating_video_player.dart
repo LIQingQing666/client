@@ -40,8 +40,23 @@ final class _FloatingVideoPlayerState extends State<FloatingVideoPlayer> {
   @override
   void initState() {
     super.initState();
-    // Position will be set in didChangeDependencies when we have a context.
     _position = Offset.zero;
+    // Rebuild when the controller state changes (e.g. becomes initialized).
+    widget.controller.addListener(_onControllerUpdate);
+    // Ensure playback continues in the PIP window.
+    if (widget.controller.value.isInitialized && !widget.controller.value.isPlaying) {
+      widget.controller.play();
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onControllerUpdate);
+    super.dispose();
+  }
+
+  void _onControllerUpdate() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -107,16 +122,29 @@ final class _FloatingVideoPlayerState extends State<FloatingVideoPlayer> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              // Video surface
-              if (controller.value.isInitialized)
-                FittedBox(
-                  fit: BoxFit.cover,
-                  child: SizedBox(
-                    width: controller.value.size.width,
-                    height: controller.value.size.height,
-                    child: VideoPlayer(controller),
-                  ),
-                ),
+              // Video surface — use ValueListenableBuilder to react to
+              // controller state changes (initialization, play/pause).
+              ValueListenableBuilder<VideoPlayerValue>(
+                valueListenable: controller,
+                builder: (context, value, _) {
+                  if (!value.isInitialized) {
+                    return const Center(
+                      child: CircularProgressIndicator(
+                        color: Colors.white54,
+                        strokeWidth: 2,
+                      ),
+                    );
+                  }
+                  return FittedBox(
+                    fit: BoxFit.cover,
+                    child: SizedBox(
+                      width: value.size.width,
+                      height: value.size.height,
+                      child: VideoPlayer(controller),
+                    ),
+                  );
+                },
+              ),
 
               // Top control bar
               Positioned(
