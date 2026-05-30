@@ -7,8 +7,8 @@ abstract final class AppConstants {
   // API 配置
   static const String baseUrl = 'http://192.168.50.174:3000/api';
   static const String wsUrl = 'http://192.168.50.174:3000';
-  static const Duration connectTimeout = Duration(seconds: 15);
-  static const Duration receiveTimeout = Duration(seconds: 15);
+  static const Duration connectTimeout = Duration(seconds: 10);
+  static const Duration receiveTimeout = Duration(seconds: 10);
 
   // 视频预加载
   static const int preloadVideoCount = 2;

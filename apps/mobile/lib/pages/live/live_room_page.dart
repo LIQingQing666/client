@@ -153,13 +153,12 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
   bool _showChatInput = false;
   VideoPlayerController? _videoController;
   bool _videoReady = false;
+  bool _videoError = false;
 
   @override
   void initState() {
     super.initState();
-    if (widget.room.videoUrl.isNotEmpty) {
-      _initVideo(widget.room.videoUrl);
-    }
+    _initVideo(widget.room.videoUrl);
   }
 
   @override
@@ -176,14 +175,31 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
   }
 
   void _initVideo(String url) {
-    if (url.isEmpty || _videoController != null) return;
+    if (url.isEmpty) {
+      if (mounted) setState(() => _videoError = true);
+      return;
+    }
+    if (_videoController != null) return;
+
+    setState(() => _videoError = false);
     _videoController = VideoPlayerController.networkUrl(Uri.parse(url))
       ..initialize().then((_) {
         if (!mounted) return;
-        setState(() => _videoReady = true);
+        setState(() {
+          _videoReady = true;
+          _videoError = false;
+        });
         _videoController!.setLooping(true);
         _videoController!.play();
-      }).catchError((_) {});
+      }).catchError((Object err) {
+        debugPrint('[LiveRoom] video init error: $err');
+        if (mounted) {
+          setState(() => _videoError = true);
+          // Dispose the failed controller so retry starts fresh.
+          _videoController?.dispose();
+          _videoController = null;
+        }
+      });
   }
 
   void _sendMessage() {
@@ -427,6 +443,30 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
     final followState = ref.watch(followProvider);
     final bottomInset = MediaQuery.of(context).padding.bottom;
 
+    if (state.room == null && !state.isLoading && state.errorMessage != null) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.wifi_off, size: 48, color: AppColors.textHint),
+              const SizedBox(height: AppDimens.paddingMd),
+              Text(state.errorMessage!, style: AppTextStyles.titleMedium),
+              const SizedBox(height: AppDimens.paddingLg),
+              ElevatedButton(
+                onPressed: () =>
+                    ref.read(liveProvider.notifier).enterRoom(widget.room.id),
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary),
+                child: const Text('重新加载'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     if (state.room == null) {
       return const Scaffold(
         backgroundColor: AppColors.background,
@@ -453,7 +493,7 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
         body: Stack(
         fit: StackFit.expand,
         children: [
-          // Background: video player or cover image
+          // Background: video player / cover image / error
           if (_videoController != null && _videoReady)
             FittedBox(
               fit: BoxFit.cover,
@@ -462,6 +502,46 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
                 height: _videoController!.value.size.height,
                 child: VideoPlayer(_videoController!),
               ),
+            )
+          else if (_videoError)
+            // Video failed — show cover with retry overlay.
+            Stack(
+              fit: StackFit.expand,
+              children: [
+                CachedNetworkImage(
+                  imageUrl: room.coverUrl,
+                  fit: BoxFit.cover,
+                  placeholder: (_, __) =>
+                      Container(color: AppColors.surface),
+                  errorWidget: (_, __, ___) =>
+                      Container(color: AppColors.surface),
+                ),
+                Container(color: Colors.black54),
+                Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.play_circle_outline,
+                          size: 56, color: Colors.white54),
+                      const SizedBox(height: AppDimens.paddingSm),
+                      const Text('视频加载失败',
+                          style: TextStyle(
+                              fontSize: 14, color: Colors.white70)),
+                      const SizedBox(height: AppDimens.paddingLg),
+                      ElevatedButton.icon(
+                        onPressed: () =>
+                            _initVideo(widget.room.videoUrl),
+                        icon: const Icon(Icons.refresh, size: 18),
+                        label: const Text('重新加载'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             )
           else
             CachedNetworkImage(

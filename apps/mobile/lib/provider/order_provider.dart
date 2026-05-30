@@ -149,9 +149,15 @@ final class OrderNotifier extends StateNotifier<OrderState> {
         couponId: couponId,
       );
       return result;
-    }
-    on Exception {
-      showToast('下单失败，请重试');
+    } on ApiException catch (e) {
+      // Show backend-specific error reason (库存不足 / 优惠券失效 etc.)
+      final detail = e.data is Map ? (e.data as Map)['detail'] as String? : null;
+      showToast(detail ?? e.message, isError: true);
+      return null;
+    } on Exception {
+      showRetryToast('网络异常，请稍后重试', onRetry: () {
+        createOrder(items: items, address: address, couponId: couponId);
+      });
       return null;
     }
   }

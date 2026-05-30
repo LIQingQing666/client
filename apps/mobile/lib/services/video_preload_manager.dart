@@ -35,9 +35,10 @@ final class VideoPreloadManager {
   VideoPreloadManager({
     required this.pool,
     required this.connectivity,
-    this.maxConcurrent = 2,
+    this.maxConcurrent = 1,
     this.wifiOnly = AppConstants.preloadWifiOnly,
     this.timeout = AppConstants.preloadTimeout,
+    this.startupDelay = const Duration(milliseconds: 800),
   }) {
     _subscription = connectivity.onConnectivityChanged.listen(_onNetworkChanged);
   }
@@ -47,10 +48,12 @@ final class VideoPreloadManager {
   final int maxConcurrent;
   final bool wifiOnly;
   final Duration timeout;
+  final Duration startupDelay;
 
   final List<VideoPreloadTask> _queue = [];
   int _loadingCount = 0;
   bool _isOnWifi = true;
+  bool _startupComplete = false;
   StreamSubscription<List<ConnectivityResult>>? _subscription;
 
   /// Whether the manager is currently allowed to process tasks.
@@ -84,7 +87,15 @@ final class VideoPreloadManager {
     // Keep the queue sorted: higher priority first.
     _queue.sort((a, b) => b.priority.compareTo(a.priority));
 
-    _processQueue();
+    // Delay first preload to let the current video finish its initial buffer.
+    if (!_startupComplete) {
+      _startupComplete = true;
+      Future.delayed(startupDelay, () {
+        _processQueue();
+      });
+    } else {
+      _processQueue();
+    }
     return task.future;
   }
 

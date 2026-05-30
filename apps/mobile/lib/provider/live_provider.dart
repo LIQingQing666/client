@@ -143,6 +143,20 @@ final class LiveNotifier extends StateNotifier<LiveState> {
             currentProduct: ProductModel.fromJson(rawProduct),
           );
         }
+      case 'new_comment':
+        // Live room user comment broadcast.
+        _addMessage(LiveMessage.fromJson(event));
+      case 'stock_update':
+        // Product stock change pushed by server.
+        final productId = event['product_id'] as String?;
+        final newStock = (event['stock'] as num?)?.toInt();
+        if (productId != null && newStock != null) {
+          final updated = state.products.map((p) {
+            if (p.id != productId) return p;
+            return p.copyWith(stock: newStock);
+          }).toList();
+          state = state.copyWith(products: updated);
+        }
       case 'room_state':
         final count = (event['online_count'] as num?)?.toInt() ?? 0;
         final heat = (event['heat_count'] as num?)?.toInt();

@@ -180,7 +180,9 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
       _applyMuteState();
     } else {
       _controller?.pause();
-      _releasePlayer(dispose: true);
+      // Only release from pool without disposing — the controller may
+      // be reused when the user swipes back, avoiding a full re-init.
+      _releasePlayer(dispose: false);
       if (!_isCoverVisible && mounted) {
         setState(() {
           _isCoverVisible = true;

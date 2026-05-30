@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../core/app_constants.dart';
 import '../models/product_model.dart';
+import '../utils/responsive_helper.dart';
 
 final class ProductCardOverlay extends StatelessWidget {
   const ProductCardOverlay({
@@ -16,16 +17,24 @@ final class ProductCardOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isSmall = ResponsiveHelper.isSmallScreen(context);
+    final imageSize = isSmall ? 48.0 : 64.0;
+    final nameStyle = isSmall
+        ? AppTextStyles.bodyMedium
+        : AppTextStyles.bodyLarge;
+    final rightPadding = isSmall ? 56.0 : 72.0;
+
     return Padding(
-      padding: const EdgeInsets.only(
-        left: AppDimens.paddingLg,
-        right: 72,
-        bottom: AppDimens.paddingLg,
+      padding: EdgeInsets.only(
+        left: isSmall ? AppDimens.paddingSm : AppDimens.paddingLg,
+        right: rightPadding,
+        bottom: isSmall ? AppDimens.paddingSm : AppDimens.paddingLg,
       ),
       child: GestureDetector(
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.all(AppDimens.paddingSm),
+          padding: EdgeInsets.all(
+              isSmall ? AppDimens.paddingXs : AppDimens.paddingSm),
           decoration: BoxDecoration(
             color: Colors.black.withAlpha(160),
             borderRadius: BorderRadius.circular(AppDimens.radiusLg),
@@ -36,13 +45,17 @@ final class ProductCardOverlay extends StatelessWidget {
                 borderRadius: BorderRadius.circular(AppDimens.radiusMd),
                 child: CachedNetworkImage(
                   imageUrl: product.coverUrl,
-                  width: 64,
-                  height: 64,
+                  width: imageSize,
+                  height: imageSize,
                   fit: BoxFit.cover,
-                  placeholder: (context, url) =>
-                      Container(width: 64, height: 64, color: AppColors.card),
-                  errorWidget: (context, url, error) =>
-                      Container(width: 64, height: 64, color: AppColors.card),
+                  placeholder: (context, url) => Container(
+                      width: imageSize,
+                      height: imageSize,
+                      color: AppColors.card),
+                  errorWidget: (context, url, error) => Container(
+                      width: imageSize,
+                      height: imageSize,
+                      color: AppColors.card),
                 ),
               ),
               const SizedBox(width: AppDimens.paddingSm),
@@ -53,7 +66,7 @@ final class ProductCardOverlay extends StatelessWidget {
                   children: [
                     Text(
                       product.name,
-                      style: AppTextStyles.bodyLarge,
+                      style: nameStyle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -68,8 +81,8 @@ final class ProductCardOverlay extends StatelessWidget {
                           const SizedBox(width: AppDimens.paddingXs),
                           Text(
                             '¥${product.originalPrice.toStringAsFixed(0)}',
-                            style: const TextStyle(
-                              fontSize: 11,
+                            style: TextStyle(
+                              fontSize: isSmall ? 10 : 11,
                               color: AppColors.textHint,
                               decoration: TextDecoration.lineThrough,
                             ),
@@ -77,8 +90,8 @@ final class ProductCardOverlay extends StatelessWidget {
                           const SizedBox(width: AppDimens.paddingXs),
                           Text(
                             product.discountPercent,
-                            style: const TextStyle(
-                              fontSize: 10,
+                            style: TextStyle(
+                              fontSize: isSmall ? 9 : 10,
                               color: AppColors.primary,
                               fontWeight: FontWeight.w600,
                             ),
@@ -89,7 +102,9 @@ final class ProductCardOverlay extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       '已售${product.sales}',
-                      style: AppTextStyles.bodySmall,
+                      style: isSmall
+                          ? const TextStyle(fontSize: 10, color: AppColors.textHint)
+                          : AppTextStyles.bodySmall,
                     ),
                   ],
                 ),

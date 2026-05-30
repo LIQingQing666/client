@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../core/app_constants.dart';
 import '../utils/toast.dart';
 
+/// Shows the video comments half-screen bottom sheet.
 Future<void> showVideoCommentsSheet({
   required BuildContext context,
   required String videoId,
@@ -27,39 +28,112 @@ final class _VideoCommentsSheet extends StatefulWidget {
 
 final class _VideoCommentsSheetState extends State<_VideoCommentsSheet> {
   final _commentController = TextEditingController();
-  List<Map<String, dynamic>> _comments = [];
+  final _scrollController = ScrollController();
+  final List<Map<String, dynamic>> _comments = [];
   bool _isLoading = true;
+  bool _isLoadingMore = false;
+  bool _hasMore = true;
+  int _page = 1;
+  String? _error;
+  static const int _pageSize = 10;
 
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     _loadComments();
   }
 
   @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
     _commentController.dispose();
     super.dispose();
   }
 
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 100) {
+      _loadMore();
+    }
+  }
+
   Future<void> _loadComments() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+      _page = 1;
+    });
+
     try {
-      // Use dioClient via a direct HTTP call, or mock data
       final dio = Dio();
       final response = await dio.get<Map<String, dynamic>>(
-        'http://127.0.0.1:3000/api/comments',
-        queryParameters: {'video_id': widget.videoId},
+        '${AppConstants.baseUrl}/comments',
+        queryParameters: {
+          'video_id': widget.videoId,
+          'page': 1,
+          'page_size': _pageSize,
+        },
       );
       final data = (response.data?['data'] as Map<String, dynamic>?) ?? {};
+      final list = (data['list'] as List<dynamic>?)
+          ?.cast<Map<String, dynamic>>() ?? [];
+      final hasMore = (data['has_more'] as bool?) ?? false;
+
       if (mounted) {
         setState(() {
-          _comments = (data['list'] as List<dynamic>?)
-              ?.cast<Map<String, dynamic>>() ?? [];
+          _comments.clear();
+          _comments.addAll(list);
+          _hasMore = hasMore;
+          _page = 1;
           _isLoading = false;
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+          _error = '加载失败';
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_isLoadingMore || !_hasMore) return;
+
+    setState(() => _isLoadingMore = true);
+
+    try {
+      final nextPage = _page + 1;
+      final dio = Dio();
+      final response = await dio.get<Map<String, dynamic>>(
+        '${AppConstants.baseUrl}/comments',
+        queryParameters: {
+          'video_id': widget.videoId,
+          'page': nextPage,
+          'page_size': _pageSize,
+        },
+      );
+      final data = (response.data?['data'] as Map<String, dynamic>?) ?? {};
+      final list = (data['list'] as List<dynamic>?)
+          ?.cast<Map<String, dynamic>>() ?? [];
+      final hasMore = (data['has_more'] as bool?) ?? false;
+
+      if (mounted) {
+        setState(() {
+          _comments.addAll(list);
+          _hasMore = hasMore;
+          _page = nextPage;
+          _isLoadingMore = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isLoadingMore = false);
+        showRetryToast('加载更多失败', onRetry: _loadMore);
+      }
     }
   }
 
@@ -67,50 +141,62 @@ final class _VideoCommentsSheetState extends State<_VideoCommentsSheet> {
     final content = _commentController.text.trim();
     if (content.isEmpty) return;
 
-    // Optimistic add
-    final comment = <String, dynamic>{
-      'id': DateTime.now().millisecondsSinceEpoch.toString(),
+    final optimisticId = DateTime.now().millisecondsSinceEpoch.toString();
+    final optimistic = <String, dynamic>{
+      'id': optimisticId,
       'user_name': '我',
       'user_avatar': '',
       'content': content,
       'like_count': 0,
     };
-    setState(() => _comments = [comment, ..._comments]);
+
+    // Optimistic add — insert at the top.
+    setState(() => _comments.insert(0, optimistic));
     _commentController.clear();
 
     try {
       final dio = Dio();
       await dio.post<Map<String, dynamic>>(
-        'http://127.0.0.1:3000/api/comments',
+        '${AppConstants.baseUrl}/comments',
         data: {
           'user_id': 'u1',
           'video_id': widget.videoId,
           'content': content,
         },
       );
+      // Replace optimistic entry with server response (falls back to optimistic).
       showToast('评论发布成功');
     } catch (_) {
-      // Keep optimistic comment even if API fails
-      showToast('评论已发布');
+      // Rollback: remove the optimistic comment.
+      if (mounted) {
+        setState(() {
+          _comments.removeWhere((c) => c['id'] == optimisticId);
+        });
+      }
+      showToast('评论发送失败，请重试', isError: true);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).padding.bottom;
+    final isSmall = MediaQuery.of(context).size.width < 360;
+    final sheetHeight = isSmall ? 0.6 : 0.7;
 
     return Container(
-      height: MediaQuery.of(context).size.height * 0.7,
+      height: MediaQuery.of(context).size.height * sheetHeight,
       decoration: const BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppDimens.radiusXl)),
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppDimens.radiusXl)),
       ),
       child: Column(
         children: [
           // Handle
           Center(
             child: Container(
-              margin: const EdgeInsets.symmetric(vertical: AppDimens.paddingSm),
+              margin:
+                  const EdgeInsets.symmetric(vertical: AppDimens.paddingSm),
               width: 36,
               height: 4,
               decoration: BoxDecoration(
@@ -128,41 +214,85 @@ final class _VideoCommentsSheetState extends State<_VideoCommentsSheet> {
           // Comments list
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
-                : _comments.isEmpty
-                    ? const Center(
-                        child: Text('暂无评论，快来抢沙发吧', style: AppTextStyles.bodyMedium),
+                ? const Center(
+                    child:
+                        CircularProgressIndicator(color: AppColors.primary))
+                : _error != null
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.wifi_off,
+                                size: 36, color: AppColors.textHint),
+                            const SizedBox(height: AppDimens.paddingSm),
+                            Text(_error!, style: AppTextStyles.bodyMedium),
+                            const SizedBox(height: AppDimens.paddingMd),
+                            ElevatedButton(
+                              onPressed: _loadComments,
+                              style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primary),
+                              child: const Text('重新加载'),
+                            ),
+                          ],
+                        ),
                       )
-                    : ListView.builder(
-                        itemCount: _comments.length,
-                        itemBuilder: (context, index) {
-                          final comment = _comments[index];
-                          return ListTile(
-                            leading: CircleAvatar(
-                              radius: 16,
-                              backgroundColor: AppColors.card,
-                              backgroundImage: (comment['user_avatar'] as String?)?.isNotEmpty == true
-                                  ? NetworkImage(comment['user_avatar'] as String)
-                                  : null,
-                              child: Icon(Icons.person, size: 16, color: AppColors.primary),
-                            ),
-                            title: Text(
-                              comment['user_name']?.toString() ?? '用户',
-                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                            ),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(comment['content']?.toString() ?? '', style: AppTextStyles.bodyMedium),
-                                Text(
-                                  '${comment['like_count'] ?? 0} 赞',
-                                  style: AppTextStyles.bodySmall,
+                    : _comments.isEmpty
+                        ? const Center(
+                            child: Text('暂无评论，快来抢沙发吧',
+                                style: AppTextStyles.bodyMedium),
+                          )
+                        : ListView.builder(
+                            controller: _scrollController,
+                            addAutomaticKeepAlives: false,
+                            itemCount:
+                                _comments.length + (_hasMore ? 1 : 0),
+                            itemBuilder: (context, index) {
+                              if (index == _comments.length) {
+                                return _LoadMoreIndicator(
+                                  isLoading: _isLoadingMore,
+                                  hasError: false,
+                                  onRetry: _loadMore,
+                                );
+                              }
+                              final comment = _comments[index];
+                              return ListTile(
+                                leading: CircleAvatar(
+                                  radius: 16,
+                                  backgroundColor: AppColors.card,
+                                  backgroundImage: (comment['user_avatar']
+                                                      as String?)
+                                                  ?.isNotEmpty ==
+                                              true
+                                          ? NetworkImage(
+                                              comment['user_avatar']
+                                                  as String)
+                                          : null,
+                                  child: const Icon(Icons.person,
+                                      size: 16, color: AppColors.primary),
                                 ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
+                                title: Text(
+                                  comment['user_name']?.toString() ?? '用户',
+                                  style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600),
+                                ),
+                                subtitle: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                        comment['content']?.toString() ??
+                                            '',
+                                        style: AppTextStyles.bodyMedium),
+                                    Text(
+                                      '${comment['like_count'] ?? 0} 赞',
+                                      style: AppTextStyles.bodySmall,
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
           ),
           // Input bar
           Container(
@@ -184,11 +314,13 @@ final class _VideoCommentsSheetState extends State<_VideoCommentsSheet> {
                     style: AppTextStyles.bodyMedium,
                     decoration: InputDecoration(
                       hintText: '说点什么...',
-                      hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 14),
+                      hintStyle: const TextStyle(
+                          color: AppColors.textHint, fontSize: 14),
                       filled: true,
                       fillColor: AppColors.card,
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(AppDimens.radiusXl),
+                        borderRadius:
+                            BorderRadius.circular(AppDimens.radiusXl),
                         borderSide: BorderSide.none,
                       ),
                       contentPadding: const EdgeInsets.symmetric(
@@ -201,9 +333,15 @@ final class _VideoCommentsSheetState extends State<_VideoCommentsSheet> {
                   ),
                 ),
                 const SizedBox(width: AppDimens.paddingSm),
-                GestureDetector(
-                  onTap: _postComment,
-                  child: const Icon(Icons.send, color: AppColors.primary),
+                SizedBox(
+                  width: 44,
+                  height: 44,
+                  child: IconButton(
+                    onPressed: _postComment,
+                    icon: const Icon(Icons.send, color: AppColors.primary),
+                    padding: EdgeInsets.zero,
+                    iconSize: 24,
+                  ),
                 ),
               ],
             ),
@@ -211,5 +349,47 @@ final class _VideoCommentsSheetState extends State<_VideoCommentsSheet> {
         ],
       ),
     );
+  }
+}
+
+/// Bottom loading / retry indicator for paginated lists.
+final class _LoadMoreIndicator extends StatelessWidget {
+  const _LoadMoreIndicator({
+    required this.isLoading,
+    required this.hasError,
+    this.onRetry,
+  });
+
+  final bool isLoading;
+  final bool hasError;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: AppDimens.paddingLg),
+        child: Center(
+          child: CircularProgressIndicator(
+            color: AppColors.primary,
+            strokeWidth: 2,
+          ),
+        ),
+      );
+    }
+
+    if (hasError) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppDimens.paddingMd),
+        child: Center(
+          child: TextButton(
+            onPressed: onRetry,
+            child: const Text('加载失败，点击重试'),
+          ),
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
   }
 }

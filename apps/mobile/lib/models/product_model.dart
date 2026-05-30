@@ -90,6 +90,44 @@ final class ProductModel {
     return highlightTime;
   }
 
+  ProductModel copyWith({
+    String? id,
+    String? name,
+    String? description,
+    String? coverUrl,
+    List<String>? images,
+    double? price,
+    double? originalPrice,
+    int? stock,
+    int? sales,
+    String? category,
+    List<String>? tags,
+    List<ProductSpec>? specs,
+    String? videoId,
+    String? aiSalesPoint,
+    int? highlightTime,
+    List<ProductSegment>? segments,
+  }) {
+    return ProductModel(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      description: description ?? this.description,
+      coverUrl: coverUrl ?? this.coverUrl,
+      images: images ?? this.images,
+      price: price ?? this.price,
+      originalPrice: originalPrice ?? this.originalPrice,
+      stock: stock ?? this.stock,
+      sales: sales ?? this.sales,
+      category: category ?? this.category,
+      tags: tags ?? this.tags,
+      specs: specs ?? this.specs,
+      videoId: videoId ?? this.videoId,
+      aiSalesPoint: aiSalesPoint ?? this.aiSalesPoint,
+      highlightTime: highlightTime ?? this.highlightTime,
+      segments: segments ?? this.segments,
+    );
+  }
+
   bool get hasDiscount => originalPrice > price;
 
   String get discountPercent {

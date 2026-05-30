@@ -30,6 +30,7 @@ import '../pages/order/payment_detail_page.dart';
 import '../pages/order/payment_result_page.dart';
 import '../pages/search/search_page.dart';
 import '../provider/auth_provider.dart';
+import '../provider/cart_provider.dart';
 import '../provider/service_providers.dart';
 
 final GlobalKey<NavigatorState> _rootNavigatorKey =
@@ -319,9 +320,9 @@ final class _ScaffoldWithNavBarState extends ConsumerState<ScaffoldWithNavBar> {
   Widget build(BuildContext context) {
     final shell = widget.navigationShell;
     final index = shell.currentIndex;
+    final cartCount = ref.watch(cartProvider.select((s) => s.items.length));
 
     // Schedule microtask to avoid "provider modified during build" error.
-    // This fires after the current frame completes.
     Future.microtask(() {
       if (mounted) {
         ref.read(currentTabIndexProvider.notifier).state = index;
@@ -335,28 +336,38 @@ final class _ScaffoldWithNavBarState extends ConsumerState<ScaffoldWithNavBar> {
         onTap: (index) {
           shell.goBranch(index, initialLocation: true);
         },
-        items: const [
-          BottomNavigationBarItem(
+        items: <BottomNavigationBarItem>[
+          const BottomNavigationBarItem(
             icon: Icon(Icons.play_circle_outline),
             activeIcon: Icon(Icons.play_circle_filled),
             label: '视频',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.live_tv_outlined),
             activeIcon: Icon(Icons.live_tv),
             label: '直播',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.shopping_cart_outlined),
-            activeIcon: Icon(Icons.shopping_cart),
+            icon: cartCount > 0
+                ? Badge(
+                    label: Text('$cartCount'),
+                    child: const Icon(Icons.shopping_cart_outlined),
+                  )
+                : const Icon(Icons.shopping_cart_outlined),
+            activeIcon: cartCount > 0
+                ? Badge(
+                    label: Text('$cartCount'),
+                    child: const Icon(Icons.shopping_cart),
+                  )
+                : const Icon(Icons.shopping_cart),
             label: '购物车',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.receipt_long_outlined),
             activeIcon: Icon(Icons.receipt_long),
             label: '订单',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.person_outline),
             activeIcon: Icon(Icons.person),
             label: '我的',

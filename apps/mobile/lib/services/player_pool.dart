@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:video_player/video_player.dart';
 
 final class PlayerPool {
-  PlayerPool({this.poolSize = 3});
+  PlayerPool({this.poolSize = 4});
 
   final int poolSize;
   final Map<String, _PooledPlayer> _players = {};
@@ -19,6 +19,20 @@ final class PlayerPool {
       return existing.controller;
     }
 
+    // Deduplicate by URL: if the same URL is already loaded under a different
+    // id, reuse the controller.
+    for (final entry in _players.entries) {
+      if (entry.value.url == url) {
+        entry.value.refCount++;
+        _players[videoId] = _PooledPlayer(
+          controller: entry.value.controller,
+          refCount: entry.value.refCount,
+          url: url,
+        );
+        return entry.value.controller;
+      }
+    }
+
     _evictIfNeeded();
 
     final controller = VideoPlayerController.networkUrl(Uri.parse(url));
@@ -29,6 +43,7 @@ final class PlayerPool {
     _players[videoId] = _PooledPlayer(
       controller: controller,
       refCount: 1,
+      url: url,
     );
 
     return controller;
@@ -104,8 +119,9 @@ final class PlayerPool {
 }
 
 final class _PooledPlayer {
-  _PooledPlayer({required this.controller, required this.refCount});
+  _PooledPlayer({required this.controller, required this.refCount, required this.url});
 
   final VideoPlayerController controller;
+  final String url;
   int refCount;
 }

@@ -20,6 +20,10 @@ Future<void> main() async {
   final hiveBox = await Hive.openBox<dynamic>('app_storage');
   final prefs = await SharedPreferences.getInstance();
 
+  // Image cache: limit memory usage to ~50 MB.
+  PaintingBinding.instance.imageCache.maximumSize = 200;
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 50 << 20;
+
   unawaited(
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,

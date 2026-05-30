@@ -3,6 +3,7 @@ import 'package:video_player/video_player.dart';
 
 import '../core/app_constants.dart';
 import '../models/live_model.dart';
+import '../utils/responsive_helper.dart';
 
 /// A draggable, boundary-aware floating video player for PIP mode.
 ///
@@ -33,8 +34,8 @@ final class _FloatingVideoPlayerState extends State<FloatingVideoPlayer> {
   Offset? _dragStart;
   Size? _screenSize;
 
-  static const double _pipWidth = 150;
-  static const double _pipHeight = 150 * 9 / 16; // ~84
+  double get _pipWidth => ResponsiveHelper.isSmallScreen(context) ? 120 : 150;
+  double get _pipHeight => _pipWidth * 9 / 16;
 
   @override
   void initState() {

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../core/app_constants.dart';
 import '../models/product_model.dart';
+import '../utils/responsive_helper.dart';
 
 final class ProductDetailSheet extends StatefulWidget {
   const ProductDetailSheet({
@@ -53,11 +54,12 @@ final class _ProductDetailSheetState extends State<ProductDetailSheet> {
   Widget build(BuildContext context) {
     final product = widget.product;
     final bottomInset = MediaQuery.of(context).padding.bottom;
+    final isSmall = ResponsiveHelper.isSmallScreen(context);
 
     return DraggableScrollableSheet(
-      initialChildSize: 0.75,
+      initialChildSize: isSmall ? 0.6 : 0.75,
       maxChildSize: 0.92,
-      minChildSize: 0.5,
+      minChildSize: isSmall ? 0.45 : 0.5,
       expand: false,
       builder: (context, scrollController) {
         return Container(
@@ -630,9 +632,10 @@ final class _QtyButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
+      behavior: HitTestBehavior.opaque,
       child: Container(
-        width: 28,
-        height: 28,
+        width: 44,
+        height: 44,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           border: Border.all(
@@ -641,7 +644,7 @@ final class _QtyButton extends StatelessWidget {
         ),
         child: Icon(
           icon,
-          size: 16,
+          size: 22,
           color: onTap != null ? AppColors.textSecondary : AppColors.divider,
         ),
       ),
