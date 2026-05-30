@@ -1,3 +1,6 @@
+import 'package:flutter/foundation.dart';
+import 'package:dio/dio.dart';
+
 import '../models/cart_model.dart';
 import 'dio_client.dart';
 
@@ -48,6 +51,12 @@ final class CartApi {
   }
 
   Future<void> deleteCartItem(String itemId) async {
-    await client.delete<Map<String, dynamic>>('/cart/$itemId');
+    final url = '${client.baseUrl}/cart/$itemId';
+    debugPrint('CartApi.deleteCartItem -> $url');
+    // Avoid sending an empty JSON body: use non-JSON content-type so Fastify won't reject
+    await client.delete<Map<String, dynamic>>(
+      '/cart/$itemId',
+      options: Options(headers: {'content-type': 'text/plain'}),
+    );
   }
 }
