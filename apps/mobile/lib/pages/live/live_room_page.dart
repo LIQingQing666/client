@@ -12,7 +12,7 @@ import '../../provider/cart_provider.dart';
 import '../../provider/favorite_provider.dart';
 import '../../provider/follow_provider.dart';
 import '../../provider/live_provider.dart';
-import '../../provider/service_providers.dart';
+import '../../provider/pip_provider.dart';
 import '../../utils/toast.dart';
 import '../../widgets/coupon_countdown.dart';
 import '../../widgets/danmaku_overlay.dart';
@@ -165,8 +165,12 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
   void dispose() {
     _chatController.dispose();
     _chatFocusNode.dispose();
-    _videoController?.pause();
-    _videoController?.dispose();
+    // Do NOT dispose video controller if PIP is active — it's still in use.
+    final pipActive = ref.read(pipProvider).isActive;
+    if (!pipActive) {
+      _videoController?.pause();
+      _videoController?.dispose();
+    }
     super.dispose();
   }
 
@@ -366,6 +370,7 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
 
   void _showProductDetail(BuildContext context, ProductModel product) {
     final favState = ref.read(favoriteProvider);
+    final room = ref.read(liveProvider).room;
     showProductDetailSheet(
       context: context,
       product: product,
@@ -374,6 +379,21 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
       },
       onBuyNow: () {
         ref.read(cartProvider.notifier).addToCart(productId: product.id);
+        // Dismiss the bottom sheet first.
+        Navigator.of(context).pop();
+        // Enter PIP mode before navigating away so the live stream keeps playing.
+        if (_videoController != null && _videoReady && room != null) {
+          ref.read(pipProvider.notifier).enterPip(_videoController!, room);
+          ref.read(pipProvider.notifier).onReturnToLive = () {
+            // Pop all routes until we're back, then re-enter the live room.
+            final router = GoRouter.of(context);
+            while (router.canPop()) {
+              router.pop();
+            }
+            context.pushReplacementNamed('liveRoom',
+                pathParameters: {'roomId': widget.room.id});
+          };
+        }
         context.pushNamed('orderConfirm', queryParameters: <String, String>{
           'total': product.price.toString(), 'count': '1',
         });
@@ -487,7 +507,23 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
               child: Row(
                 children: [
                   GestureDetector(
-                    onTap: () => context.pop(),
+                    onTap: () {
+                      // Enter PIP mode if video is playing, then pop back.
+                      final room = ref.read(liveProvider).room;
+                      if (_videoController != null && _videoReady && room != null) {
+                        ref.read(pipProvider.notifier).enterPip(_videoController!, room);
+                        ref.read(pipProvider.notifier).onReturnToLive = () {
+                          // Pop all current routes and re-enter the live room.
+                          final router = GoRouter.of(context);
+                          while (router.canPop()) {
+                            router.pop();
+                          }
+                          context.pushReplacementNamed('liveRoom',
+                              pathParameters: {'roomId': widget.room.id});
+                        };
+                      }
+                      context.pop();
+                    },
                     child: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
                   ),
                   const SizedBox(width: AppDimens.paddingMd),

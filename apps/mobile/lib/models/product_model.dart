@@ -1,3 +1,24 @@
+/// A labeled video segment (e.g. "材质介绍" starting at 15s).
+final class ProductSegment {
+  const ProductSegment({
+    required this.label,
+    required this.startTime,
+    this.endTime = 0,
+  });
+
+  factory ProductSegment.fromJson(Map<String, dynamic> json) {
+    return ProductSegment(
+      label: (json['label'] as String?) ?? '',
+      startTime: (json['start_time'] as num?)?.toInt() ?? 0,
+      endTime: (json['end_time'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  final String label;
+  final int startTime;
+  final int endTime; // 0 means no limit
+}
+
 final class ProductModel {
   const ProductModel({
     required this.id,
@@ -15,10 +36,12 @@ final class ProductModel {
     required this.videoId,
     required this.aiSalesPoint,
     this.highlightTime = 0,
+    this.segments = const [],
   });
 
   factory ProductModel.fromJson(Map<String, dynamic> json) {
     final rawSpecs = (json['specs'] as List<dynamic>?) ?? [];
+    final rawSegments = (json['segments'] as List<dynamic>?) ?? [];
     return ProductModel(
       id: json['id'] as String,
       name: json['name'] as String,
@@ -37,6 +60,9 @@ final class ProductModel {
       videoId: (json['video_id'] as String?) ?? '',
       aiSalesPoint: (json['ai_sales_point'] as String?) ?? '',
       highlightTime: (json['highlight_time'] as num?)?.toInt() ?? 0,
+      segments: rawSegments
+          .map((e) => ProductSegment.fromJson(e as Map<String, dynamic>))
+          .toList(),
     );
   }
 
@@ -55,6 +81,14 @@ final class ProductModel {
   final String videoId;
   final String aiSalesPoint;
   final int highlightTime;
+  final List<ProductSegment> segments;
+
+  /// Effective seek time: prefer the first segment's startTime if available,
+  /// otherwise fall back to highlightTime.
+  int get effectiveSeekTime {
+    if (segments.isNotEmpty) return segments.first.startTime;
+    return highlightTime;
+  }
 
   bool get hasDiscount => originalPrice > price;
 

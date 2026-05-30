@@ -1,15 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/video_api.dart';
+import '../core/app_constants.dart';
 import '../models/video_model.dart';
 import '../services/player_pool.dart';
 import '../services/storage_service.dart';
+import '../services/video_preload_manager.dart';
 import '../utils/toast.dart';
 import 'service_providers.dart';
-
-final playerPoolProvider = Provider<PlayerPool>((ref) {
-  return PlayerPool();
-});
 
 final videoApiProvider = Provider<VideoApi>((ref) {
   return VideoApi(client: ref.watch(dioClientProvider));
@@ -62,7 +60,7 @@ final class FeedState {
 }
 
 final class FeedNotifier extends StateNotifier<FeedState> {
-  FeedNotifier({required this.api, required this.pool, required this.storage})
+  FeedNotifier({required this.api, required this.pool, required this.storage, required this.preloadManager})
       : super(const FeedState()) {
     loadVideos();
   }
@@ -70,6 +68,7 @@ final class FeedNotifier extends StateNotifier<FeedState> {
   final VideoApi api;
   final PlayerPool pool;
   final StorageService storage;
+  final VideoPreloadManager preloadManager;
 
   String get _userId => storage.userId ?? 'u1';
 
@@ -178,10 +177,26 @@ final class FeedNotifier extends StateNotifier<FeedState> {
       return;
     }
 
-    for (int i = index - 1; i <= index + 1; i++) {
-      if (i >= 0 && i < videos.length && i != index) {
-        final v = videos[i];
-        pool.preload(v.id, v.videoUrl);
+    // Cancel previous preloads that are no longer relevant.
+    _cancelStalePreloads(index);
+
+    // Preload next N videos (default: preloadVideoCount).
+    final count = AppConstants.preloadVideoCount;
+    for (int i = 1; i <= count; i++) {
+      final nextIndex = index + i;
+      if (nextIndex < videos.length) {
+        final v = videos[nextIndex];
+        preloadManager.enqueue(v.id, v.videoUrl, priority: count - i);
+      }
+    }
+  }
+
+  void _cancelStalePreloads(int currentIndex) {
+    final videos = state.videos;
+    final keepRange = currentIndex + AppConstants.preloadVideoCount;
+    for (int i = 0; i < videos.length; i++) {
+      if (i < currentIndex || i > keepRange) {
+        preloadManager.cancel(videos[i].id);
       }
     }
   }
@@ -194,5 +209,6 @@ final feedProvider =
   final api = ref.watch(videoApiProvider);
   final pool = ref.watch(playerPoolProvider);
   final storage = ref.watch(storageServiceProvider);
-  return FeedNotifier(api: api, pool: pool, storage: storage);
+  final preloadManager = ref.watch(videoPreloadManagerProvider);
+  return FeedNotifier(api: api, pool: pool, storage: storage, preloadManager: preloadManager);
 });

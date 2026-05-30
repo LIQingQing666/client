@@ -56,6 +56,7 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
   late Animation<double> _fadeAnimation;
   bool _isCoverVisible = true;
   bool _isInitialized = false;
+  bool _highlightActive = false;
 
   @override
   void initState() {
@@ -74,8 +75,17 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
   void _onSeekTriggered() {
     final seekTo = widget.seekTrigger?.value;
     if (seekTo != null && seekTo > 0 && _controller != null && _isInitialized) {
-      _controller!.seekTo(Duration(seconds: seekTo));
-      _controller!.play();
+      try {
+        _controller!.seekTo(Duration(seconds: seekTo));
+        _controller!.play();
+        // Brief highlight flash when a seek is triggered.
+        setState(() => _highlightActive = true);
+        Future.delayed(const Duration(milliseconds: 1200), () {
+          if (mounted) setState(() => _highlightActive = false);
+        });
+      } on Exception {
+        showToast('跳转失败，请重试');
+      }
     }
   }
 
@@ -226,6 +236,33 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
 
           // Cover overlay with fade
           if (_isCoverVisible) _buildCover(),
+
+          // Highlight flash when seek is triggered (product segment jump)
+          if (_highlightActive)
+            Positioned.fill(
+              child: AnimatedOpacity(
+                opacity: _highlightActive ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 300),
+                child: IgnorePointer(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: AppColors.accent.withAlpha(180),
+                        width: 3,
+                      ),
+                      borderRadius: BorderRadius.circular(4),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.accent.withAlpha(80),
+                          blurRadius: 20,
+                          spreadRadius: 4,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
 
           // Play/pause indicator
           if (widget.isActive && _isInitialized && !_controller!.value.isPlaying)

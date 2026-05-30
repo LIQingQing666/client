@@ -34,13 +34,27 @@ final class PlayerPool {
     return controller;
   }
 
-  void preload(String videoId, String url) {
+  Future<void> preload(String videoId, String url) async {
     if (_players.containsKey(videoId)) {
       return;
     }
 
-    unawaited(acquire(videoId, url));
+    try {
+      await acquire(videoId, url);
+    } on Exception {
+      // Preload failure is non-fatal — the player will retry on acquire.
+    }
   }
+
+  void cancelPreload(String videoId) {
+    final entry = _players[videoId];
+    if (entry == null || entry.refCount > 0) {
+      return;
+    }
+    _disposePlayer(videoId);
+  }
+
+  int get activeCount => _players.length;
 
   void release(String videoId, {bool dispose = false}) {
     final entry = _players[videoId];

@@ -69,9 +69,9 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
             'count': '1',
           });
         },
-        onSeekToTime: product.highlightTime > 0
-            ? () {
-                _seekTrigger.value = product.highlightTime;
+        onSeekToTime: (product.highlightTime > 0 || product.segments.isNotEmpty)
+            ? (int seekTime) {
+                _seekTrigger.value = seekTime;
                 Navigator.of(context).pop();
               }
             : null,
@@ -100,6 +100,7 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
               category: product.category, tags: product.tags,
               specs: product.specs, videoId: product.videoId,
               aiSalesPoint: newPoint, highlightTime: product.highlightTime,
+              segments: product.segments,
             );
             if (!mounted) return;
             await showProductDetailSheet(
@@ -114,9 +115,9 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
                   'total': product.price.toString(), 'count': '1',
                 });
               },
-              onSeekToTime: updated.highlightTime > 0
-                  ? () {
-                      _seekTrigger.value = updated.highlightTime;
+              onSeekToTime: (updated.highlightTime > 0 || updated.segments.isNotEmpty)
+                  ? (int seekTime) {
+                      _seekTrigger.value = seekTime;
                       Navigator.of(context).pop();
                     }
                   : null,

@@ -10,8 +10,12 @@ abstract final class AppConstants {
   static const Duration connectTimeout = Duration(seconds: 15);
   static const Duration receiveTimeout = Duration(seconds: 15);
 
-  // 视频相关
+  // 视频预加载
   static const int preloadVideoCount = 2;
+  static const bool preloadWifiOnly = true;
+  static const Duration preloadTimeout = Duration(seconds: 30);
+
+  // 视频相关
   static const Duration videoFadeInDuration = Duration(milliseconds: 300);
 
   // 分页

@@ -20,7 +20,7 @@ final class ProductDetailSheet extends StatefulWidget {
   final VoidCallback? onAddToCart;
   final VoidCallback? onBuyNow;
   final VoidCallback? onRefreshAi;
-  final VoidCallback? onSeekToTime;
+  final void Function(int seekTime)? onSeekToTime;
   final VoidCallback? onFavorite;
   final bool isFavorited;
 
@@ -341,28 +341,16 @@ final class _ProductDetailSheetState extends State<ProductDetailSheet> {
                   ),
                 ),
 
-              // Video seek to product highlight
-              if (product.highlightTime > 0 && widget.onSeekToTime != null)
+              // Video seek to product highlight / segments
+              if (widget.onSeekToTime != null &&
+                  (product.segments.isNotEmpty || product.highlightTime > 0))
                 Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: AppDimens.paddingLg,
                   ),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: widget.onSeekToTime,
-                      icon: const Icon(Icons.play_circle_outline, size: 18),
-                      label: Text(
-                        '跳转到讲解 (${_formatTime(product.highlightTime)})',
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.primary,
-                        side: const BorderSide(color: AppColors.divider),
-                        padding: const EdgeInsets.symmetric(
-                          vertical: AppDimens.paddingMd,
-                        ),
-                      ),
-                    ),
+                  child: _SegmentSeekButton(
+                    product: product,
+                    onSeekToTime: widget.onSeekToTime!,
                   ),
                 ),
 
@@ -402,11 +390,139 @@ final class _ProductDetailSheetState extends State<ProductDetailSheet> {
   // Exposed methods
   Map<String, String> get selectedSpecs => Map.unmodifiable(_selectedSpecs);
   int get quantity => _quantity;
+}
+
+/// A seek button that adapts to the number of product segments.
+///
+/// - 0 segments + highlightTime > 0 → single jump button (backward compat)
+/// - 1 segment → single jump button with segment label
+/// - 2+ segments → button opens a segment picker dialog
+final class _SegmentSeekButton extends StatelessWidget {
+  const _SegmentSeekButton({required this.product, required this.onSeekToTime});
+
+  final ProductModel product;
+  final void Function(int seekTime) onSeekToTime;
 
   static String _formatTime(int seconds) {
     final min = seconds ~/ 60;
     final sec = seconds % 60;
     return '${min.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasMultipleSegments = product.segments.length > 1;
+
+    if (hasMultipleSegments) {
+      return SizedBox(
+        width: double.infinity,
+        child: OutlinedButton.icon(
+          onPressed: () => _showSegmentPicker(context),
+          icon: const Icon(Icons.playlist_play, size: 18),
+          label: Text('${product.segments.length}个讲解片段'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.primary,
+            side: const BorderSide(color: AppColors.divider),
+            padding: const EdgeInsets.symmetric(vertical: AppDimens.paddingMd),
+          ),
+        ),
+      );
+    }
+
+    // Single segment or legacy highlightTime
+    final time = product.segments.isNotEmpty
+        ? product.segments.first.startTime
+        : product.highlightTime;
+    final label = product.segments.isNotEmpty
+        ? product.segments.first.label
+        : null;
+
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: () => onSeekToTime(time),
+        icon: const Icon(Icons.play_circle_outline, size: 18),
+        label: Text(
+          label != null
+              ? '$label (${_formatTime(time)})'
+              : '跳转到讲解 (${_formatTime(time)})',
+        ),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.primary,
+          side: const BorderSide(color: AppColors.divider),
+          padding: const EdgeInsets.symmetric(vertical: AppDimens.paddingMd),
+        ),
+      ),
+    );
+  }
+
+  void _showSegmentPicker(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _SegmentPickerSheet(
+        segments: product.segments,
+        onSelected: (segment) {
+          Navigator.of(ctx).pop();
+          onSeekToTime(segment.startTime);
+        },
+      ),
+    );
+  }
+}
+
+/// A bottom sheet listing all product explanation segments.
+final class _SegmentPickerSheet extends StatelessWidget {
+  const _SegmentPickerSheet({required this.segments, required this.onSelected});
+
+  final List<ProductSegment> segments;
+  final void Function(ProductSegment segment) onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppDimens.radiusXl)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: AppDimens.paddingSm),
+          Center(
+            child: Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.textHint,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: AppDimens.paddingMd),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: AppDimens.paddingLg),
+            child: Text('选择讲解片段', style: AppTextStyles.titleMedium),
+          ),
+          const SizedBox(height: AppDimens.paddingMd),
+          ...segments.map((seg) => ListTile(
+                leading: const Icon(Icons.play_circle_outline,
+                    color: AppColors.primary),
+                title: Text(seg.label, style: AppTextStyles.bodyLarge),
+                subtitle: Text(
+                  seg.endTime > 0
+                      ? '${_SegmentSeekButton._formatTime(seg.startTime)} - ${_SegmentSeekButton._formatTime(seg.endTime)}'
+                      : _SegmentSeekButton._formatTime(seg.startTime),
+                  style: AppTextStyles.bodySmall,
+                ),
+                trailing: const Icon(Icons.chevron_right,
+                    color: AppColors.textHint),
+                onTap: () => onSelected(seg),
+              )),
+          const SizedBox(height: AppDimens.paddingLg),
+        ],
+      ),
+    );
   }
 }
 
@@ -539,7 +655,7 @@ Future<void> showProductDetailSheet({
   required VoidCallback onAddToCart,
   required VoidCallback onBuyNow,
   VoidCallback? onRefreshAi,
-  VoidCallback? onSeekToTime,
+  void Function(int seekTime)? onSeekToTime,
   VoidCallback? onFavorite,
   bool isFavorited = false,
 }) {
