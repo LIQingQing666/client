@@ -380,22 +380,14 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
       },
       onBuyNow: () {
         ref.read(cartProvider.notifier).addToCart(productId: product.id);
-        // Dismiss the bottom sheet first.
+        // Dismiss the product detail bottom sheet first.
         Navigator.of(context).pop();
         // Enter PIP mode before navigating away so the live stream keeps playing.
         if (_videoController != null && _videoReady && room != null) {
           ref.read(pipProvider.notifier).enterPip(_videoController!, room);
-          ref.read(pipProvider.notifier).onReturnToLive = () {
-            // Pop all routes until we're back, then re-enter the live room.
-            final router = GoRouter.of(context);
-            while (router.canPop()) {
-              router.pop();
-            }
-            context.pushReplacementNamed('liveRoom',
-                pathParameters: {'roomId': widget.room.id});
-          };
         }
-        context.pushNamed('orderConfirm', queryParameters: <String, String>{
+        // Use the global router — context from inside a bottom sheet is stale after pop.
+        AppRouter.router.pushNamed('orderConfirm', queryParameters: <String, String>{
           'total': product.price.toString(), 'count': '1',
         });
       },
