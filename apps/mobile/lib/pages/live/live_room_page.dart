@@ -41,12 +41,14 @@ final class _LiveRoomPageState extends ConsumerState<LiveRoomPage> {
     Future.microtask(() {
       final rooms = ref.read(roomListProvider);
       final index = rooms.indexWhere((r) => r.id == widget.roomId);
-      if (index >= 0 && mounted) {
+      if (mounted) {
         setState(() {
-          _currentIndex = index;
+          _currentIndex = index >= 0 ? index : 0;
           _initialized = true;
         });
-        _pageController.jumpToPage(index);
+        if (index >= 0) {
+          _pageController.jumpToPage(index);
+        }
       }
       ref.read(liveProvider.notifier).enterRoom(widget.roomId);
     });
@@ -61,9 +63,10 @@ final class _LiveRoomPageState extends ConsumerState<LiveRoomPage> {
 
   @override
   Widget build(BuildContext context) {
+    final liveState = ref.watch(liveProvider);
     final rooms = ref.watch(roomListProvider);
 
-    if (rooms.isEmpty) {
+    if (rooms.isEmpty && !_initialized) {
       return const Scaffold(
         backgroundColor: AppColors.background,
         body: Center(child: CircularProgressIndicator(color: AppColors.primary)),
@@ -77,27 +80,48 @@ final class _LiveRoomPageState extends ConsumerState<LiveRoomPage> {
       );
     }
 
-    final safeIndex = _currentIndex.clamp(0, rooms.length - 1);
+    // When the room list is empty (e.g. returning from PIP), use the live
+    // provider's room as a single-item list.
+    final displayRooms = rooms.isNotEmpty
+        ? rooms
+        : (liveState.room != null ? [liveState.room!] : <LiveRoomInfo>[]);
+
+    if (displayRooms.isEmpty) {
+      return const Scaffold(
+        backgroundColor: AppColors.background,
+        body: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+      );
+    }
+
+    final safeIndex = _currentIndex.clamp(0, displayRooms.length - 1);
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: PageView.builder(
-        controller: _pageController,
-        scrollDirection: Axis.vertical,
-        itemCount: rooms.length,
-        onPageChanged: (index) {
-          if (index >= 0 && index < rooms.length) {
-            setState(() => _currentIndex = index);
-            ref.read(liveProvider.notifier).switchRoom(rooms[index].id);
-          }
-        },
-        itemBuilder: (context, index) {
-          final room = rooms[index];
-          final isActive = index == safeIndex;
-          if (isActive) {
-            return _LiveRoomActiveContent(key: ValueKey('live_${room.id}'), room: room);
-          }
-          return _LiveRoomPlaceholder(room: room);
+      body: displayRooms.length == 1
+          ? _LiveRoomActiveContent(
+              key: ValueKey('live_${displayRooms[0].id}'),
+              room: displayRooms[0],
+            )
+          : PageView.builder(
+              controller: _pageController,
+              scrollDirection: Axis.vertical,
+              itemCount: displayRooms.length,
+              onPageChanged: (index) {
+                if (index >= 0 && index < displayRooms.length) {
+                  setState(() => _currentIndex = index);
+                  ref
+                      .read(liveProvider.notifier)
+                      .switchRoom(displayRooms[index].id);
+                }
+              },
+              itemBuilder: (context, index) {
+                final room = displayRooms[index];
+                final isActive = index == safeIndex;
+                if (isActive) {
+                  return _LiveRoomActiveContent(
+                      key: ValueKey('live_${room.id}'), room: room);
+                }
+                return _LiveRoomPlaceholder(room: room);
         },
       ),
     );
