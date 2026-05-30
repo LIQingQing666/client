@@ -199,32 +199,45 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
     super.dispose();
   }
 
+  /// Initialize (or re-initialize) the video player.
+  /// Safe to call multiple times — returns early if already initializing.
   void _initVideo(String url) {
     if (url.isEmpty) {
       if (mounted) setState(() => _videoError = true);
       return;
     }
-    if (_videoController != null) return;
+    // If we already have a working controller for the SAME url, don't re-init.
+    if (_videoController != null && _videoReady && _videoController!.dataSource == url) {
+      return;
+    }
+    // Dispose any failed/previous controller first.
+    if (_videoController != null) {
+      _videoController!.dispose();
+      _videoController = null;
+    }
 
-    setState(() => _videoError = false);
-    _videoController = VideoPlayerController.networkUrl(Uri.parse(url))
-      ..initialize().then((_) {
-        if (!mounted) return;
-        setState(() {
-          _videoReady = true;
-          _videoError = false;
-        });
-        _videoController!.setLooping(true);
-        _videoController!.play();
-      }).catchError((Object err) {
-        debugPrint('[LiveRoom] video init error: $err');
-        if (mounted) {
-          setState(() => _videoError = true);
-          // Dispose the failed controller so retry starts fresh.
-          _videoController?.dispose();
-          _videoController = null;
-        }
+    setState(() {
+      _videoReady = false;
+      _videoError = false;
+    });
+
+    final controller = VideoPlayerController.networkUrl(Uri.parse(url));
+    _videoController = controller;
+    controller.initialize().then((_) {
+      if (!mounted || _videoController != controller) return;
+      setState(() {
+        _videoReady = true;
+        _videoError = false;
       });
+      controller.setLooping(true);
+      controller.play();
+    }).catchError((Object err) {
+      debugPrint('[LiveRoom] video init error: $err');
+      if (!mounted || _videoController != controller) return;
+      setState(() => _videoError = true);
+      controller.dispose();
+      if (_videoController == controller) _videoController = null;
+    });
   }
 
   void _sendMessage() {
@@ -277,8 +290,11 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
       backgroundColor: Colors.transparent,
       builder: (_) => GiftPanel(
         onSelect: (gift) {
-          showToast('送出了 ${gift.name}');
+          Navigator.of(context).pop();
+          // Defer toast so it renders after the sheet is fully dismissed.
+          Future.microtask(() => showToast('送出了 ${gift.name}'));
         },
+        onClose: () => Navigator.of(context).pop(),
       ),
     );
   }
@@ -393,13 +409,28 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
         children: [
           // Background: video player / cover image / error
           if (_videoController != null && _videoReady)
-            FittedBox(
-              fit: BoxFit.cover,
-              child: SizedBox(
-                width: _videoController!.value.size.width,
-                height: _videoController!.value.size.height,
-                child: VideoPlayer(_videoController!),
-              ),
+            ValueListenableBuilder<VideoPlayerValue>(
+              valueListenable: _videoController!,
+              builder: (_, value, __) {
+                if (!value.isInitialized || value.size.isEmpty) {
+                  return CachedNetworkImage(
+                    imageUrl: room.coverUrl,
+                    fit: BoxFit.cover,
+                    placeholder: (_, __) =>
+                        Container(color: AppColors.surface),
+                    errorWidget: (_, __, ___) =>
+                        Container(color: AppColors.surface),
+                  );
+                }
+                return FittedBox(
+                  fit: BoxFit.cover,
+                  child: SizedBox(
+                    width: value.size.width,
+                    height: value.size.height,
+                    child: VideoPlayer(_videoController!),
+                  ),
+                );
+              },
             )
           else if (_videoError)
             // Video failed — show cover with retry overlay.
@@ -463,15 +494,15 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
             ),
           ),
 
-          // Bottom gradient
+          // Bottom gradient — only behind the input row.
           Positioned(
-            bottom: 0, left: 0, right: 0, height: 200 + bottomInset,
+            bottom: 0, left: 0, right: 0, height: 64 + bottomInset,
             child: Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.bottomCenter,
                   end: Alignment.topCenter,
-                  colors: [Colors.black.withAlpha(160), Colors.black.withAlpha(20)],
+                  colors: [Colors.black.withAlpha(180), Colors.transparent],
                 ),
               ),
             ),
@@ -620,14 +651,14 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
             const bottomRowH = 48.0;
             return Stack(
               children: [
-                // Comments — left 2/3
+                // Comments — left 2/3, same height as product card
                 Positioned(
                   left: AppDimens.paddingMd,
                   right: hasProduct
                       ? cardW + AppDimens.paddingSm
                       : AppDimens.paddingLg + 56,
                   bottom: bottomRowH + AppDimens.paddingSm + bottomInset,
-                  height: 120,
+                  height: 180,
                   child: _CommentList(messages: state.messages),
                 ),
                 // Product card — right 1/3, bottom at bottom-row top
@@ -734,7 +765,18 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
                   // Action buttons — right half
                   _BottomActionBtn(
                     icon: Icons.shopping_cart_outlined,
-                    onTap: () => context.pushNamed('cart'),
+                    onTap: () {
+                      // Enter PIP before navigating to cart.
+                      final room = ref.read(liveProvider).room;
+                      if (_videoController != null &&
+                          _videoReady &&
+                          room != null) {
+                        ref
+                            .read(pipProvider.notifier)
+                            .enterPip(_videoController!, room);
+                      }
+                      AppRouter.router.go('/cart');
+                    },
                   ),
                   _BottomActionBtn(
                     icon: state.isLiked
@@ -753,7 +795,7 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
                     onTap: _showGiftPanel,
                   ),
                   _BottomActionBtn(
-                    icon: Icons.share_outlined,
+                    icon: Icons.ios_share,
                     onTap: _onShare,
                   ),
                 ],
@@ -787,13 +829,13 @@ final class _BottomActionBtn extends StatelessWidget {
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: SizedBox(
-        width: 40,
+        width: 44,
         height: 48,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 22, color: iconColor ?? Colors.white70),
+            Icon(icon, size: 28, color: iconColor ?? Colors.white70),
             if (label != null) ...[
               const SizedBox(height: 1),
               Text(label!, style: const TextStyle(fontSize: 9, color: Colors.white60)),

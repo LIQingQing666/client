@@ -217,57 +217,21 @@ final class _FloatingProductCardState extends State<FloatingProductCard>
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis),
                 const Spacer(),
-                // Price row
-                Row(
-                  children: [
-                    Text('¥${product.price.toStringAsFixed(0)}',
-                        style: TextStyle(
-                            fontSize: priceFont,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.primary)),
-                    if (product.hasDiscount) ...[
-                      const SizedBox(width: 4),
-                      Flexible(
-                        child: Text(
-                            '¥${product.originalPrice.toStringAsFixed(0)}',
-                            style: TextStyle(
-                                fontSize: bodyFont - 1,
-                                color: AppColors.textHint,
-                                decoration: TextDecoration.lineThrough),
-                            overflow: TextOverflow.ellipsis),
-                      ),
-                    ],
-                  ],
-                ),
+                // Price
+                Text('¥${product.price.toStringAsFixed(0)}',
+                    style: TextStyle(
+                        fontSize: priceFont,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primary)),
                 const SizedBox(height: 1),
-                // Tags / discount / stock
-                Row(
-                  children: [
-                    if (product.hasDiscount)
-                      Container(
-                        margin: const EdgeInsets.only(right: 4),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 3, vertical: 1),
-                        decoration: BoxDecoration(
-                            color: AppColors.primary.withAlpha(40),
-                            borderRadius: BorderRadius.circular(2)),
-                        child: Text(product.discountPercent,
-                            style: TextStyle(
-                                fontSize: bodyFont - 2,
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.w600)),
-                      ),
-                    Text(
-                        product.stock > 0
-                            ? '库存 ${product.stock}'
-                            : '已售罄',
-                        style: TextStyle(
-                            fontSize: bodyFont - 2,
-                            color: product.stock > 0
-                                ? AppColors.textHint
-                                : AppColors.error)),
-                  ],
-                ),
+                // Stock
+                Text(
+                    product.stock > 0 ? '库存 ${product.stock}' : '已售罄',
+                    style: TextStyle(
+                        fontSize: bodyFont - 2,
+                        color: product.stock > 0
+                            ? AppColors.textHint
+                            : AppColors.error)),
               ],
             ),
           ),

@@ -669,7 +669,7 @@ final class _BottomActionBar extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.all(AppDimens.paddingSm),
               child: Icon(
-                isFavorited ? Icons.bookmark : Icons.bookmark_border,
+                isFavorited ? Icons.star : Icons.star_border,
                 color: isFavorited ? AppColors.primary : AppColors.textSecondary,
                 size: 28,
               ),
