@@ -98,7 +98,7 @@ final class FavoriteNotifier extends StateNotifier<FavoriteState> {
     if (existing >= 0) {
       final updated = [...state.items]..removeAt(existing);
       state = state.copyWith(items: updated);
-      showToast('已取消收藏');
+      showFavoriteToast('已取消收藏');
     } else {
       final item = FavoriteItem(
         id: id,
@@ -108,7 +108,7 @@ final class FavoriteNotifier extends StateNotifier<FavoriteState> {
         subtitle: authorName,
       );
       state = state.copyWith(items: [item, ...state.items]);
-      showToast('已收藏');
+      showFavoriteToast('已收藏');
     }
     _persist();
   }
@@ -125,7 +125,7 @@ final class FavoriteNotifier extends StateNotifier<FavoriteState> {
     if (existing >= 0) {
       final updated = [...state.items]..removeAt(existing);
       state = state.copyWith(items: updated);
-      showToast('已取消收藏');
+      showFavoriteToast('已取消收藏');
     } else {
       final item = FavoriteItem(
         id: id,
@@ -139,7 +139,7 @@ final class FavoriteNotifier extends StateNotifier<FavoriteState> {
         },
       );
       state = state.copyWith(items: [item, ...state.items]);
-      showToast('已收藏');
+      showFavoriteToast('已收藏');
     }
     _persist();
   }

@@ -14,7 +14,6 @@ import '../../provider/favorite_provider.dart';
 import '../../provider/follow_provider.dart';
 import '../../provider/live_provider.dart';
 import '../../provider/pip_provider.dart';
-import '../../utils/toast.dart';
 import '../../widgets/coupon_countdown.dart';
 import '../../widgets/danmaku_overlay.dart';
 import '../../widgets/floating_product_card.dart';
@@ -206,10 +205,8 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
       if (mounted) setState(() => _videoError = true);
       return;
     }
-    // If we already have a working controller for the SAME url, don't re-init.
-    if (_videoController != null && _videoReady && _videoController!.dataSource == url) {
-      return;
-    }
+    // If we already have a working controller, don't re-init.
+    if (_videoController != null && _videoReady) return;
     // Dispose any failed/previous controller first.
     if (_videoController != null) {
       _videoController!.dispose();
@@ -290,9 +287,9 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
       backgroundColor: Colors.transparent,
       builder: (_) => GiftPanel(
         onSelect: (gift) {
+          // Send gift notification into the scrolling comment area.
+          ref.read(liveProvider.notifier).sendGift('我', gift.icon, gift.name);
           Navigator.of(context).pop();
-          // Defer toast so it renders after the sheet is fully dismissed.
-          Future.microtask(() => showToast('送出了 ${gift.name}'));
         },
         onClose: () => Navigator.of(context).pop(),
       ),

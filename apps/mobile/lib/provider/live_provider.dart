@@ -196,6 +196,19 @@ final class LiveNotifier extends StateNotifier<LiveState> {
     );
   }
 
+  /// Adds a local gift notification as a system message (scrolls in comment area).
+  void sendGift(String userName, String giftIcon, String giftName) {
+    _addMessage(
+      LiveMessage(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        userName: userName,
+        content: '送出了 $giftIcon $giftName',
+        type: 'system',
+        timestamp: DateTime.now().toIso8601String(),
+      ),
+    );
+  }
+
   Future<void> switchRoom(String newRoomId) async {
     if (state.room?.id == newRoomId) return;
     _eventSub?.cancel();
