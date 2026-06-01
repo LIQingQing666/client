@@ -183,6 +183,17 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
   @override
   void initState() {
     super.initState();
+    // If returning from PIP, reuse the already-initialized controller.
+    final pipState = ref.read(pipProvider);
+    if (!pipState.isActive && pipState.videoController != null) {
+      _videoController = pipState.videoController;
+      _videoReady = true;
+      _videoError = false;
+      _videoController!.play();
+      // Take ownership — release the PIP reference without disposing.
+      ref.read(pipProvider.notifier).releaseController();
+      return;
+    }
     _initVideo(widget.room.videoUrl);
   }
 
