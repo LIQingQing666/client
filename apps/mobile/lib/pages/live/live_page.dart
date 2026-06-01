@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../api/live_api.dart';
 import '../../core/app_constants.dart';
 import '../../models/live_model.dart';
+import '../../provider/live_provider.dart';
 import '../../provider/service_providers.dart';
 
 final class LivePage extends ConsumerStatefulWidget {
@@ -44,6 +45,7 @@ final class _LivePageState extends ConsumerState<LivePage> {
       final api = LiveApi(client: ref.read(dioClientProvider));
       final rooms = await api.getRooms();
       if (!mounted) return;
+      ref.read(roomListProvider.notifier).state = rooms;
       setState(() {
         _rooms = rooms;
         _isLoading = false;

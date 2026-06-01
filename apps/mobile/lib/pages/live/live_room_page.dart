@@ -6,15 +6,18 @@ import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../core/app_constants.dart';
+import '../../core/app_router.dart';
+import '../../models/live_model.dart';
 import '../../models/product_model.dart';
 import '../../provider/cart_provider.dart';
+import '../../provider/favorite_provider.dart';
 import '../../provider/follow_provider.dart';
 import '../../provider/live_provider.dart';
-import '../../utils/toast.dart';
+import '../../provider/pip_provider.dart';
 import '../../widgets/coupon_countdown.dart';
 import '../../widgets/danmaku_overlay.dart';
+import '../../widgets/floating_product_card.dart';
 import '../../widgets/product_detail_sheet.dart';
-import '../../widgets/product_floating_card.dart';
 import 'audience_list.dart';
 import 'gift_panel.dart';
 
@@ -28,45 +31,210 @@ final class LiveRoomPage extends ConsumerStatefulWidget {
 }
 
 final class _LiveRoomPageState extends ConsumerState<LiveRoomPage> {
-  final _chatController = TextEditingController();
-  final _chatFocusNode = FocusNode();
-  bool _showChatInput = false;
-  VideoPlayerController? _videoController;
-  bool _videoReady = false;
+  final _pageController = PageController();
+  int _currentIndex = 0;
+  bool _initialized = false;
 
   @override
   void initState() {
     super.initState();
     Future.microtask(() {
+      final rooms = ref.read(roomListProvider);
+      final index = rooms.indexWhere((r) => r.id == widget.roomId);
+      if (mounted) {
+        setState(() {
+          _currentIndex = index >= 0 ? index : 0;
+          _initialized = true;
+        });
+        if (index >= 0) {
+          _pageController.jumpToPage(index);
+        }
+      }
       ref.read(liveProvider.notifier).enterRoom(widget.roomId);
     });
   }
 
   @override
   void dispose() {
-    _chatController.dispose();
-    _chatFocusNode.dispose();
-    _releaseVideo();
+    _pageController.dispose();
     ref.read(liveProvider.notifier).leaveRoom();
     super.dispose();
   }
 
-  void _releaseVideo() {
-    _videoController?.pause();
-    _videoController?.dispose();
-    _videoController = null;
-    _videoReady = false;
+  @override
+  Widget build(BuildContext context) {
+    final liveState = ref.watch(liveProvider);
+    final rooms = ref.watch(roomListProvider);
+
+    if (rooms.isEmpty && !_initialized) {
+      return const Scaffold(
+        backgroundColor: AppColors.background,
+        body: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+      );
+    }
+
+    if (!_initialized) {
+      return const Scaffold(
+        backgroundColor: AppColors.background,
+        body: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+      );
+    }
+
+    // When the room list is empty (e.g. returning from PIP), use the live
+    // provider's room as a single-item list.
+    final displayRooms = rooms.isNotEmpty
+        ? rooms
+        : (liveState.room != null ? [liveState.room!] : <LiveRoomInfo>[]);
+
+    if (displayRooms.isEmpty) {
+      return const Scaffold(
+        backgroundColor: AppColors.background,
+        body: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+      );
+    }
+
+    final safeIndex = _currentIndex.clamp(0, displayRooms.length - 1);
+
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: displayRooms.length == 1
+          ? _LiveRoomActiveContent(
+              key: ValueKey('live_${displayRooms[0].id}'),
+              room: displayRooms[0],
+            )
+          : PageView.builder(
+              controller: _pageController,
+              scrollDirection: Axis.vertical,
+              itemCount: displayRooms.length,
+              onPageChanged: (index) {
+                if (index >= 0 && index < displayRooms.length) {
+                  setState(() => _currentIndex = index);
+                  ref
+                      .read(liveProvider.notifier)
+                      .switchRoom(displayRooms[index].id);
+                }
+              },
+              itemBuilder: (context, index) {
+                final room = displayRooms[index];
+                final isActive = index == safeIndex;
+                if (isActive) {
+                  return _LiveRoomActiveContent(
+                      key: ValueKey('live_${room.id}'), room: room);
+                }
+                return _LiveRoomPlaceholder(room: room);
+        },
+      ),
+    );
+  }
+}
+
+final class _LiveRoomPlaceholder extends StatelessWidget {
+  const _LiveRoomPlaceholder({required this.room});
+
+  final LiveRoomInfo room;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        CachedNetworkImage(
+          imageUrl: room.coverUrl,
+          fit: BoxFit.cover,
+          placeholder: (_, __) => Container(color: AppColors.surface),
+          errorWidget: (_, __, ___) => Container(color: AppColors.surface),
+        ),
+        Container(color: Colors.black.withAlpha(100)),
+        Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.play_circle_outline, size: 64, color: Colors.white54),
+              const SizedBox(height: 12),
+              Text(room.title, style: const TextStyle(fontSize: 16, color: Colors.white70)),
+              const SizedBox(height: 4),
+              Text(room.authorName, style: const TextStyle(fontSize: 13, color: Colors.white54)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+final class _LiveRoomActiveContent extends ConsumerStatefulWidget {
+  const _LiveRoomActiveContent({super.key, required this.room});
+
+  final LiveRoomInfo room;
+
+  @override
+  ConsumerState<_LiveRoomActiveContent> createState() => _LiveRoomActiveContentState();
+}
+
+final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveContent> {
+  final _chatController = TextEditingController();
+  final _chatFocusNode = FocusNode();
+  bool _showChatInput = false;
+  VideoPlayerController? _videoController;
+  bool _videoReady = false;
+  bool _videoError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initVideo(widget.room.videoUrl);
   }
 
+  @override
+  void dispose() {
+    _chatController.dispose();
+    _chatFocusNode.dispose();
+    // Do NOT dispose video controller if PIP is active — it's still in use.
+    final pipActive = ref.read(pipProvider).isActive;
+    if (!pipActive) {
+      _videoController?.pause();
+      _videoController?.dispose();
+    }
+    super.dispose();
+  }
+
+  /// Initialize (or re-initialize) the video player.
+  /// Safe to call multiple times — returns early if already initializing.
   void _initVideo(String url) {
-    if (url.isEmpty || _videoController != null) return;
-    _videoController = VideoPlayerController.networkUrl(Uri.parse(url))
-      ..initialize().then((_) {
-        if (!mounted) return;
-        setState(() => _videoReady = true);
-        _videoController!.setLooping(true);
-        _videoController!.play();
-      }).catchError((_) {});
+    if (url.isEmpty) {
+      if (mounted) setState(() => _videoError = true);
+      return;
+    }
+    // If we already have a working controller, don't re-init.
+    if (_videoController != null && _videoReady) return;
+    // Dispose any failed/previous controller first.
+    if (_videoController != null) {
+      _videoController!.dispose();
+      _videoController = null;
+    }
+
+    setState(() {
+      _videoReady = false;
+      _videoError = false;
+    });
+
+    final controller = VideoPlayerController.networkUrl(Uri.parse(url));
+    _videoController = controller;
+    controller.initialize().then((_) {
+      if (!mounted || _videoController != controller) return;
+      setState(() {
+        _videoReady = true;
+        _videoError = false;
+      });
+      controller.setLooping(true);
+      controller.play();
+    }).catchError((Object err) {
+      debugPrint('[LiveRoom] video init error: $err');
+      if (!mounted || _videoController != controller) return;
+      setState(() => _videoError = true);
+      controller.dispose();
+      if (_videoController == controller) _videoController = null;
+    });
   }
 
   void _sendMessage() {
@@ -92,9 +260,7 @@ final class _LiveRoomPageState extends ConsumerState<LiveRoomPage> {
     if (authorId == null) return;
     try {
       await ref.read(followProvider.notifier).toggleFollow(authorId);
-    } on Exception {
-      // toast handled in provider
-    }
+    } on Exception {}
   }
 
   void _onShare() {
@@ -121,8 +287,63 @@ final class _LiveRoomPageState extends ConsumerState<LiveRoomPage> {
       backgroundColor: Colors.transparent,
       builder: (_) => GiftPanel(
         onSelect: (gift) {
-          showToast('送出了 ${gift.name}');
+          // Send gift notification into the scrolling comment area.
+          ref.read(liveProvider.notifier).sendGift('我', gift.icon, gift.name);
+          Navigator.of(context).pop();
         },
+        onClose: () => Navigator.of(context).pop(),
+      ),
+    );
+  }
+
+  void _showProductDetail(BuildContext context, ProductModel product) {
+    final favState = ref.read(favoriteProvider);
+    final room = ref.read(liveProvider).room;
+    showProductDetailSheet(
+      context: context,
+      product: product,
+      onAddToCart: () {
+        ref.read(cartProvider.notifier).addToCart(productId: product.id);
+      },
+      onBuyNow: () {
+        ref.read(cartProvider.notifier).addToCart(productId: product.id);
+        // Dismiss the product detail bottom sheet first.
+        Navigator.of(context).pop();
+        // Enter PIP mode before navigating away so the live stream keeps playing.
+        if (_videoController != null && _videoReady && room != null) {
+          ref.read(pipProvider.notifier).enterPip(_videoController!, room);
+        }
+        // Use the global router — context from inside a bottom sheet is stale after pop.
+        AppRouter.router.pushNamed('orderConfirm', queryParameters: <String, String>{
+          'total': product.price.toString(), 'count': '1',
+        });
+      },
+      onFavorite: () {
+        ref.read(favoriteProvider.notifier).toggleProductFavorite(
+          id: product.id,
+          name: product.name,
+          coverUrl: product.coverUrl,
+          price: product.price,
+          videoId: product.videoId,
+          highlightTime: product.highlightTime,
+        );
+      },
+      isFavorited: favState.isFavorited(product.id),
+    );
+  }
+
+  void _onAuthorTap() {
+    final room = ref.read(liveProvider).room;
+    if (room == null) return;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _AuthorInfoSheet(
+        authorName: room.authorName,
+        authorAvatar: room.authorAvatar,
+        authorId: room.authorId,
+        onFollow: _onFollowTap,
+        isFollowing: ref.read(followProvider).followingIds.contains(room.authorId),
       ),
     );
   }
@@ -133,28 +354,23 @@ final class _LiveRoomPageState extends ConsumerState<LiveRoomPage> {
     final followState = ref.watch(followProvider);
     final bottomInset = MediaQuery.of(context).padding.bottom;
 
-    if (state.isLoading || state.room == null) {
-      return const Scaffold(
-        backgroundColor: AppColors.background,
-        body: Center(child: CircularProgressIndicator(color: AppColors.primary)),
-      );
-    }
-
-    if (state.errorMessage != null && state.room == null) {
+    if (state.room == null && !state.isLoading && state.errorMessage != null) {
       return Scaffold(
         backgroundColor: AppColors.background,
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline, size: 48, color: AppColors.error),
+              const Icon(Icons.wifi_off, size: 48, color: AppColors.textHint),
               const SizedBox(height: AppDimens.paddingMd),
-              Text(state.errorMessage!, style: AppTextStyles.bodyMedium),
+              Text(state.errorMessage!, style: AppTextStyles.titleMedium),
               const SizedBox(height: AppDimens.paddingLg),
               ElevatedButton(
-                onPressed: () => context.pop(),
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-                child: const Text('返回'),
+                onPressed: () =>
+                    ref.read(liveProvider.notifier).enterRoom(widget.room.id),
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary),
+                child: const Text('重新加载'),
               ),
             ],
           ),
@@ -162,34 +378,103 @@ final class _LiveRoomPageState extends ConsumerState<LiveRoomPage> {
       );
     }
 
+    if (state.room == null) {
+      return const Scaffold(
+        backgroundColor: AppColors.background,
+        body: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+      );
+    }
+
     final room = state.room!;
     final isFollowing = followState.followingIds.contains(room.authorId);
 
-    if (room.videoUrl.isNotEmpty && _videoController == null) {
-      _initVideo(room.videoUrl);
-    }
-
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Stack(
+    return PopScope(
+      canPop: false, // We handle back navigation ourselves.
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        // Enter PIP mode if video is playing, then pop.
+        final currentRoom = state.room;
+        if (_videoController != null && _videoReady && currentRoom != null) {
+          ref.read(pipProvider.notifier).enterPip(_videoController!, currentRoom);
+        }
+        context.pop();
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        body: Stack(
         fit: StackFit.expand,
         children: [
-          // Background: video player or cover image
+          // Background: video player / cover image / error
           if (_videoController != null && _videoReady)
-            FittedBox(
-              fit: BoxFit.cover,
-              child: SizedBox(
-                width: _videoController!.value.size.width,
-                height: _videoController!.value.size.height,
-                child: VideoPlayer(_videoController!),
-              ),
+            ValueListenableBuilder<VideoPlayerValue>(
+              valueListenable: _videoController!,
+              builder: (_, value, __) {
+                if (!value.isInitialized || value.size.isEmpty) {
+                  return CachedNetworkImage(
+                    imageUrl: room.coverUrl,
+                    fit: BoxFit.cover,
+                    placeholder: (_, __) =>
+                        Container(color: AppColors.surface),
+                    errorWidget: (_, __, ___) =>
+                        Container(color: AppColors.surface),
+                  );
+                }
+                return FittedBox(
+                  fit: BoxFit.cover,
+                  child: SizedBox(
+                    width: value.size.width,
+                    height: value.size.height,
+                    child: VideoPlayer(_videoController!),
+                  ),
+                );
+              },
+            )
+          else if (_videoError)
+            // Video failed — show cover with retry overlay.
+            Stack(
+              fit: StackFit.expand,
+              children: [
+                CachedNetworkImage(
+                  imageUrl: room.coverUrl,
+                  fit: BoxFit.cover,
+                  placeholder: (_, __) =>
+                      Container(color: AppColors.surface),
+                  errorWidget: (_, __, ___) =>
+                      Container(color: AppColors.surface),
+                ),
+                Container(color: Colors.black54),
+                Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.play_circle_outline,
+                          size: 56, color: Colors.white54),
+                      const SizedBox(height: AppDimens.paddingSm),
+                      const Text('视频加载失败',
+                          style: TextStyle(
+                              fontSize: 14, color: Colors.white70)),
+                      const SizedBox(height: AppDimens.paddingLg),
+                      ElevatedButton.icon(
+                        onPressed: () =>
+                            _initVideo(widget.room.videoUrl),
+                        icon: const Icon(Icons.refresh, size: 18),
+                        label: const Text('重新加载'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             )
           else
             CachedNetworkImage(
               imageUrl: room.coverUrl,
               fit: BoxFit.cover,
-              placeholder: (context, url) => Container(color: AppColors.surface),
-              errorWidget: (context, url, error) => Container(color: AppColors.surface),
+              placeholder: (_, __) => Container(color: AppColors.surface),
+              errorWidget: (_, __, ___) => Container(color: AppColors.surface),
             ),
 
           // Top gradient
@@ -206,15 +491,15 @@ final class _LiveRoomPageState extends ConsumerState<LiveRoomPage> {
             ),
           ),
 
-          // Bottom gradient
+          // Bottom gradient — only behind the input row.
           Positioned(
-            bottom: 0, left: 0, right: 0, height: 200 + bottomInset,
+            bottom: 0, left: 0, right: 0, height: 64 + bottomInset,
             child: Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.bottomCenter,
                   end: Alignment.topCenter,
-                  colors: [Colors.black.withAlpha(160), Colors.black.withAlpha(20)],
+                  colors: [Colors.black.withAlpha(180), Colors.transparent],
                 ),
               ),
             ),
@@ -232,7 +517,14 @@ final class _LiveRoomPageState extends ConsumerState<LiveRoomPage> {
               child: Row(
                 children: [
                   GestureDetector(
-                    onTap: () => context.pop(),
+                    onTap: () {
+                      // Enter PIP mode if video is playing, then pop back.
+                      final room = ref.read(liveProvider).room;
+                      if (_videoController != null && _videoReady && room != null) {
+                        ref.read(pipProvider.notifier).enterPip(_videoController!, room);
+                      }
+                      context.pop();
+                    },
                     child: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
                   ),
                   const SizedBox(width: AppDimens.paddingMd),
@@ -240,21 +532,30 @@ final class _LiveRoomPageState extends ConsumerState<LiveRoomPage> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        CircleAvatar(
-                          radius: 16,
-                          backgroundColor: AppColors.card,
-                          child: Text(
-                            room.authorName.isNotEmpty ? room.authorName[0] : '?',
-                            style: const TextStyle(fontSize: 12, color: Colors.white),
+                        GestureDetector(
+                          onTap: _onAuthorTap,
+                          child: CircleAvatar(
+                            radius: 16,
+                            backgroundColor: AppColors.card,
+                            backgroundImage: room.authorAvatar.isNotEmpty
+                                ? CachedNetworkImageProvider(room.authorAvatar)
+                                : null,
+                            child: room.authorAvatar.isEmpty
+                                ? Text(room.authorName.isNotEmpty ? room.authorName[0] : '?',
+                                    style: const TextStyle(fontSize: 12, color: Colors.white))
+                                : null,
                           ),
                         ),
                         const SizedBox(width: AppDimens.paddingSm),
                         Flexible(
-                          child: Text(
-                            room.authorName,
-                            style: AppTextStyles.bodyMedium,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                          child: GestureDetector(
+                            onTap: _onAuthorTap,
+                            child: Text(
+                              room.authorName,
+                              style: AppTextStyles.bodyMedium,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         ),
                         const SizedBox(width: AppDimens.paddingSm),
@@ -280,7 +581,24 @@ final class _LiveRoomPageState extends ConsumerState<LiveRoomPage> {
                       ],
                     ),
                   ),
-                  // Online count
+                  const SizedBox(width: AppDimens.paddingSm),
+                  // Heat value
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: AppDimens.paddingSm, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withAlpha(160),
+                      borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.local_fire_department, color: Colors.white, size: 14),
+                        const SizedBox(width: 2),
+                        Text(state.heatCountText, style: const TextStyle(fontSize: 11, color: Colors.white)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: AppDimens.paddingSm),
                   GestureDetector(
                     onTap: _showAudienceList,
                     child: Container(
@@ -294,10 +612,7 @@ final class _LiveRoomPageState extends ConsumerState<LiveRoomPage> {
                         children: [
                           const Icon(Icons.person, color: Colors.white, size: 14),
                           const SizedBox(width: 4),
-                          Text(
-                            state.onlineCountText,
-                            style: const TextStyle(fontSize: 12, color: Colors.white),
-                          ),
+                          Text(state.onlineCountText, style: const TextStyle(fontSize: 12, color: Colors.white)),
                         ],
                       ),
                     ),
@@ -324,114 +639,57 @@ final class _LiveRoomPageState extends ConsumerState<LiveRoomPage> {
               ),
             ),
 
-          if (state.currentProduct != null)
-            Positioned(
-              right: AppDimens.paddingLg,
-              bottom: bottomInset + 80 + AppDimens.paddingMd,
-              child: _FloatingProductCard(
-                product: state.currentProduct!,
-                onTap: () {
-                  showProductDetailSheet(
-                    context: context,
-                    product: state.currentProduct!,
-                    onAddToCart: () {
-                      ref.read(cartProvider.notifier).addToCart(
-                        productId: state.currentProduct!.id,
-                      );
-                    },
-                    onBuyNow: () {
-                      final p = state.currentProduct!;
-                      context.pushNamed('orderConfirm', queryParameters: <String, String>{
-                        'from': 'buy_now',
-                        'total': p.price.toString(),
-                        'count': '1',
-                        'product_id': p.id,
-                        'product_name': p.name,
-                        'product_price': p.price.toString(),
-                        'product_cover': p.coverUrl,
-                        'product_spec': '',
-                        'quantity': '1',
-                      });
-                    },
-                  );
-                },
-              ),
-            )
-          else if (state.products.isNotEmpty)
-            Positioned(
-              right: AppDimens.paddingLg,
-              bottom: bottomInset + 80 + AppDimens.paddingMd,
-              child: _FloatingProductCard(
-                product: state.products.first,
-                onTap: () {
-                  final product = state.products.first;
-                  showProductDetailSheet(
-                    context: context,
-                    product: product,
-                    onAddToCart: () {
-                      ref.read(cartProvider.notifier).addToCart(
-                        productId: product.id,
-                      );
-                    },
-                    onBuyNow: () {
-                      final p = product;
-                      context.pushNamed('orderConfirm', queryParameters: <String, String>{
-                        'from': 'buy_now',
-                        'total': p.price.toString(),
-                        'count': '1',
-                        'product_id': p.id,
-                        'product_name': p.name,
-                        'product_price': p.price.toString(),
-                        'product_cover': p.coverUrl,
-                        'product_spec': '',
-                        'quantity': '1',
-                      });
-                    },
-                  );
-                },
-              ),
-            ),
-
-          // Explaining product card
-          if (state.currentProduct != null)
-            Positioned(
-              left: AppDimens.paddingLg,
-              bottom: 160 + bottomInset,
-              right: 100,
-              child: _ExplainingProductCard(
-                product: state.currentProduct!,
-                onTap: () {
-                  showProductDetailSheet(
-                    context: context,
-                    product: state.currentProduct!,
-                    onAddToCart: () {
-                      ref.read(cartProvider.notifier).addToCart(productId: state.currentProduct!.id);
-                    },
-                    onBuyNow: () {
-                      final p = state.currentProduct!;
-                      context.pushNamed('orderConfirm', queryParameters: <String, String>{
-                        'from': 'buy_now',
-                        'total': p.price.toString(),
-                        'count': '1',
-                        'product_id': p.id,
-                        'product_name': p.name,
-                        'product_price': p.price.toString(),
-                        'product_cover': p.coverUrl,
-                        'product_spec': '',
-                        'quantity': '1',
-                      });
-                    },
-                  );
-                },
-              ),
-            ),
+          // Comments (left side, above bottom row) + Product card (right side)
+          Builder(builder: (ctx) {
+            final hasProduct =
+                state.currentProduct != null || state.products.isNotEmpty;
+            final screenW = MediaQuery.of(context).size.width;
+            final cardW = hasProduct ? screenW / 3 : 0.0;
+            const bottomRowH = 48.0;
+            return Stack(
+              children: [
+                // Comments — left side, same height as product card
+                Positioned(
+                  left: AppDimens.paddingMd,
+                  right: hasProduct
+                      ? cardW + AppDimens.paddingSm
+                      : AppDimens.paddingLg + 56,
+                  bottom: bottomRowH + AppDimens.paddingSm + bottomInset,
+                  height: 180,
+                  child: _CommentList(messages: state.messages),
+                ),
+                // Product card — right side, bottom at bottom-row top
+                if (hasProduct)
+                  Positioned(
+                    right: AppDimens.paddingMd,
+                    bottom: bottomRowH + AppDimens.paddingSm + bottomInset,
+                    width: cardW - AppDimens.paddingSm,
+                    height: 180,
+                    child: FloatingProductCard(
+                      product: state.currentProduct ??
+                          state.products.first,
+                      onTap: () => _showProductDetail(
+                          ctx,
+                          state.currentProduct ??
+                              state.products.first),
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      disableAutoFade: true,
+                      verticalLayout: true,
+                    ),
+                  ),
+              ],
+            );
+          }),
 
           // Coupon banners
           if (state.coupons.isNotEmpty)
             Positioned(
               left: AppDimens.paddingLg,
-              bottom: state.currentProduct != null ? 220 + bottomInset : 160 + bottomInset,
               right: AppDimens.paddingLg,
+              bottom: 200 + bottomInset,
               child: CouponCountdown(
                 coupon: state.coupons.first,
                 onClaim: () {
@@ -442,490 +700,267 @@ final class _LiveRoomPageState extends ConsumerState<LiveRoomPage> {
               ),
             ),
 
-          // Bottom bar
+          // ---- Bottom row: input (left 1/2) + actions (right 1/2) ----
           Positioned(
             bottom: bottomInset,
-            left: 0, right: 0,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(AppDimens.paddingLg, AppDimens.paddingSm, AppDimens.paddingLg, AppDimens.paddingSm),
-              child: SafeArea(
-                top: false,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _showChatInput
-                          ? TextField(
-                              controller: _chatController,
-                              focusNode: _chatFocusNode,
-                              style: const TextStyle(fontSize: 14, color: Colors.white),
-                              decoration: InputDecoration(
-                                hintText: '说点什么...',
-                                hintStyle: const TextStyle(color: AppColors.textHint),
-                                filled: true,
-                                fillColor: Colors.white.withAlpha(30),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: AppDimens.paddingMd, vertical: AppDimens.paddingSm),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(AppDimens.radiusXl),
-                                  borderSide: BorderSide.none,
-                                ),
-                                suffixIcon: IconButton(
-                                  icon: const Icon(Icons.send, color: AppColors.primary, size: 20),
-                                  onPressed: _sendMessage,
-                                ),
+            left: 0,
+            right: 0,
+            child: Container(
+              height: 48,
+              margin: const EdgeInsets.symmetric(horizontal: AppDimens.paddingSm),
+              child: Row(
+                children: [
+                  // Input — left half
+                  Expanded(
+                    flex: 1,
+                    child: _showChatInput
+                        ? TextField(
+                            controller: _chatController,
+                            focusNode: _chatFocusNode,
+                            style: const TextStyle(
+                                fontSize: 13, color: Colors.white),
+                            decoration: InputDecoration(
+                              hintText: '说点什么...',
+                              hintStyle: const TextStyle(
+                                  color: AppColors.textHint, fontSize: 13),
+                              filled: true,
+                              fillColor: Colors.white.withAlpha(25),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 8),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(24),
+                                borderSide: BorderSide.none,
                               ),
-                              onSubmitted: (_) => _sendMessage(),
-                            )
-                          : GestureDetector(
-                              onTap: _toggleChatInput,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: AppDimens.paddingMd, vertical: AppDimens.paddingSm + 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withAlpha(30),
-                                  borderRadius: BorderRadius.circular(AppDimens.radiusXl),
-                                ),
-                                child: const Text('说点什么...', style: TextStyle(fontSize: 14, color: AppColors.textHint)),
+                              suffixIcon: IconButton(
+                                icon: const Icon(Icons.send,
+                                    color: AppColors.primary, size: 18),
+                                onPressed: _sendMessage,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(
+                                    minWidth: 36, minHeight: 36),
                               ),
                             ),
-                    ),
-                    const SizedBox(width: AppDimens.paddingMd),
-                    _BottomAction(icon: Icons.shopping_bag_outlined, label: '商品', onTap: () => _showProductList(context)),
-                    const SizedBox(width: AppDimens.paddingSm),
-                    _BottomAction(icon: Icons.share, label: '分享', onTap: _onShare),
-                    const SizedBox(width: AppDimens.paddingSm),
-                    _BottomAction(icon: Icons.card_giftcard, label: '礼物', onTap: _showGiftPanel),
-                  ],
-                ),
+                            onSubmitted: (_) => _sendMessage(),
+                          )
+                        : GestureDetector(
+                            onTap: _toggleChatInput,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withAlpha(25),
+                                borderRadius: BorderRadius.circular(24),
+                              ),
+                              child: const Text('说点什么...',
+                                  style: TextStyle(
+                                      fontSize: 13,
+                                      color: AppColors.textHint)),
+                            ),
+                          ),
+                  ),
+                  const SizedBox(width: AppDimens.paddingXs),
+                  // Action buttons — right half
+                  _BottomActionBtn(
+                    icon: Icons.shopping_cart_outlined,
+                    onTap: () {
+                      // Enter PIP before navigating to cart.
+                      final room = ref.read(liveProvider).room;
+                      if (_videoController != null &&
+                          _videoReady &&
+                          room != null) {
+                        ref
+                            .read(pipProvider.notifier)
+                            .enterPip(_videoController!, room);
+                      }
+                      AppRouter.router.go('/cart');
+                    },
+                  ),
+                  _BottomActionBtn(
+                    icon: state.isLiked
+                        ? Icons.favorite
+                        : Icons.favorite_border,
+                    iconColor:
+                        state.isLiked ? AppColors.primary : Colors.white70,
+                    label: state.likeCount > 0
+                        ? state.likeCount.toString()
+                        : null,
+                    onTap: () =>
+                        ref.read(liveProvider.notifier).toggleLike(),
+                  ),
+                  _BottomActionBtn(
+                    icon: Icons.card_giftcard,
+                    onTap: _showGiftPanel,
+                  ),
+                  _BottomActionBtn(
+                    icon: Icons.ios_share,
+                    onTap: _onShare,
+                  ),
+                ],
               ),
             ),
           ),
         ],
       ),
-    );
-  }
-
-  void _showProductList(BuildContext context) {
-    final products = ref.read(liveProvider).products;
-
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        height: MediaQuery.of(context).size.height * 0.6,
-        decoration: const BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(AppDimens.radiusXl)),
-        ),
-        child: Column(
-          children: [
-            const SizedBox(height: AppDimens.paddingSm),
-            Center(
-              child: Container(
-                width: 36, height: 4,
-                decoration: BoxDecoration(color: AppColors.textHint, borderRadius: BorderRadius.circular(2)),
-              ),
-            ),
-            const SizedBox(height: AppDimens.paddingMd),
-            const Text('商品列表', style: AppTextStyles.titleMedium),
-            const SizedBox(height: AppDimens.paddingMd),
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: AppDimens.paddingLg),
-                itemCount: products.length,
-                itemBuilder: (context, index) {
-                  final product = products[index];
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: AppDimens.paddingSm),
-                    padding: const EdgeInsets.all(AppDimens.paddingSm),
-                    decoration: BoxDecoration(
-                      color: AppColors.card,
-                      borderRadius: BorderRadius.circular(AppDimens.radiusMd),
-                    ),
-                    child: Row(
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(AppDimens.radiusSm),
-                          child: CachedNetworkImage(
-                            imageUrl: product.coverUrl, width: 64, height: 64, fit: BoxFit.cover,
-                            placeholder: (_, __) => Container(color: AppColors.card),
-                            errorWidget: (_, __, ___) => Container(color: AppColors.card),
-                          ),
-                        ),
-                        const SizedBox(width: AppDimens.paddingMd),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(product.name, style: AppTextStyles.bodyLarge, maxLines: 1, overflow: TextOverflow.ellipsis),
-                              const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  Text('¥${product.price.toStringAsFixed(0)}', style: AppTextStyles.priceSmall),
-                                  if (product.hasDiscount) ...[
-                                    const SizedBox(width: AppDimens.paddingXs),
-                                    Text('¥${product.originalPrice.toStringAsFixed(0)}',
-                                      style: const TextStyle(fontSize: 11, color: AppColors.textHint, decoration: TextDecoration.lineThrough)),
-                                  ],
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: () {
-                            Navigator.of(ctx).pop();
-                            showProductDetailSheet(
-                              context: context,
-                              product: product,
-                              onAddToCart: () {
-                                ref.read(cartProvider.notifier).addToCart(productId: product.id);
-                              },
-                              onBuyNow: () {
-                                final p = product;
-                                context.pushNamed('orderConfirm', queryParameters: <String, String>{
-                                  'from': 'buy_now',
-                                  'total': p.price.toString(),
-                                  'count': '1',
-                                  'product_id': p.id,
-                                  'product_name': p.name,
-                                  'product_price': p.price.toString(),
-                                  'product_cover': p.coverUrl,
-                                  'product_spec': '',
-                                  'quantity': '1',
-                                });
-                              },
-                            );
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: AppDimens.paddingMd, vertical: AppDimens.paddingSm),
-                            decoration: BoxDecoration(
-                              color: AppColors.surface,
-                              borderRadius: BorderRadius.circular(AppDimens.radiusMd),
-                            ),
-                            child: const Text('购买', style: TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w600)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    ),
+  );
   }
 }
 
-final class _ExplainingProductCard extends StatelessWidget {
-  const _ExplainingProductCard({required this.product, this.onTap});
-
-  final ProductModel product;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(AppDimens.paddingSm),
-        decoration: BoxDecoration(
-          color: Colors.black.withAlpha(200),
-          borderRadius: BorderRadius.circular(AppDimens.radiusLg),
-          border: Border.all(color: AppColors.accent.withAlpha(150)),
-        ),
-        child: Row(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(AppDimens.radiusMd),
-              child: CachedNetworkImage(
-                imageUrl: product.coverUrl, width: 56, height: 56, fit: BoxFit.cover,
-                placeholder: (_, __) => Container(color: AppColors.card),
-                errorWidget: (_, __, ___) => Container(color: AppColors.card),
-              ),
-            ),
-            const SizedBox(width: AppDimens.paddingSm),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.auto_awesome, color: AppColors.accent, size: 14),
-                      SizedBox(width: 4),
-                      Text('主播正在讲解', style: TextStyle(fontSize: 11, color: AppColors.accent, fontWeight: FontWeight.w600)),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(product.name, style: AppTextStyles.bodyMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
-                  const SizedBox(height: 2),
-                  Text('¥${product.price.toStringAsFixed(0)}', style: AppTextStyles.priceSmall),
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right, color: Colors.white70),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-final class _BottomAction extends StatelessWidget {
-  const _BottomAction({required this.icon, required this.label, this.onTap});
+/// Compact action button for the bottom row.
+final class _BottomActionBtn extends StatelessWidget {
+  const _BottomActionBtn({
+    required this.icon,
+    this.iconColor,
+    this.label,
+    this.onTap,
+  });
 
   final IconData icon;
-  final String label;
+  final Color? iconColor;
+  final String? label;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        width: 44,
+        height: 48,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 28, color: iconColor ?? Colors.white70),
+            if (label != null) ...[
+              const SizedBox(height: 1),
+              Text(label!, style: const TextStyle(fontSize: 9, color: Colors.white60)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+final class _AuthorInfoSheet extends StatelessWidget {
+  const _AuthorInfoSheet({
+    required this.authorName,
+    required this.authorAvatar,
+    required this.authorId,
+    this.onFollow,
+    this.isFollowing = false,
+  });
+
+  final String authorName;
+  final String authorAvatar;
+  final String authorId;
+  final VoidCallback? onFollow;
+  final bool isFollowing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppDimens.paddingLg),
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppDimens.radiusXl)),
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 40, height: 40,
-            decoration: BoxDecoration(
-              color: Colors.white.withAlpha(30),
-              shape: BoxShape.circle,
+          Center(
+            child: Container(
+              width: 36, height: 4,
+              margin: const EdgeInsets.only(bottom: AppDimens.paddingLg),
+              decoration: BoxDecoration(color: AppColors.textHint, borderRadius: BorderRadius.circular(2)),
             ),
-            child: Icon(icon, color: Colors.white, size: 20),
           ),
-          const SizedBox(height: 2),
-          Text(label, style: const TextStyle(fontSize: 10, color: Colors.white70)),
+          CircleAvatar(
+            radius: 36,
+            backgroundColor: AppColors.card,
+            backgroundImage: authorAvatar.isNotEmpty ? CachedNetworkImageProvider(authorAvatar) : null,
+            child: authorAvatar.isEmpty
+                ? Text(authorName.isNotEmpty ? authorName[0].toUpperCase() : '?',
+                    style: const TextStyle(fontSize: 28, color: Colors.white))
+                : null,
+          ),
+          const SizedBox(height: AppDimens.paddingMd),
+          Text(authorName, style: AppTextStyles.titleLarge),
+          const SizedBox(height: AppDimens.paddingXs),
+          Text('ID: $authorId', style: AppTextStyles.bodySmall),
+          const SizedBox(height: AppDimens.paddingLg),
+          SizedBox(
+            width: 120,
+            child: ElevatedButton(
+              onPressed: onFollow,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isFollowing ? AppColors.card : AppColors.primary,
+                foregroundColor: isFollowing ? AppColors.textSecondary : Colors.white,
+              ),
+              child: Text(isFollowing ? '已关注' : '关注'),
+            ),
+          ),
+          const SizedBox(height: AppDimens.paddingLg),
         ],
       ),
     );
   }
 }
 
-class _FloatingProductCard extends StatefulWidget {
-  final ProductModel product;
-  final VoidCallback? onTap;
-  final Duration delay;
+/// Simple inline comment list widget for live room.
+final class _CommentList extends StatelessWidget {
+  const _CommentList({required this.messages});
 
-  const _FloatingProductCard({
-    required this.product,
-    this.onTap,
-    this.delay = const Duration(milliseconds: 500),
-  });
-
-  @override
-  State<_FloatingProductCard> createState() => _FloatingProductCardState();
-}
-
-class _FloatingProductCardState extends State<_FloatingProductCard>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _opacityAnimation;
-  late final Animation<Offset> _slideAnimation;
-  bool _isVisible = false;
-
-  @override
-  void initState() {
-    super.initState();
-
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 300),
-      vsync: this,
-    );
-
-    _opacityAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeIn),
-    );
-
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0.3, 0.0), // 从右侧滑入
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
-
-    // 延时显示
-    _startDelayTimer();
-  }
-
-  void _startDelayTimer() {
-    Future.delayed(widget.delay, () {
-      if (mounted) {
-        setState(() {
-          _isVisible = true;
-        });
-        _controller.forward();
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+  final List<LiveMessage> messages;
 
   @override
   Widget build(BuildContext context) {
-    // 获取屏幕宽度的三分之一
-    final screenWidth = MediaQuery.of(context).size.width;
-    final cardWidth = screenWidth / 3;
+    if (messages.isEmpty) return const SizedBox.shrink();
 
-    // 如果还没到显示时间，返回空容器
-    if (!_isVisible) {
-      return const SizedBox.shrink();
-    }
+    // Show only the last 10 messages in the comment list
+    final displayMessages = messages.length > 10
+        ? messages.sublist(messages.length - 10)
+        : messages;
 
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        return Opacity(
-          opacity: _opacityAnimation.value,
-          child: SlideTransition(
-            position: _slideAnimation,
-            child: child,
-          ),
-        );
-      },
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: Container(
-          width: cardWidth,
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.15),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 商品图片
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: AspectRatio(
-                  aspectRatio: 1, // 正方形图片
-                  child: Image.network(
-                    widget.product.coverUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        color: Colors.grey[200],
-                        child: const Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.image_not_supported_outlined,
-                              color: Colors.grey,
-                              size: 32,
-                            ),
-                            SizedBox(height: 4),
-                            Text(
-                              '暂无图片',
-                              style: TextStyle(
-                                color: Colors.grey,
-                                fontSize: 10,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return Container(
-                        color: Colors.grey[100],
-                        child: const Center(
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.grey,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
+    return ListView.builder(
+      padding: EdgeInsets.zero,
+      itemCount: displayMessages.length,
+      itemBuilder: (context, index) {
+        final msg = displayMessages[index];
+        final isSystem = msg.isSystem;
 
-              const SizedBox(height: 8),
-
-              // 商品名称
-              Text(
-                widget.product.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF333333),
-                  height: 1.3,
-                ),
-              ),
-
-              const SizedBox(height: 4),
-
-              // 价格行
-              Row(
-                children: [
-                  // 当前价格
-                  Text(
-                    '¥${widget.product.price}',
+        return Padding(
+          padding: const EdgeInsets.only(bottom: AppDimens.paddingXs),
+          child: RichText(
+            text: TextSpan(
+              children: [
+                if (!isSystem) ...[
+                  TextSpan(
+                    text: '${msg.userName} ',
                     style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFFFF4759),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.accent,
+                      shadows: [Shadow(color: Colors.black38, blurRadius: 1, offset: Offset(1, 1))],
                     ),
                   ),
-
-                  // 原价（如果有优惠）
-                  if (widget.product.originalPrice > widget.product.price) ...[
-                    const SizedBox(width: 4),
-                    Flexible(
-                      child: Text(
-                        '¥${widget.product.originalPrice}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: Color(0xFF999999),
-                          decoration: TextDecoration.lineThrough,
-                        ),
-                      ),
-                    ),
-                  ],
                 ],
-              ),
-
-              // 可选：销量信息
-              if (widget.product.sales > 0) ...[
-                const SizedBox(height: 4),
-                Text(
-                  '已售${_formatSales(widget.product.sales)}',
-                  style: const TextStyle(
-                    fontSize: 10,
-                    color: Color(0xFF999999),
+                TextSpan(
+                  text: msg.content,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isSystem ? AppColors.warning : Colors.white,
+                    fontWeight: isSystem ? FontWeight.w600 : FontWeight.w400,
+                    shadows: const [Shadow(color: Colors.black38, blurRadius: 1, offset: Offset(1, 1))],
                   ),
                 ),
               ],
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
-  }
-
-  // 格式化销量数字
-  String _formatSales(int sales) {
-    if (sales >= 10000) {
-      return '${(sales / 10000).toStringAsFixed(1)}万';
-    } else if (sales >= 1000) {
-      return '${(sales / 1000).toStringAsFixed(1)}k';
-    }
-    return sales.toString();
   }
 }

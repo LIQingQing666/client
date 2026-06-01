@@ -81,6 +81,23 @@ final class StorageService {
     await box.delete(_historyKey);
   }
 
+  // ---- Favorites ----
+
+  static const _favoritesKey = 'favorites';
+
+  List<Map<String, dynamic>> getFavorites() {
+    final raw = box.get(_favoritesKey);
+    if (raw is String) {
+      final list = jsonDecode(raw) as List<dynamic>;
+      return list.cast<Map<String, dynamic>>();
+    }
+    return [];
+  }
+
+  Future<void> saveFavorites(List<Map<String, dynamic>> items) async {
+    await box.put(_favoritesKey, jsonEncode(items));
+  }
+
   // ---- Generic ----
 
   Future<void> setString(String key, String value) => box.put(key, value);

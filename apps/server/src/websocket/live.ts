@@ -3,6 +3,18 @@ import { Server as SocketIOServer } from 'socket.io';
 import { getDb } from '../db/schema.js';
 import crypto from 'node:crypto';
 
+// Module-level io storage for access from routes
+let _io: SocketIOServer | null = null;
+
+export function setIO(io: SocketIOServer): void {
+  _io = io;
+}
+
+export function getIO(): SocketIOServer {
+  if (!_io) throw new Error('Socket.IO not initialized');
+  return _io;
+}
+
 export function createWebSocketServer(httpServer: HttpServer): SocketIOServer {
   const io = new SocketIOServer(httpServer, {
     cors: {
@@ -41,15 +53,23 @@ export function createWebSocketServer(httpServer: HttpServer): SocketIOServer {
       // Broadcast updated online count
       io.to(room).emit('online_count', { count: state.onlineCount });
 
-      // Send mock danmaku welcome
-      setTimeout(() => {
-        socket.emit('danmaku', {
-          id: crypto.randomUUID(),
-          user_name: '系统消息',
-          content: '欢迎进入直播间！',
-          type: 'system',
-        });
-      }, 500);
+      // Send pre-set history comments (3+ required by spec)
+      const historyComments = [
+        { user_name: '小明数码', content: '这款真的超好用，我已经回购三次了！', delay: 300 },
+        { user_name: '小红穿搭', content: '主播今天讲解的好详细啊，学到了', delay: 600 },
+        { user_name: '阿杰户外', content: '已下单，期待收货！', delay: 900 },
+        { user_name: '系统消息', content: '欢迎进入直播间！', delay: 1200, type: 'system' },
+      ];
+      historyComments.forEach((c) => {
+        setTimeout(() => {
+          socket.emit('danmaku', {
+            id: crypto.randomUUID(),
+            user_name: c.user_name,
+            content: c.content,
+            type: (c as Record<string, unknown>).type ?? 'user',
+          });
+        }, c.delay);
+      });
     });
 
     socket.on('leave', (data: { room?: string }) => {

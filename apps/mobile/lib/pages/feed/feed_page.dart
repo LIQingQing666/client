@@ -9,13 +9,13 @@ import '../../models/product_model.dart';
 import '../../models/video_model.dart';
 import '../../provider/cart_provider.dart';
 import '../../provider/feed_provider.dart';
+import '../../provider/favorite_provider.dart';
 import '../../provider/follow_provider.dart';
 import '../../provider/service_providers.dart';
 import '../../utils/toast.dart';
 import '../../widgets/product_detail_sheet.dart';
 import '../../widgets/video_comments_sheet.dart';
 import '../../widgets/video_player_widget.dart';
-import '../../widgets/product_floating_card.dart';
 
 final class FeedPage extends ConsumerStatefulWidget {
   const FeedPage({super.key, this.initialVideoId});
@@ -30,40 +30,7 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
   late final PageController _pageController = PageController();
   final ValueNotifier<int> _seekTrigger = ValueNotifier<int>(0);
   String? _pendingJumpVideoId;
-  ProductModel? _currentProduct;
-  bool _isProductCardVisible = false;
-  bool _isInitialLoad = true;
-
-  //load product information and set product_card
-  Future<void> _loadCurrentVideoProduct(VideoModel video) async {
-    // 重置状态
-    if (mounted) {
-      setState(() {
-        _currentProduct = null;
-        _isProductCardVisible = false;
-      });
-    }
-
-    try {
-      // 通过 videoApi 获取视频详情，其中包含商品列表
-      final videoApi = ref.read(videoApiProvider);
-      final detail = await videoApi.getVideoDetail(video.id);
-
-      if (!mounted) return;
-
-      // detail.products 是 List<Map<String, dynamic>>
-      final products = detail.products;
-      if (products.isNotEmpty) {
-        setState(() {
-          _currentProduct = ProductModel.fromJson(products.first);
-          _isProductCardVisible = true;
-        });
-      }
-    } catch (e) {
-      debugPrint('Failed to load product for video ${video.id}: $e');
-      // 静默处理，不影响视频播放
-    }
-  }
+  final Map<String, ProductModel?> _productCache = {};
 
   @override
   void initState() {
@@ -71,14 +38,6 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
     if (widget.initialVideoId != null) {
       _pendingJumpVideoId = widget.initialVideoId;
     }
-
-    // 初始加载第一个视频的商品
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final feedState = ref.read(feedProvider);
-      if (feedState.videos.isNotEmpty) {
-        _loadCurrentVideoProduct(feedState.videos.first);
-      }
-    });
   }
 
   @override
@@ -86,6 +45,59 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
     _seekTrigger.dispose();
     _pageController.dispose();
     super.dispose();
+  }
+
+  Future<ProductModel?> _fetchProductForVideo(VideoModel video) async {
+    if (_productCache.containsKey(video.id)) return _productCache[video.id];
+    try {
+      final videoApi = ref.read(videoApiProvider);
+      final detail = await videoApi.getVideoDetail(video.id);
+      final products = detail.products;
+      if (products.isEmpty) {
+        _productCache[video.id] = null;
+        return null;
+      }
+      final product = ProductModel.fromJson(products.first);
+      _productCache[video.id] = product;
+      return product;
+    } on Exception {
+      _productCache[video.id] = null;
+      return null;
+    }
+  }
+
+  void _showCachedProduct(ProductModel product) {
+    showProductDetailSheet(
+      context: context,
+      product: product,
+      onAddToCart: () {
+        ref.read(cartProvider.notifier).addToCart(productId: product.id);
+      },
+      onBuyNow: () {
+        ref.read(cartProvider.notifier).addToCart(productId: product.id);
+        context.pushNamed('orderConfirm', queryParameters: <String, String>{
+          'total': product.price.toString(),
+          'count': '1',
+        });
+      },
+      onSeekToTime: (product.highlightTime > 0 || product.segments.isNotEmpty)
+          ? (int seekTime) {
+              _seekTrigger.value = seekTime;
+              Navigator.of(context).pop();
+            }
+          : null,
+      onFavorite: () {
+        ref.read(favoriteProvider.notifier).toggleProductFavorite(
+          id: product.id,
+          name: product.name,
+          coverUrl: product.coverUrl,
+          price: product.price,
+          videoId: product.videoId,
+          highlightTime: product.highlightTime,
+        );
+      },
+      isFavorited: ref.read(favoriteProvider).isFavorited(product.id),
+    );
   }
 
   Future<void> _onProductTap(VideoModel video) async {
@@ -117,12 +129,23 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
             'quantity': '1',
           });
         },
-        onSeekToTime: product.highlightTime > 0
-            ? () {
-                _seekTrigger.value = product.highlightTime;
+        onSeekToTime: (product.highlightTime > 0 || product.segments.isNotEmpty)
+            ? (int seekTime) {
+                _seekTrigger.value = seekTime;
                 Navigator.of(context).pop();
               }
             : null,
+        onFavorite: () {
+          ref.read(favoriteProvider.notifier).toggleProductFavorite(
+            id: product.id,
+            name: product.name,
+            coverUrl: product.coverUrl,
+            price: product.price,
+            videoId: product.videoId,
+            highlightTime: product.highlightTime,
+          );
+        },
+        isFavorited: ref.read(favoriteProvider).isFavorited(product.id),
         onRefreshAi: () async {
           final api = ProductApi(client: ref.read(dioClientProvider));
           try {
@@ -137,6 +160,7 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
               category: product.category, tags: product.tags,
               specs: product.specs, videoId: product.videoId,
               aiSalesPoint: newPoint, highlightTime: product.highlightTime,
+              segments: product.segments,
             );
             if (!mounted) return;
             await showProductDetailSheet(
@@ -158,12 +182,23 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
                   'quantity': '1',
                 });
               },
-              onSeekToTime: updated.highlightTime > 0
-                  ? () {
-                      _seekTrigger.value = updated.highlightTime;
+              onSeekToTime: (updated.highlightTime > 0 || updated.segments.isNotEmpty)
+                  ? (int seekTime) {
+                      _seekTrigger.value = seekTime;
                       Navigator.of(context).pop();
                     }
                   : null,
+              onFavorite: () {
+                ref.read(favoriteProvider.notifier).toggleProductFavorite(
+                  id: product.id,
+                  name: product.name,
+                  coverUrl: product.coverUrl,
+                  price: product.price,
+                  videoId: product.videoId,
+                  highlightTime: product.highlightTime,
+                );
+              },
+              isFavorited: ref.read(favoriteProvider).isFavorited(product.id),
             );
           } on Exception {
             showToast('AI 卖点生成失败，请重试');
@@ -187,6 +222,65 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
     Share.share('${video.title}\n\n一起来看精彩视频！');
   }
 
+  void _onAuthorTap(VideoModel video) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(AppDimens.paddingLg),
+        decoration: const BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(AppDimens.radiusXl)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Center(
+              child: Container(
+                width: 36, height: 4,
+                margin: const EdgeInsets.only(bottom: AppDimens.paddingLg),
+                decoration: BoxDecoration(color: AppColors.textHint, borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            CircleAvatar(
+              radius: 36,
+              backgroundColor: AppColors.card,
+              child: Text(
+                video.authorName.isNotEmpty ? video.authorName[0].toUpperCase() : '?',
+                style: const TextStyle(fontSize: 28, color: Colors.white),
+              ),
+            ),
+            const SizedBox(height: AppDimens.paddingMd),
+            Text(video.authorName, style: AppTextStyles.titleLarge),
+            const SizedBox(height: AppDimens.paddingXs),
+            Text('ID: ${video.authorId}', style: AppTextStyles.bodySmall),
+            const SizedBox(height: AppDimens.paddingLg),
+            SizedBox(
+              width: 120,
+              child: ElevatedButton(
+                onPressed: () {
+                  _onFollowTap(video.authorId);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: ref.read(followProvider).followingIds.contains(video.authorId)
+                      ? AppColors.card
+                      : AppColors.primary,
+                  foregroundColor: ref.read(followProvider).followingIds.contains(video.authorId)
+                      ? AppColors.textSecondary
+                      : Colors.white,
+                ),
+                child: Text(
+                  ref.read(followProvider).followingIds.contains(video.authorId) ? '已关注' : '关注',
+                ),
+              ),
+            ),
+            const SizedBox(height: AppDimens.paddingLg),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final feedState = ref.watch(feedProvider);
@@ -194,6 +288,8 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
     final pool = ref.read(playerPoolProvider);
     final followState = ref.watch(followProvider);
     final tabIndex = ref.watch(currentTabIndexProvider);
+    final isMuted = ref.watch(muteStateProvider);
+    final favoriteState = ref.watch(favoriteProvider);
     final isTabActive = tabIndex == 0;
     final currentTab = feedState.tab;
 
@@ -248,13 +344,6 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
       );
     }
 
-    if (_isInitialLoad && feedState.videos.isNotEmpty) {
-      _isInitialLoad = false;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _loadCurrentVideoProduct(feedState.videos[feedState.currentIndex]);
-      });
-    }
-
     return Scaffold(
       body: Stack(
         children: [
@@ -266,7 +355,6 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
               if (index < feedState.videos.length) {
                 notifier.setCurrentIndex(index);
               }
-              _loadCurrentVideoProduct(feedState.videos[index]);
             },
             itemBuilder: (context, index) {
               if (index >= feedState.videos.length) {
@@ -279,22 +367,49 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
               final isActive = isTabActive && index == feedState.currentIndex;
               final isFollowing = followState.followingIds.contains(video.authorId);
 
+              final cachedProduct = _productCache[video.id];
+
+              // Fetch product data when this video becomes active.
+              if (isActive && !_productCache.containsKey(video.id)) {
+                _fetchProductForVideo(video).then((product) {
+                  if (mounted) setState(() {});
+                });
+              }
+
               return VideoPlayerWidget(
                 key: ValueKey(video.id),
                 video: video,
                 pool: pool,
                 isActive: isActive,
+                isMuted: isMuted,
+                product: cachedProduct,
                 onLike: () => notifier.toggleLike(video.id),
-                onProductTap: () => _onProductTap(video),
+                onProductTap: () {
+                  if (cachedProduct != null) {
+                    _showCachedProduct(cachedProduct);
+                  } else {
+                    _onProductTap(video);
+                  }
+                },
                 onShare: () => _onShare(video),
                 onMessage: () => showVideoCommentsSheet(
                   context: context,
                   videoId: video.id,
                 ),
                 onFollow: () => _onFollowTap(video.authorId),
+                onMuteToggle: () => ref.read(muteStateProvider.notifier).state = !isMuted,
+                onAuthorTap: () => _onAuthorTap(video),
+                onFavorite: () {
+                  ref.read(favoriteProvider.notifier).toggleVideoFavorite(
+                    id: video.id,
+                    title: video.title,
+                    coverUrl: video.coverUrl,
+                    authorName: video.authorName,
+                  );
+                },
+                isFavorited: favoriteState.isFavorited(video.id),
                 isFollowing: isFollowing,
                 seekTrigger: _seekTrigger,
-                productCard: _buildProductCard(),
               );
             },
           ),
@@ -332,26 +447,6 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
           ),
         ],
       ),
-    );
-  }
-
-  // ✅ 确保方法有正确的缩进和括号匹配
-  Widget? _buildProductCard() {
-    if (!_isProductCardVisible || _currentProduct == null) {
-      return null;
-    }
-
-    final feedState = ref.read(feedProvider);
-    if (feedState.videos.isEmpty) return null;
-
-    final currentVideo = feedState.videos[feedState.currentIndex];
-
-    return ProductFloatingCard(
-      product: _currentProduct!,
-      delay: const Duration(milliseconds: 500),
-      onTap: () {
-        _onProductTap(currentVideo);
-      },
     );
   }
 }

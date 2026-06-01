@@ -52,6 +52,11 @@ final class _PaymentResultPageState extends ConsumerState<PaymentResultPage> {
       _isPaying = false;
       _payStatus = success ? 'paid' : 'failed';
     });
+
+    // Refresh the order list so the order page shows latest status.
+    if (success) {
+      ref.read(orderProvider.notifier).loadOrders();
+    }
   }
 
   @override

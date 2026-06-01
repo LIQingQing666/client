@@ -2,13 +2,16 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/app_router.dart';
 import 'core/app_theme.dart';
+import 'provider/pip_provider.dart';
 import 'provider/service_providers.dart';
 import 'utils/toast.dart';
+import 'widgets/floating_video_player.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,6 +19,10 @@ Future<void> main() async {
   await Hive.initFlutter();
   final hiveBox = await Hive.openBox<dynamic>('app_storage');
   final prefs = await SharedPreferences.getInstance();
+
+  // Image cache: limit memory usage to ~50 MB.
+  PaintingBinding.instance.imageCache.maximumSize = 200;
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 50 << 20;
 
   unawaited(
     SystemChrome.setPreferredOrientations([
@@ -41,11 +48,13 @@ Future<void> main() async {
   );
 }
 
-final class CommerceApp extends StatelessWidget {
+final class CommerceApp extends ConsumerWidget {
   const CommerceApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pipState = ref.watch(pipProvider);
+
     return MaterialApp.router(
       title: 'LiveCommerce',
       debugShowCheckedModeBanner: false,
@@ -53,6 +62,40 @@ final class CommerceApp extends StatelessWidget {
       darkTheme: AppTheme.darkTheme,
       scaffoldMessengerKey: scaffoldMessengerKey,
       routerConfig: AppRouter.router,
+      builder: (context, child) {
+        return Stack(
+          children: [
+            if (child != null) child,
+            // PIP floating window overlay
+            if (pipState.isActive &&
+                pipState.videoController != null &&
+                pipState.roomInfo != null)
+              FloatingVideoPlayer(
+                controller: pipState.videoController!,
+                roomInfo: pipState.roomInfo!,
+                onTap: () {
+                  final roomId = pipState.pipRoomId;
+                  // Dispose the old PIP controller — the new live room page
+                  // will create a fresh one.
+                  ref.read(pipProvider.notifier).closePip();
+                  if (roomId != null) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      final router = AppRouter.router;
+                      while (router.canPop()) {
+                        router.pop();
+                      }
+                      router.pushNamed('liveRoom',
+                          pathParameters: {'roomId': roomId});
+                    });
+                  }
+                },
+                onClose: () {
+                  ref.read(pipProvider.notifier).closePip();
+                },
+              ),
+          ],
+        );
+      },
     );
   }
 }

@@ -40,6 +40,7 @@ final class LiveRoomInfo {
     required this.authorAvatar,
     required this.onlineCount,
     required this.tags,
+    this.heatCount = 0,
   });
 
   factory LiveRoomInfo.fromJson(Map<String, dynamic> json) {
@@ -53,6 +54,7 @@ final class LiveRoomInfo {
       authorName: (json['author_name'] as String?) ?? '',
       authorAvatar: (json['author_avatar'] as String?) ?? '',
       onlineCount: (json['online_count'] as num?)?.toInt() ?? 0,
+      heatCount: (json['heat_count'] as num?)?.toInt() ?? 0,
       tags: rawTags.cast<String>(),
     );
   }
@@ -65,6 +67,7 @@ final class LiveRoomInfo {
   final String authorName;
   final String authorAvatar;
   final int onlineCount;
+  final int heatCount;
   final List<String> tags;
 
   String get onlineCountText {
@@ -72,5 +75,12 @@ final class LiveRoomInfo {
       return '${(onlineCount / 10000).toStringAsFixed(1)}万';
     }
     return onlineCount.toString();
+  }
+
+  String get heatCountText {
+    if (heatCount >= 10000) {
+      return '${(heatCount / 10000).toStringAsFixed(1)}万热度';
+    }
+    return '$heatCount热度';
   }
 }

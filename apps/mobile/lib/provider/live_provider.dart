@@ -17,6 +17,9 @@ final class LiveState {
     this.room,
     this.messages = const [],
     this.onlineCount = 0,
+    this.likeCount = 0,
+    this.isLiked = false,
+    this.heatCount = 0,
     this.currentProduct,
     this.products = const [],
     this.coupons = const [],
@@ -28,6 +31,9 @@ final class LiveState {
   final LiveRoomInfo? room;
   final List<LiveMessage> messages;
   final int onlineCount;
+  final int likeCount;
+  final bool isLiked;
+  final int heatCount;
   final ProductModel? currentProduct;
   final List<ProductModel> products;
   final List<LiveCoupon> coupons;
@@ -42,10 +48,20 @@ final class LiveState {
     return onlineCount.toString();
   }
 
+  String get heatCountText {
+    if (heatCount >= 10000) {
+      return '${(heatCount / 10000).toStringAsFixed(1)}万热度';
+    }
+    return '$heatCount热度';
+  }
+
   LiveState copyWith({
     LiveRoomInfo? room,
     List<LiveMessage>? messages,
     int? onlineCount,
+    int? likeCount,
+    bool? isLiked,
+    int? heatCount,
     ProductModel? currentProduct,
     List<ProductModel>? products,
     List<LiveCoupon>? coupons,
@@ -57,6 +73,9 @@ final class LiveState {
       room: room ?? this.room,
       messages: messages ?? this.messages,
       onlineCount: onlineCount ?? this.onlineCount,
+      likeCount: likeCount ?? this.likeCount,
+      isLiked: isLiked ?? this.isLiked,
+      heatCount: heatCount ?? this.heatCount,
       currentProduct: currentProduct,
       products: products ?? this.products,
       coupons: coupons ?? this.coupons,
@@ -87,6 +106,7 @@ final class LiveNotifier extends StateNotifier<LiveState> {
         room: detail.room,
         products: detail.products,
         coupons: detail.coupons,
+        heatCount: detail.room.heatCount,
         isLoading: false,
       );
     }
@@ -123,9 +143,24 @@ final class LiveNotifier extends StateNotifier<LiveState> {
             currentProduct: ProductModel.fromJson(rawProduct),
           );
         }
+      case 'new_comment':
+        // Live room user comment broadcast.
+        _addMessage(LiveMessage.fromJson(event));
+      case 'stock_update':
+        // Product stock change pushed by server.
+        final productId = event['product_id'] as String?;
+        final newStock = (event['stock'] as num?)?.toInt();
+        if (productId != null && newStock != null) {
+          final updated = state.products.map((p) {
+            if (p.id != productId) return p;
+            return p.copyWith(stock: newStock);
+          }).toList();
+          state = state.copyWith(products: updated);
+        }
       case 'room_state':
         final count = (event['online_count'] as num?)?.toInt() ?? 0;
-        state = state.copyWith(onlineCount: count);
+        final heat = (event['heat_count'] as num?)?.toInt();
+        state = state.copyWith(onlineCount: count, heatCount: heat);
       case 'room_products':
         final rawList = (event['list'] as List<dynamic>?) ?? [];
         final products = rawList
@@ -161,6 +196,36 @@ final class LiveNotifier extends StateNotifier<LiveState> {
     );
   }
 
+  /// Adds a local gift notification as a system message (scrolls in comment area).
+  void sendGift(String userName, String giftIcon, String giftName) {
+    _addMessage(
+      LiveMessage(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        userName: userName,
+        content: '送出了 $giftIcon $giftName',
+        type: 'system',
+        timestamp: DateTime.now().toIso8601String(),
+      ),
+    );
+  }
+
+  Future<void> switchRoom(String newRoomId) async {
+    if (state.room?.id == newRoomId) return;
+    _eventSub?.cancel();
+    if (state.room != null) {
+      wsService.leaveRoom(state.room!.id);
+    }
+    await enterRoom(newRoomId);
+  }
+
+  void toggleLike() {
+    final newLiked = !state.isLiked;
+    state = state.copyWith(
+      isLiked: newLiked,
+      likeCount: state.likeCount + (newLiked ? 1 : -1),
+    );
+  }
+
   void leaveRoom() {
     if (state.room != null) {
       wsService.leaveRoom(state.room!.id);
@@ -174,6 +239,8 @@ final class LiveNotifier extends StateNotifier<LiveState> {
     super.dispose();
   }
 }
+
+final roomListProvider = StateProvider<List<LiveRoomInfo>>((ref) => []);
 
 final liveProvider = StateNotifierProvider<LiveNotifier, LiveState>((ref) {
   final api = ref.watch(liveApiProvider);

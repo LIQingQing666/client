@@ -1,5 +1,8 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { initDb } from './db/schema.js';
 import './db/seed.js';
 import { videoRoutes } from './routes/videos.js';
@@ -43,11 +46,22 @@ async function main() {
   // Health check
   app.get('/api/health', async () => ({ code: 0, message: 'ok', timestamp: new Date().toISOString() }));
 
+  // Serve test client page via HTTP (avoids file:// CORS issues)
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const testClientPath = path.join(__dirname, '..', 'public', 'test-client.html');
+  app.get('/test-client', async (_req, res) => {
+    const html = fs.readFileSync(testClientPath, 'utf-8');
+    return res.type('text/html; charset=utf-8').send(html);
+  });
+
   // Ensure Fastify creates its HTTP server before we attach WebSocket
   await app.ready();
 
   // Attach WebSocket to Fastify's HTTP server
   const io = createWebSocketServer(app.server);
+
+  // Make io accessible to routes via module-level store
+  import('./websocket/live.js').then((m) => m.setIO(io));
 
   // Start
   await app.listen({ port: PORT, host: HOST });

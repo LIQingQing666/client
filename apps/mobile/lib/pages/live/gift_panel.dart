@@ -22,9 +22,10 @@ final List<Gift> defaultGifts = const [
 ];
 
 final class GiftPanel extends StatelessWidget {
-  const GiftPanel({super.key, required this.onSelect});
+  const GiftPanel({super.key, required this.onSelect, required this.onClose});
 
   final void Function(Gift gift) onSelect;
+  final VoidCallback onClose;
 
   @override
   Widget build(BuildContext context) {
@@ -63,10 +64,7 @@ final class GiftPanel extends StatelessWidget {
             itemBuilder: (context, index) {
               final gift = defaultGifts[index];
               return GestureDetector(
-                onTap: () {
-                  onSelect(gift);
-                  Navigator.of(context).pop();
-                },
+                onTap: () => onSelect(gift),
                 child: Container(
                   decoration: BoxDecoration(
                     color: AppColors.card,
@@ -89,7 +87,7 @@ final class GiftPanel extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: onClose,
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.textHint,
                 side: const BorderSide(color: AppColors.divider),
