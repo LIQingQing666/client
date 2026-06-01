@@ -98,6 +98,9 @@ final class LiveNotifier extends StateNotifier<LiveState> {
   static const int _maxMessages = 200;
 
   Future<void> enterRoom(String roomId) async {
+    // Cancel any previous subscription before re-entering.
+    _eventSub?.cancel();
+    _eventSub = null;
     state = state.copyWith(isLoading: true);
 
     try {
