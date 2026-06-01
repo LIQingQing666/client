@@ -97,7 +97,6 @@ final class CartNotifier extends StateNotifier<CartState> {
         quantity: quantity,
       );
       await loadCart();
-      showToast('已加入购物车');
     }
     on Exception {
       showToast('添加商品失败，请重试');

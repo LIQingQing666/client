@@ -16,6 +16,9 @@ import '../../utils/toast.dart';
 /// 支持两种数据来源：
 /// - from=cart（默认）：从购物车已选商品结算，参数 total/count 仅用于展示
 /// - from=buy_now：从视频/直播立即购买，参数传入商品快照
+///
+/// 优惠券计算链条：
+///   商品总额 → 商品券优惠 → 券后小计 → 满减优惠 → 实付金额
 final class OrderConfirmPage extends ConsumerStatefulWidget {
   const OrderConfirmPage({
     super.key,
@@ -28,6 +31,12 @@ final class OrderConfirmPage extends ConsumerStatefulWidget {
     this.productCover,
     this.spec,
     this.quantity = 1,
+    this.couponDiscount = 0,
+    this.couponId,
+    this.productCouponDiscount = 0,
+    this.fullReductionDiscount = 0,
+    this.payAmount,
+    this.couponIds = '',
   });
 
   final double total;
@@ -39,6 +48,12 @@ final class OrderConfirmPage extends ConsumerStatefulWidget {
   final String? productCover;
   final String? spec;
   final int quantity;
+  final double couponDiscount;
+  final String? couponId;
+  final double productCouponDiscount;
+  final double fullReductionDiscount;
+  final double? payAmount;
+  final String couponIds;
 
   @override
   ConsumerState<OrderConfirmPage> createState() => _OrderConfirmPageState();
@@ -211,18 +226,36 @@ final class _OrderConfirmPageState extends ConsumerState<OrderConfirmPage> {
                         label: '商品总额',
                         value: '¥${widget.total.toStringAsFixed(2)}',
                       ),
-                      const SizedBox(height: AppDimens.paddingSm),
-                      const _PriceRow(
-                        label: '优惠',
-                        value: '-¥0.00',
-                        valueColor: AppColors.success,
-                      ),
+                      if (widget.productCouponDiscount > 0) ...[
+                        const SizedBox(height: AppDimens.paddingSm),
+                        _PriceRow(
+                          label: '商品券优惠',
+                          value: '-¥${widget.productCouponDiscount.toStringAsFixed(2)}',
+                          valueColor: AppColors.success,
+                        ),
+                      ],
+                      if (widget.fullReductionDiscount > 0) ...[
+                        const SizedBox(height: AppDimens.paddingSm),
+                        _PriceRow(
+                          label: '满减优惠',
+                          value: '-¥${widget.fullReductionDiscount.toStringAsFixed(2)}',
+                          valueColor: AppColors.success,
+                        ),
+                      ],
+                      if (widget.couponDiscount > 0 && widget.productCouponDiscount == 0 && widget.fullReductionDiscount == 0) ...[
+                        const SizedBox(height: AppDimens.paddingSm),
+                        _PriceRow(
+                          label: '优惠',
+                          value: '-¥${widget.couponDiscount.toStringAsFixed(2)}',
+                          valueColor: AppColors.success,
+                        ),
+                      ],
                       const SizedBox(height: AppDimens.paddingSm),
                       const Divider(color: AppColors.divider),
                       const SizedBox(height: AppDimens.paddingSm),
                       _PriceRow(
                         label: '实付金额',
-                        value: '¥${widget.total.toStringAsFixed(2)}',
+                        value: '¥${(widget.payAmount ?? (widget.total - widget.couponDiscount)).toStringAsFixed(2)}',
                         valueStyle: AppTextStyles.price,
                       ),
                     ],
@@ -270,7 +303,7 @@ final class _OrderConfirmPageState extends ConsumerState<OrderConfirmPage> {
                             ),
                           )
                         : Text(
-                            '提交订单 ¥${widget.total.toStringAsFixed(0)}',
+                            '提交订单 ¥${(widget.payAmount ?? (widget.total - widget.couponDiscount)).toStringAsFixed(0)}',
                             style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,

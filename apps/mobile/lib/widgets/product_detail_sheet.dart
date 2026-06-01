@@ -1,11 +1,14 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/app_constants.dart';
+import '../models/coupon_model.dart';
 import '../models/product_model.dart';
 import '../utils/responsive_helper.dart';
+import 'coupon_picker_sheet.dart';
 
-final class ProductDetailSheet extends StatefulWidget {
+final class ProductDetailSheet extends ConsumerStatefulWidget {
   const ProductDetailSheet({
     super.key,
     required this.product,
@@ -18,21 +21,22 @@ final class ProductDetailSheet extends StatefulWidget {
   });
 
   final ProductModel product;
-  final void Function(String spec, int quantity)? onAddToCart;
-  final void Function(String spec, int quantity)? onBuyNow;
+  final void Function(String spec, int quantity, String? couponId)? onAddToCart;
+  final void Function(String spec, int quantity, String? couponId)? onBuyNow;
   final VoidCallback? onRefreshAi;
   final void Function(int seekTime)? onSeekToTime;
   final VoidCallback? onFavorite;
   final bool isFavorited;
 
   @override
-  State<ProductDetailSheet> createState() => _ProductDetailSheetState();
+  ConsumerState<ProductDetailSheet> createState() => _ProductDetailSheetState();
 }
 
-final class _ProductDetailSheetState extends State<ProductDetailSheet> {
+final class _ProductDetailSheetState extends ConsumerState<ProductDetailSheet> {
   final _scrollController = ScrollController();
   final Map<String, String> _selectedSpecs = {};
   int _quantity = 1;
+  bool _showCartAdded = false;
 
   @override
   void initState() {
@@ -48,6 +52,39 @@ final class _ProductDetailSheetState extends State<ProductDetailSheet> {
   void dispose() {
     _scrollController.dispose();
     super.dispose();
+  }
+
+  CouponModel? _selectedCoupon;
+
+  /// 获取券后价
+  double get _couponPrice {
+    if (_selectedCoupon != null) {
+      return _selectedCoupon!.getPriceAfterDiscount(widget.product.price);
+    }
+    return widget.product.price;
+  }
+
+  void _onAddToCart(String spec, int quantity) {
+    widget.onAddToCart?.call(spec, quantity, _selectedCoupon?.id);
+    if (!mounted) return;
+    setState(() => _showCartAdded = true);
+    Future.delayed(const Duration(milliseconds: 1500), () {
+      if (mounted) setState(() => _showCartAdded = false);
+    });
+  }
+
+  Future<void> _showCouponPicker() async {
+    final result = await showCouponPickerSheet(
+      context: context,
+      type: CouponType.product,
+      productId: widget.product.id,
+      productName: widget.product.name,
+      productPrice: widget.product.price,
+      currentSelected: _selectedCoupon,
+    );
+    if (result != _selectedCoupon) {
+      setState(() => _selectedCoupon = result);
+    }
   }
 
   @override
@@ -111,7 +148,7 @@ final class _ProductDetailSheetState extends State<ProductDetailSheet> {
                 ),
               ),
 
-              // Price and name
+              // Price and name + coupon entry
               Padding(
                 padding: const EdgeInsets.all(AppDimens.paddingLg),
                 child: Column(
@@ -124,31 +161,21 @@ final class _ProductDetailSheetState extends State<ProductDetailSheet> {
                           '¥${product.price.toStringAsFixed(0)}',
                           style: AppTextStyles.price,
                         ),
-                        if (product.hasDiscount) ...[
-                          const SizedBox(width: AppDimens.paddingSm),
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 2),
-                            child: Text(
-                              '¥${product.originalPrice.toStringAsFixed(0)}',
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: AppColors.textHint,
-                                decoration: TextDecoration.lineThrough,
-                              ),
-                            ),
-                          ),
+                        if (_selectedCoupon != null) ...[
                           const SizedBox(width: AppDimens.paddingSm),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: AppDimens.paddingXs,
-                              vertical: 1,
+                              horizontal: 6,
+                              vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: AppColors.surface,
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFFFF6B6B), Color(0xFFFF4757)],
+                              ),
                               borderRadius: BorderRadius.circular(AppDimens.radiusSm),
                             ),
                             child: Text(
-                              product.discountPercent,
+                              '券后¥${_couponPrice.toStringAsFixed(0)}',
                               style: const TextStyle(
                                 fontSize: 11,
                                 color: Colors.white,
@@ -157,6 +184,39 @@ final class _ProductDetailSheetState extends State<ProductDetailSheet> {
                             ),
                           ),
                         ],
+                        const Spacer(),
+                        // 优惠券入口按钮
+                        GestureDetector(
+                          onTap: _showCouponPicker,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: AppColors.primary, width: 0.5),
+                              borderRadius: BorderRadius.circular(AppDimens.radiusSm),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.local_offer,
+                                    size: 14, color: AppColors.primary),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _selectedCoupon != null
+                                      ? '已省¥${_selectedCoupon!.discountAmount.toStringAsFixed(0)}'
+                                      : '领券',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: AppDimens.paddingSm),
@@ -413,18 +473,48 @@ final class _ProductDetailSheetState extends State<ProductDetailSheet> {
             ],
           ),
         ),
+        // Floating "✓ 已加入购物车" toast
+        if (_showCartAdded)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 70 + bottomInset,  // just above the action bar
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF4CAF50),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.white, size: 20),
+                    SizedBox(width: 8),
+                    Text('已加入购物车',
+                        style: TextStyle(fontSize: 14, color: Colors.white, fontWeight: FontWeight.w500)),
+                  ],
+                ),
+              ),
+            ),
+          ),
         _BottomActionBar(
           onAddToCart: widget.onAddToCart != null
-              ? () => widget.onAddToCart!(_selectedSpecs.values.join(','), _quantity)
+              ? () => _onAddToCart(_selectedSpecs.values.join(','), _quantity)
               : null,
           onBuyNow: (product.stock > 0 && widget.onBuyNow != null)
-              ? () => widget.onBuyNow!(_selectedSpecs.values.join(','), _quantity)
+              ? () => widget.onBuyNow!(
+                    _selectedSpecs.values.join(','),
+                    _quantity,
+                    _selectedCoupon?.id,
+                  )
               : null,
           onFavorite: widget.onFavorite,
           isFavorited: widget.isFavorited,
-          price: product.price,
+          price: _couponPrice,
           bottomInset: bottomInset,
           stock: product.stock,
+          selectedCoupon: _selectedCoupon,
         ),
       ],
     ),
@@ -640,6 +730,7 @@ final class _BottomActionBar extends StatelessWidget {
     required this.price,
     required this.bottomInset,
     this.stock = 0,
+    this.selectedCoupon,
   });
 
   final VoidCallback? onAddToCart;
@@ -649,6 +740,7 @@ final class _BottomActionBar extends StatelessWidget {
   final double price;
   final double bottomInset;
   final int stock;
+  final CouponModel? selectedCoupon;
 
   @override
   Widget build(BuildContext context) {
@@ -680,19 +772,23 @@ final class _BottomActionBar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: AppDimens.paddingSm),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(soldOut ? '已售罄' : '价格',
-                  style: TextStyle(
-                      fontSize: 11,
-                      color: soldOut ? AppColors.error : AppColors.textHint)),
-              Text(
-                '¥${price.toStringAsFixed(0)}',
-                style: AppTextStyles.price,
-              ),
-            ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(soldOut ? '已售罄' : '价格',
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: soldOut ? AppColors.error : AppColors.textHint)),
+                Text(
+                  selectedCoupon != null
+                      ? '¥${price.toStringAsFixed(0)}(券后)'
+                      : '¥${price.toStringAsFixed(0)}',
+                  style: AppTextStyles.price,
+                ),
+              ],
+            ),
           ),
           const SizedBox(width: AppDimens.paddingMd),
           if (onAddToCart != null && !soldOut) ...[
@@ -772,8 +868,8 @@ final class _QtyButton extends StatelessWidget {
 Future<void> showProductDetailSheet({
   required BuildContext context,
   required ProductModel product,
-  required void Function(String spec, int quantity) onAddToCart,
-  required void Function(String spec, int quantity) onBuyNow,
+  required void Function(String spec, int quantity, String? couponId) onAddToCart,
+  required void Function(String spec, int quantity, String? couponId) onBuyNow,
   VoidCallback? onRefreshAi,
   void Function(int seekTime)? onSeekToTime,
   VoidCallback? onFavorite,
@@ -785,8 +881,8 @@ Future<void> showProductDetailSheet({
     backgroundColor: Colors.transparent,
     builder: (ctx) => ProductDetailSheet(
       product: product,
-      onAddToCart: (spec, quantity) => onAddToCart(spec, quantity),
-      onBuyNow: (spec, quantity) => onBuyNow(spec, quantity),
+      onAddToCart: (spec, quantity, couponId) => onAddToCart(spec, quantity, couponId),
+      onBuyNow: (spec, quantity, couponId) => onBuyNow(spec, quantity, couponId),
       onRefreshAi: onRefreshAi,
       onSeekToTime: onSeekToTime,
       onFavorite: onFavorite,

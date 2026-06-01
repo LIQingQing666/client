@@ -165,6 +165,14 @@ final class MinePage extends ConsumerWidget {
               _buildDivider(),
               _buildMenuItem(
                 context,
+                icon: Icons.local_offer_outlined,
+                title: '优惠券',
+                subtitle: '查看我的优惠券',
+                onTap: () => context.pushNamed('couponList'),
+              ),
+              _buildDivider(),
+              _buildMenuItem(
+                context,
                 icon: Icons.receipt_long_outlined,
                 title: '我的订单',
                 subtitle: '查看全部订单',
