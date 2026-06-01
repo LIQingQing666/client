@@ -57,6 +57,7 @@ final class CartNotifier extends StateNotifier<CartState> {
 
   final CartApi api;
   final StorageService storage;
+  bool _isAddingToCart = false;
 
   String get _userId => storage.userId ?? 'u1';
 
@@ -101,6 +102,12 @@ final class CartNotifier extends StateNotifier<CartState> {
               'spec': item.spec,
               'quantity': item.quantity,
               'selected': item.selected,
+              'product_specs': item.productSpecs
+                  .map((s) => <String, dynamic>{
+                        'name': s.name,
+                        'values': s.values,
+                      })
+                  .toList(),
             })
         .toList();
     storage.saveCartItems(jsonList);
@@ -111,6 +118,8 @@ final class CartNotifier extends StateNotifier<CartState> {
     String spec = '',
     int quantity = 1,
   }) async {
+    if (_isAddingToCart) return;
+    _isAddingToCart = true;
     try {
       await api.addToCart(
         userId: _userId,
@@ -123,6 +132,8 @@ final class CartNotifier extends StateNotifier<CartState> {
     }
     on Exception {
       showToast('添加商品失败，请重试');
+    } finally {
+      _isAddingToCart = false;
     }
   }
 

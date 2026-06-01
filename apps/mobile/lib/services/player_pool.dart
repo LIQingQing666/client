@@ -19,16 +19,12 @@ final class PlayerPool {
       return existing.controller;
     }
 
-    // Deduplicate by URL: if the same URL is already loaded under a different
-    // id, reuse the controller.
+    // Deduplicate by URL: if the same URL is already loaded, reuse the
+    // controller and alias the entry instead of duplicating it.
     for (final entry in _players.entries) {
       if (entry.value.url == url) {
         entry.value.refCount++;
-        _players[videoId] = _PooledPlayer(
-          controller: entry.value.controller,
-          refCount: entry.value.refCount,
-          url: url,
-        );
+        _players[videoId] = entry.value; // alias — same refCount, same controller
         return entry.value.controller;
       }
     }

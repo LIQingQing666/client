@@ -67,8 +67,8 @@ final class OrderNotifier extends StateNotifier<OrderState> {
 
   String get _userId => storage.userId ?? 'u1';
 
-  Future<void> loadOrders({String? status}) async {
-    if (state.isLoading) {
+  Future<void> loadOrders({String? status, bool force = false}) async {
+    if (state.isLoading && !force) {
       return;
     }
     state = state.copyWith(

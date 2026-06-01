@@ -200,6 +200,12 @@ final class FeedNotifier extends StateNotifier<FeedState> {
       }
     }
   }
+
+  @override
+  void dispose() {
+    preloadManager.dispose();
+    super.dispose();
+  }
 }
 
 final muteStateProvider = StateProvider<bool>((ref) => false);

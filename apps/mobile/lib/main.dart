@@ -75,19 +75,14 @@ final class CommerceApp extends ConsumerWidget {
                 roomInfo: pipState.roomInfo!,
                 onTap: () {
                   final roomId = pipState.pipRoomId;
-                  // Dispose the old PIP controller — the new live room page
-                  // will create a fresh one.
-                  ref.read(pipProvider.notifier).closePip();
-                  if (roomId != null) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      final router = AppRouter.router;
-                      while (router.canPop()) {
-                        router.pop();
-                      }
-                      router.pushNamed('liveRoom',
-                          pathParameters: {'roomId': roomId});
-                    });
-                  }
+                  if (roomId == null) return;
+                  // Navigate first so the new page builds before we dispose
+                  // the old controller (avoids enterRoom state conflicts).
+                  AppRouter.router.pushNamed('liveRoom',
+                      pathParameters: {'roomId': roomId});
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    ref.read(pipProvider.notifier).closePip();
+                  });
                 },
                 onClose: () {
                   ref.read(pipProvider.notifier).closePip();

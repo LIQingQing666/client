@@ -325,6 +325,7 @@ final class _CartBottomBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).padding.bottom;
+    final isPriceInvalid = total <= 0 && selectedCount > 0;
 
     return Container(
       padding: EdgeInsets.only(
@@ -343,16 +344,21 @@ final class _CartBottomBar extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('合计', style: AppTextStyles.bodyMedium),
+              Text(isPriceInvalid ? '价格异常' : '合计',
+                  style: TextStyle(
+                      fontSize: 13,
+                      color: isPriceInvalid ? AppColors.error : AppColors.textSecondary)),
               Text(
-                '¥${total.toStringAsFixed(0)}',
-                style: AppTextStyles.price,
+                isPriceInvalid ? '不可结算' : '¥${total.toStringAsFixed(0)}',
+                style: isPriceInvalid
+                    ? const TextStyle(fontSize: 14, color: AppColors.error)
+                    : AppTextStyles.price,
               ),
             ],
           ),
           const Spacer(),
           ElevatedButton(
-            onPressed: onCheckout,
+            onPressed: isPriceInvalid ? null : onCheckout,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,

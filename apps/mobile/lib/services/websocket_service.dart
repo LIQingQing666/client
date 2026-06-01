@@ -97,6 +97,8 @@ final class WebSocketService {
       debugPrint('[WS] max reconnect attempts reached');
       return;
     }
+    // Prevent duplicate timers from multiple disconnect events.
+    if (_reconnectTimer?.isActive == true) return;
 
     _setState(WebSocketState.reconnecting);
     _reconnectTimer?.cancel();

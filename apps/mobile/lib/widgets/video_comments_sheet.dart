@@ -40,6 +40,7 @@ final class _VideoCommentsSheetState extends State<_VideoCommentsSheet> {
   int _page = 1;
   String? _error;
   static const int _pageSize = 10;
+  static const int _maxCachedComments = 100;
 
   @override
   void initState() {
@@ -134,7 +135,13 @@ final class _VideoCommentsSheetState extends State<_VideoCommentsSheet> {
       if (mounted) {
         setState(() {
           _comments.addAll(list);
-          _hasMore = hasMore;
+          // Cap cached comments to prevent memory blow-up.
+          if (_comments.length > _maxCachedComments) {
+            _comments.removeRange(0, _comments.length - _maxCachedComments);
+            _hasMore = true; // still more on server
+          } else {
+            _hasMore = hasMore;
+          }
           _page = nextPage;
           _isLoadingMore = false;
         });
