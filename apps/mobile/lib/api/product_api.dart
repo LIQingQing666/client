@@ -1,4 +1,5 @@
 import '../models/product_model.dart';
+import 'package:dio/dio.dart';
 import 'dio_client.dart';
 
 final class ProductApi {
@@ -65,6 +66,99 @@ final class ProductApi {
     final data = response.data!['data'] as Map<String, dynamic>;
     return data['sales_point'] as String;
   }
+
+  /// 创建商品
+  Future<ProductModel> createProduct(
+      ProductCreateRequest request,
+      ) async {
+    final response = await client.post<Map<String, dynamic>>(
+      '/products',
+      data: request.toJson(),
+    );
+    final data = response.data!['data'] as Map<String, dynamic>;
+    return ProductModel.fromJson(data);
+  }
+
+  /// 更新商品
+  Future<ProductModel> updateProduct({
+    required String id,
+    required ProductCreateRequest request,
+  }) async {
+    final response = await client.put<Map<String, dynamic>>(
+      '/products/$id',
+      data: request.toJson(),
+    );
+    final data = response.data!['data'] as Map<String, dynamic>;
+    return ProductModel.fromJson(data);
+  }
+
+  /// 删除商品
+  Future<void> deleteProduct(String id) async {
+    await client.delete('/products/$id');
+  }
+
+  /// 获取品类列表
+  Future<List<String>> getCategories() async {
+    final response = await client.get<Map<String, dynamic>>(
+      '/categories',
+    );
+    final data = response.data!['data'] as Map<String, dynamic>;
+    final list = (data['list'] as List<dynamic>)
+        .map((e) => e as String)
+        .toList();
+    return list;
+  }
+
+  /// 生成 AI 卖点（用于新建商品时生成）
+  Future<String> generateAiSalesPoint({
+    required String name,
+    required String description,
+    required String category,
+    List<String>? tags,
+  }) async {
+    final response = await client.post<Map<String, dynamic>>(
+      '/products/ai-sales-point',
+      data: {
+        'name': name,
+        'description': description,
+        'category': category,
+        if (tags != null) 'tags': tags,
+      },
+    );
+    final data = response.data!['data'] as Map<String, dynamic>;
+    return data['sales_point'] as String;
+  }
+
+  /// 上传商品图片
+  Future<String> uploadImage(String filePath) async {
+    final formData = FormData.fromMap({
+      'file': await MultipartFile.fromFile(filePath),
+    });
+    final response = await client.post<Map<String, dynamic>>(
+      '/products/upload-image',
+      data: formData,
+    );
+    final data = response.data!['data'] as Map<String, dynamic>;
+    return data['url'] as String;
+  }
+
+  /// 批量上传图片
+  Future<List<String>> uploadImages(List<String> filePaths) async {
+    final formData = FormData();
+    for (final path in filePaths) {
+      formData.files.add(
+        MapEntry('files', await MultipartFile.fromFile(path)),
+      );
+    }
+    final response = await client.post<Map<String, dynamic>>(
+      '/products/upload-images',
+      data: formData,
+    );
+    final data = response.data!['data'] as Map<String, dynamic>;
+    return (data['urls'] as List<dynamic>)
+        .map((e) => e as String)
+        .toList();
+  }
 }
 
 final class ProductListResponse {
@@ -121,4 +215,62 @@ final class ProductDetailResponse {
   final List<Map<String, dynamic>> comments;
   final List<ProductModel> relatedProducts;
   final Map<String, dynamic>? video;
+}
+
+/// 创建商品的请求体
+final class ProductCreateRequest {
+  const ProductCreateRequest({
+    required this.name,
+    required this.description,
+    required this.price,
+    required this.originalPrice,
+    required this.stock,
+    required this.category,
+    this.tags = const [],
+    required this.coverUrl,
+    required this.images,
+    this.aiSalesPoint,
+  });
+
+  final String name;
+  final String description;
+  final double price;
+  final double originalPrice;
+  final int stock;
+  final String category;
+  final List<String> tags;
+  final String coverUrl;
+  final List<String> images;
+  final String? aiSalesPoint;
+
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'description': description,
+    'price': price,
+    'original_price': originalPrice,
+    'stock': stock,
+    'category': category,
+    'tags': tags,
+    'cover_url': coverUrl,
+    'images': images,
+    if (aiSalesPoint != null) 'ai_sales_point': aiSalesPoint,
+  };
+}
+
+/// 品类信息
+final class CategoryInfo {
+  const CategoryInfo({
+    required this.name,
+    required this.productCount,
+  });
+
+  factory CategoryInfo.fromJson(Map<String, dynamic> json) {
+    return CategoryInfo(
+      name: json['name'] as String,
+      productCount: (json['product_count'] as num).toInt(),
+    );
+  }
+
+  final String name;
+  final int productCount;
 }

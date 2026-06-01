@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/dio_client.dart';
 import '../api/recharge_api.dart';
+import '../api/upload_api.dart';
 import '../services/storage_service.dart';
 import '../services/websocket_service.dart';
 
@@ -59,6 +60,11 @@ final webSocketServiceProvider = Provider<WebSocketService>((ref) {
 final rechargeApiProvider = Provider<RechargeApi>((ref) {
   final client = ref.watch(dioClientProvider);
   return RechargeApi(client: client);
+});
+
+final uploadApiProvider = Provider<UploadApi>((ref) {
+  final client = ref.watch(dioClientProvider);
+  return UploadApi(client: client);
 });
 
 final currentTabIndexProvider = StateProvider<int>((ref) => 0);

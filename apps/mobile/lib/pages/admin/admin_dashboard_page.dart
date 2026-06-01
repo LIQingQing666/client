@@ -10,6 +10,7 @@ import '../../models/product_model.dart';
 import '../../models/video_model.dart';
 import '../../provider/admin_provider.dart';
 import '../../provider/service_providers.dart';
+import 'add_product_page.dart';
 
 final class AdminDashboardPage extends ConsumerStatefulWidget {
   const AdminDashboardPage({super.key});
@@ -193,6 +194,68 @@ final class _ProductManagementTabState
 
   @override
   Widget build(BuildContext context) {
+    return Column(
+      children: [
+        // 顶部操作栏
+        _buildActionBar(context),
+        // 商品列表
+        Expanded(
+          child: _buildProductList(context),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionBar(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppDimens.paddingLg,
+        AppDimens.paddingMd,
+        AppDimens.paddingLg,
+        AppDimens.paddingSm,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              '共 ${_products.length} 件商品',
+              style: AppTextStyles.bodySmall,
+            ),
+          ),
+          ElevatedButton.icon(
+            onPressed: () async {
+              final result = await Navigator.push<bool>(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const AddProductPage(),
+                ),
+              );
+              if (result == true) {
+                _loadProducts(); // 刷新列表
+              }
+            },
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('添加商品'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppDimens.paddingMd,
+                vertical: AppDimens.paddingSm,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppDimens.radiusSm),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+
+  @override
+  Widget _buildProductList(BuildContext context) {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator(color: AppColors.primary));
     }
@@ -206,6 +269,20 @@ final class _ProductManagementTabState
             Text(_error!, style: AppTextStyles.bodyMedium),
             const SizedBox(height: AppDimens.paddingMd),
             ElevatedButton(onPressed: _loadProducts, child: const Text('重试')),
+          ],
+        ),
+      );
+    }
+    if (_products.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.inventory_2, size: 64, color: AppColors.textHint.withValues(alpha: 0.5)),
+            const SizedBox(height: AppDimens.paddingMd),
+            const Text('暂无商品', style: AppTextStyles.bodyMedium),
+            const SizedBox(height: AppDimens.paddingSm),
+            const Text('点击上方按钮添加第一个商品', style: AppTextStyles.bodySmall),
           ],
         ),
       );
