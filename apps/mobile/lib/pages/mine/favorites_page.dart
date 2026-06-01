@@ -111,13 +111,24 @@ final class _FavoritesPageState extends ConsumerState<FavoritesPage>
             showProductDetailSheet(
               context: context,
               product: product,
-              onAddToCart: () {
-                ref.read(cartProvider.notifier).addToCart(productId: product.id);
+              onAddToCart: (spec, quantity) {
+                ref.read(cartProvider.notifier).addToCart(
+                  productId: product.id,
+                  spec: spec,
+                  quantity: quantity,
+                );
               },
-              onBuyNow: () {
-                ref.read(cartProvider.notifier).addToCart(productId: product.id);
+              onBuyNow: (spec, quantity) {
                 context.pushNamed('orderConfirm', queryParameters: <String, String>{
-                  'total': product.price.toString(), 'count': '1',
+                  'from': 'buy_now',
+                  'total': (product.price * quantity).toString(),
+                  'count': quantity.toString(),
+                  'product_id': product.id,
+                  'product_name': product.name,
+                  'product_price': product.price.toString(),
+                  'product_cover': product.coverUrl,
+                  'product_spec': spec,
+                  'quantity': quantity.toString(),
                 });
               },
               onFavorite: () {

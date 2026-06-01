@@ -303,11 +303,14 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
     showProductDetailSheet(
       context: context,
       product: product,
-      onAddToCart: () {
-        ref.read(cartProvider.notifier).addToCart(productId: product.id);
+      onAddToCart: (spec, quantity) {
+        ref.read(cartProvider.notifier).addToCart(
+          productId: product.id,
+          spec: spec,
+          quantity: quantity,
+        );
       },
-      onBuyNow: () {
-        ref.read(cartProvider.notifier).addToCart(productId: product.id);
+      onBuyNow: (spec, quantity) {
         // Dismiss the product detail bottom sheet first.
         Navigator.of(context).pop();
         // Enter PIP mode before navigating away so the live stream keeps playing.
@@ -316,7 +319,15 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
         }
         // Use the global router — context from inside a bottom sheet is stale after pop.
         AppRouter.router.pushNamed('orderConfirm', queryParameters: <String, String>{
-          'total': product.price.toString(), 'count': '1',
+          'from': 'buy_now',
+          'total': (product.price * quantity).toString(),
+          'count': quantity.toString(),
+          'product_id': product.id,
+          'product_name': product.name,
+          'product_price': product.price.toString(),
+          'product_cover': product.coverUrl,
+          'product_spec': spec,
+          'quantity': quantity.toString(),
         });
       },
       onFavorite: () {

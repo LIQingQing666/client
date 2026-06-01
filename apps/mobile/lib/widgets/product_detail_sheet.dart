@@ -18,8 +18,8 @@ final class ProductDetailSheet extends StatefulWidget {
   });
 
   final ProductModel product;
-  final VoidCallback? onAddToCart;
-  final VoidCallback? onBuyNow;
+  final void Function(String spec, int quantity)? onAddToCart;
+  final void Function(String spec, int quantity)? onBuyNow;
   final VoidCallback? onRefreshAi;
   final void Function(int seekTime)? onSeekToTime;
   final VoidCallback? onFavorite;
@@ -414,8 +414,12 @@ final class _ProductDetailSheetState extends State<ProductDetailSheet> {
           ),
         ),
         _BottomActionBar(
-          onAddToCart: widget.onAddToCart,
-          onBuyNow: product.stock > 0 ? widget.onBuyNow : null,
+          onAddToCart: widget.onAddToCart != null
+              ? () => widget.onAddToCart!(_selectedSpecs.values.join(','), _quantity)
+              : null,
+          onBuyNow: (product.stock > 0 && widget.onBuyNow != null)
+              ? () => widget.onBuyNow!(_selectedSpecs.values.join(','), _quantity)
+              : null,
           onFavorite: widget.onFavorite,
           isFavorited: widget.isFavorited,
           price: product.price,
@@ -768,8 +772,8 @@ final class _QtyButton extends StatelessWidget {
 Future<void> showProductDetailSheet({
   required BuildContext context,
   required ProductModel product,
-  required VoidCallback onAddToCart,
-  required VoidCallback onBuyNow,
+  required void Function(String spec, int quantity) onAddToCart,
+  required void Function(String spec, int quantity) onBuyNow,
   VoidCallback? onRefreshAi,
   void Function(int seekTime)? onSeekToTime,
   VoidCallback? onFavorite,
@@ -781,8 +785,8 @@ Future<void> showProductDetailSheet({
     backgroundColor: Colors.transparent,
     builder: (ctx) => ProductDetailSheet(
       product: product,
-      onAddToCart: onAddToCart,
-      onBuyNow: onBuyNow,
+      onAddToCart: (spec, quantity) => onAddToCart(spec, quantity),
+      onBuyNow: (spec, quantity) => onBuyNow(spec, quantity),
       onRefreshAi: onRefreshAi,
       onSeekToTime: onSeekToTime,
       onFavorite: onFavorite,
