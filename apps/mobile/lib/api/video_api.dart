@@ -91,6 +91,18 @@ final class VideoApi {
     return VideoModel.fromJson(data);
   }
 
+  Future<VideoModel> updateVideo({
+    required String id,
+    required VideoCreateRequest request,
+  }) async {
+    final response = await client.put<Map<String, dynamic>>(
+      '/videos/$id',
+      data: request.toJson(),
+    );
+    final data = response.data!['data'] as Map<String, dynamic>;
+    return VideoModel.fromJson(data);
+  }
+
   Future<void> updateVideoStatus(String id, String status) async {
     await client.patch(
       '/videos/$id',
@@ -103,6 +115,10 @@ final class VideoApi {
   Future<void> deactivateVideo(String id) => updateVideoStatus(id, 'inactive');
 
   Future<void> reactivateVideo(String id) => updateVideoStatus(id, 'published');
+
+  Future<void> deleteVideo(String id) async {
+    await client.delete('/videos/$id');
+  }
 }
 
 final class VideoListResponse {
