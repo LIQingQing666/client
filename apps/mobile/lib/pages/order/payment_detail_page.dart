@@ -535,6 +535,9 @@ final class _PaymentDetailPageState extends ConsumerState<PaymentDetailPage> {
                             onPressed: _isPaying ? null : _doPay,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.primary,
+                              foregroundColor: Colors.white,
+                              disabledBackgroundColor: AppColors.primary.withOpacity(0.5),
+                              disabledForegroundColor: Colors.white.withOpacity(0.7),
                               shape: RoundedRectangleBorder(
                                 borderRadius:
                                     BorderRadius.circular(AppDimens.radiusMd),
@@ -556,6 +559,7 @@ final class _PaymentDetailPageState extends ConsumerState<PaymentDetailPage> {
                                     style: const TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.w600,
+                                      color: Colors.white,
                                     ),
                                   ),
                           ),

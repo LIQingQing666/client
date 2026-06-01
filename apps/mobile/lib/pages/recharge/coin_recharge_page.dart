@@ -775,6 +775,9 @@ final class _CoinRechargePageState extends ConsumerState<CoinRechargePage>
             onPressed: canPay ? _doRecharge : null,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: AppColors.primary.withOpacity(0.5),
+              disabledForegroundColor: Colors.white.withOpacity(0.7),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(AppDimens.radiusMd),
               ),
@@ -794,6 +797,7 @@ final class _CoinRechargePageState extends ConsumerState<CoinRechargePage>
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
+                      color: Colors.white,
                     ),
                   ),
           ),
