@@ -112,6 +112,7 @@ final class _FavoritesPageState extends ConsumerState<FavoritesPage>
               context: context,
               product: product,
               onAddToCart: (spec, quantity) {
+                Navigator.of(context).pop();
                 ref.read(cartProvider.notifier).addToCart(
                   productId: product.id,
                   spec: spec,

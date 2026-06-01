@@ -33,6 +33,7 @@ final class _ProductDetailSheetState extends State<ProductDetailSheet> {
   final _scrollController = ScrollController();
   final Map<String, String> _selectedSpecs = {};
   int _quantity = 1;
+  bool _showCartAdded = false;
 
   @override
   void initState() {
@@ -48,6 +49,15 @@ final class _ProductDetailSheetState extends State<ProductDetailSheet> {
   void dispose() {
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _onAddToCart(String spec, int quantity) {
+    widget.onAddToCart?.call(spec, quantity);
+    if (!mounted) return;
+    setState(() => _showCartAdded = true);
+    Future.delayed(const Duration(milliseconds: 1500), () {
+      if (mounted) setState(() => _showCartAdded = false);
+    });
   }
 
   @override
@@ -413,9 +423,34 @@ final class _ProductDetailSheetState extends State<ProductDetailSheet> {
             ],
           ),
         ),
+        // Floating "✓ 已加入购物车" toast
+        if (_showCartAdded)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 70 + bottomInset,  // just above the action bar
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF4CAF50),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.white, size: 20),
+                    SizedBox(width: 8),
+                    Text('已加入购物车',
+                        style: TextStyle(fontSize: 14, color: Colors.white, fontWeight: FontWeight.w500)),
+                  ],
+                ),
+              ),
+            ),
+          ),
         _BottomActionBar(
           onAddToCart: widget.onAddToCart != null
-              ? () => widget.onAddToCart!(_selectedSpecs.values.join(','), _quantity)
+              ? () => _onAddToCart(_selectedSpecs.values.join(','), _quantity)
               : null,
           onBuyNow: (product.stock > 0 && widget.onBuyNow != null)
               ? () => widget.onBuyNow!(_selectedSpecs.values.join(','), _quantity)
