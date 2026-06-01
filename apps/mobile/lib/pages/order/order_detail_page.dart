@@ -194,12 +194,13 @@ final class _OrderDetailPageState extends ConsumerState<OrderDetailPage> {
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(AppDimens.radiusMd),
                             ),
                           ),
                           child: const Text('去支付',
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white)),
                         ),
                       ),
                   ],

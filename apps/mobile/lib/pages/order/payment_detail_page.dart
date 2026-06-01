@@ -206,11 +206,12 @@ final class _PaymentDetailPageState extends ConsumerState<PaymentDetailPage> {
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(AppDimens.radiusMd),
               ),
             ),
-            child: const Text('去充值'),
+            child: const Text('去充值', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),

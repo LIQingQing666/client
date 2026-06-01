@@ -152,8 +152,11 @@ final class _OrderCard extends ConsumerWidget {
                 onConfirmSuccess();
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-            child: const Text('确认收到'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('确认收到', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
