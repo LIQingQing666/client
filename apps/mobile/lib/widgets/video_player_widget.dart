@@ -296,7 +296,7 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
             isFollowing: widget.isFollowing,
           ),
 
-          // Right action bar
+          // Right action bar (mute, like, comment, share, favorite)
           _VideoActionBar(
             video: widget.video,
             onLike: widget.onLike,
@@ -311,7 +311,7 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
           // Floating product card (TikTok-style overlay)
           if (widget.product != null)
             FloatingProductCard(
-              product: widget.product,
+              product: widget.product!,
               onTap: widget.onProductTap ?? () {},
               disableAutoFade: true,
             ),

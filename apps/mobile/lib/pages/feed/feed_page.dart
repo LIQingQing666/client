@@ -70,14 +70,24 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
     showProductDetailSheet(
       context: context,
       product: product,
-      onAddToCart: () {
-        ref.read(cartProvider.notifier).addToCart(productId: product.id);
+      onAddToCart: (spec, quantity, couponId) {
+        ref.read(cartProvider.notifier).addToCart(
+          productId: product.id,
+          spec: spec,
+          quantity: quantity,
+        );
       },
-      onBuyNow: () {
-        ref.read(cartProvider.notifier).addToCart(productId: product.id);
+      onBuyNow: (spec, quantity, couponId) {
         context.pushNamed('orderConfirm', queryParameters: <String, String>{
-          'total': product.price.toString(),
-          'count': '1',
+          'from': 'buy_now',
+          'total': (product.price * quantity).toString(),
+          'count': quantity.toString(),
+          'product_id': product.id,
+          'product_name': product.name,
+          'product_price': product.price.toString(),
+          'product_cover': product.coverUrl,
+          'product_spec': spec,
+          'quantity': quantity.toString(),
         });
       },
       onSeekToTime: (product.highlightTime > 0 || product.segments.isNotEmpty)
@@ -113,14 +123,24 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
       await showProductDetailSheet(
         context: context,
         product: product,
-        onAddToCart: () {
-          ref.read(cartProvider.notifier).addToCart(productId: product.id);
+        onAddToCart: (spec, quantity, couponId) {
+          ref.read(cartProvider.notifier).addToCart(
+            productId: product.id,
+            spec: spec,
+            quantity: quantity,
+          );
         },
-        onBuyNow: () {
-          ref.read(cartProvider.notifier).addToCart(productId: product.id);
+        onBuyNow: (spec, quantity, couponId) {
           context.pushNamed('orderConfirm', queryParameters: <String, String>{
-            'total': product.price.toString(),
-            'count': '1',
+            'from': 'buy_now',
+            'total': (product.price * quantity).toString(),
+            'count': quantity.toString(),
+            'product_id': product.id,
+            'product_name': product.name,
+            'product_price': product.price.toString(),
+            'product_cover': product.coverUrl,
+            'product_spec': spec,
+            'quantity': quantity.toString(),
           });
         },
         onSeekToTime: (product.highlightTime > 0 || product.segments.isNotEmpty)
@@ -157,16 +177,27 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
               segments: product.segments,
             );
             if (!mounted) return;
-            await showProductDetailSheet(
+      await showProductDetailSheet(
               context: context,
               product: updated,
-              onAddToCart: () {
-                ref.read(cartProvider.notifier).addToCart(productId: product.id);
+              onAddToCart: (spec, quantity, couponId) {
+                ref.read(cartProvider.notifier).addToCart(
+                  productId: product.id,
+                  spec: spec,
+                  quantity: quantity,
+                );
               },
-              onBuyNow: () {
-                ref.read(cartProvider.notifier).addToCart(productId: product.id);
+              onBuyNow: (spec, quantity, couponId) {
                 context.pushNamed('orderConfirm', queryParameters: <String, String>{
-                  'total': product.price.toString(), 'count': '1',
+                  'from': 'buy_now',
+                  'total': (product.price * quantity).toString(),
+                  'count': quantity.toString(),
+                  'product_id': product.id,
+                  'product_name': product.name,
+                  'product_price': product.price.toString(),
+                  'product_cover': product.coverUrl,
+                  'product_spec': spec,
+                  'quantity': quantity.toString(),
                 });
               },
               onSeekToTime: (updated.highlightTime > 0 || updated.segments.isNotEmpty)

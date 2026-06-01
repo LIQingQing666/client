@@ -15,6 +15,7 @@ import '../../provider/follow_provider.dart';
 import '../../provider/live_provider.dart';
 import '../../provider/pip_provider.dart';
 import '../../widgets/coupon_countdown.dart';
+import '../../utils/toast.dart';
 import '../../widgets/danmaku_overlay.dart';
 import '../../widgets/floating_product_card.dart';
 import '../../widgets/product_detail_sheet.dart';
@@ -302,11 +303,14 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
     showProductDetailSheet(
       context: context,
       product: product,
-      onAddToCart: () {
-        ref.read(cartProvider.notifier).addToCart(productId: product.id);
+      onAddToCart: (spec, quantity, couponId) {
+        ref.read(cartProvider.notifier).addToCart(
+          productId: product.id,
+          spec: spec,
+          quantity: quantity,
+        );
       },
-      onBuyNow: () {
-        ref.read(cartProvider.notifier).addToCart(productId: product.id);
+      onBuyNow: (spec, quantity, couponId) {
         // Dismiss the product detail bottom sheet first.
         Navigator.of(context).pop();
         // Enter PIP mode before navigating away so the live stream keeps playing.
@@ -315,7 +319,15 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
         }
         // Use the global router — context from inside a bottom sheet is stale after pop.
         AppRouter.router.pushNamed('orderConfirm', queryParameters: <String, String>{
-          'total': product.price.toString(), 'count': '1',
+          'from': 'buy_now',
+          'total': (product.price * quantity).toString(),
+          'count': quantity.toString(),
+          'product_id': product.id,
+          'product_name': product.name,
+          'product_price': product.price.toString(),
+          'product_cover': product.coverUrl,
+          'product_spec': spec,
+          'quantity': quantity.toString(),
         });
       },
       onFavorite: () {
@@ -639,7 +651,7 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
               ),
             ),
 
-          // Comments (left 2/3) + product card (right 1/3) — above bottom row.
+          // Comments (left side, above bottom row) + Product card (right side)
           Builder(builder: (ctx) {
             final hasProduct =
                 state.currentProduct != null || state.products.isNotEmpty;
@@ -648,7 +660,7 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
             const bottomRowH = 48.0;
             return Stack(
               children: [
-                // Comments — left 2/3, same height as product card
+                // Comments — left side, same height as product card
                 Positioned(
                   left: AppDimens.paddingMd,
                   right: hasProduct
@@ -658,7 +670,7 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
                   height: 180,
                   child: _CommentList(messages: state.messages),
                 ),
-                // Product card — right 1/3, bottom at bottom-row top
+                // Product card — right side, bottom at bottom-row top
                 if (hasProduct)
                   Positioned(
                     right: AppDimens.paddingMd,
@@ -693,9 +705,7 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
               child: CouponCountdown(
                 coupon: state.coupons.first,
                 onClaim: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('优惠券已领取！'), backgroundColor: AppColors.success),
-                  );
+                showToast('优惠券已领取！', type: ToastType.success);
                 },
               ),
             ),
@@ -909,6 +919,7 @@ final class _AuthorInfoSheet extends StatelessWidget {
   }
 }
 
+/// Simple inline comment list widget for live room.
 final class _CommentList extends StatelessWidget {
   const _CommentList({required this.messages});
 

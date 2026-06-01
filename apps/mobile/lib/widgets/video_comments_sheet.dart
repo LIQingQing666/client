@@ -1,30 +1,26 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
-import '../api/dio_client.dart';
 import '../core/app_constants.dart';
 import '../utils/toast.dart';
 
 /// Shows the video comments half-screen bottom sheet.
-/// Pass [dioClient] for authenticated requests; falls back to mock data otherwise.
 Future<void> showVideoCommentsSheet({
   required BuildContext context,
   required String videoId,
-  DioClient? dioClient,
 }) {
   return showModalBottomSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (ctx) => _VideoCommentsSheet(videoId: videoId, dioClient: dioClient),
+    builder: (ctx) => _VideoCommentsSheet(videoId: videoId),
   );
 }
 
 final class _VideoCommentsSheet extends StatefulWidget {
-  const _VideoCommentsSheet({required this.videoId, this.dioClient});
+  const _VideoCommentsSheet({required this.videoId});
 
   final String videoId;
-  final DioClient? dioClient;
 
   @override
   State<_VideoCommentsSheet> createState() => _VideoCommentsSheetState();
@@ -40,7 +36,6 @@ final class _VideoCommentsSheetState extends State<_VideoCommentsSheet> {
   int _page = 1;
   String? _error;
   static const int _pageSize = 10;
-  static const int _maxCachedComments = 100;
 
   @override
   void initState() {
@@ -72,7 +67,7 @@ final class _VideoCommentsSheetState extends State<_VideoCommentsSheet> {
     });
 
     try {
-      final dio = _dio();
+      final dio = Dio();
       final response = await dio.get<Map<String, dynamic>>(
         '${AppConstants.baseUrl}/comments',
         queryParameters: {
@@ -96,19 +91,13 @@ final class _VideoCommentsSheetState extends State<_VideoCommentsSheet> {
         });
       }
     } catch (_) {
-      // API failed — use mock data.
-      _useMockData();
+      if (mounted) {
+        setState(() {
+          _error = '加载失败';
+          _isLoading = false;
+        });
+      }
     }
-  }
-
-  void _useMockData() {
-    if (!mounted) return;
-    setState(() {
-      _comments.clear();
-      _comments.addAll(_mockComments);
-      _hasMore = false;
-      _isLoading = false;
-    });
   }
 
   Future<void> _loadMore() async {
@@ -118,7 +107,7 @@ final class _VideoCommentsSheetState extends State<_VideoCommentsSheet> {
 
     try {
       final nextPage = _page + 1;
-      final dio = _dio();
+      final dio = Dio();
       final response = await dio.get<Map<String, dynamic>>(
         '${AppConstants.baseUrl}/comments',
         queryParameters: {
@@ -135,13 +124,7 @@ final class _VideoCommentsSheetState extends State<_VideoCommentsSheet> {
       if (mounted) {
         setState(() {
           _comments.addAll(list);
-          // Cap cached comments to prevent memory blow-up.
-          if (_comments.length > _maxCachedComments) {
-            _comments.removeRange(0, _comments.length - _maxCachedComments);
-            _hasMore = true; // still more on server
-          } else {
-            _hasMore = hasMore;
-          }
+          _hasMore = hasMore;
           _page = nextPage;
           _isLoadingMore = false;
         });
@@ -152,18 +135,6 @@ final class _VideoCommentsSheetState extends State<_VideoCommentsSheet> {
         showRetryToast('加载更多失败', onRetry: _loadMore);
       }
     }
-  }
-
-  Dio _dio() {
-    if (widget.dioClient != null) {
-      // DioClient doesn't expose its internal Dio, so create one with auth.
-      // For now use a plain Dio — the auth token is added via interceptor on
-      // the server side or we rely on the public endpoint.
-    }
-    return Dio(BaseOptions(
-      connectTimeout: AppConstants.connectTimeout,
-      receiveTimeout: AppConstants.receiveTimeout,
-    ));
   }
 
   Future<void> _postComment() async {
@@ -179,11 +150,12 @@ final class _VideoCommentsSheetState extends State<_VideoCommentsSheet> {
       'like_count': 0,
     };
 
+    // Optimistic add — insert at the top.
     setState(() => _comments.insert(0, optimistic));
     _commentController.clear();
 
     try {
-      final dio = _dio();
+      final dio = Dio();
       await dio.post<Map<String, dynamic>>(
         '${AppConstants.baseUrl}/comments',
         data: {
@@ -192,50 +164,18 @@ final class _VideoCommentsSheetState extends State<_VideoCommentsSheet> {
           'content': content,
         },
       );
+      // Replace optimistic entry with server response (falls back to optimistic).
       showToast('评论发布成功');
     } catch (_) {
-      // Keep optimistic entry.
-      showToast('评论已发布（离线模式）');
+      // Rollback: remove the optimistic comment.
+      if (mounted) {
+        setState(() {
+          _comments.removeWhere((c) => c['id'] == optimisticId);
+        });
+      }
+      showToast('评论发送失败，请重试', type: ToastType.error);
     }
   }
-
-  static const _mockComments = <Map<String, dynamic>>[
-    {
-      'id': 'm1',
-      'user_name': '小明',
-      'user_avatar': '',
-      'content': '这个视频太棒了，学习到了很多！',
-      'like_count': 23,
-    },
-    {
-      'id': 'm2',
-      'user_name': '小红',
-      'user_avatar': '',
-      'content': '已下单，期待收货～',
-      'like_count': 15,
-    },
-    {
-      'id': 'm3',
-      'user_name': '阿强',
-      'user_avatar': '',
-      'content': '第二次购买了，质量一如既往的好',
-      'like_count': 8,
-    },
-    {
-      'id': 'm4',
-      'user_name': '花花',
-      'user_avatar': '',
-      'content': '请问这个有什么颜色可以选？',
-      'like_count': 3,
-    },
-    {
-      'id': 'm5',
-      'user_name': '大海',
-      'user_avatar': '',
-      'content': '主播讲解得很详细，赞一个',
-      'like_count': 12,
-    },
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -252,6 +192,7 @@ final class _VideoCommentsSheetState extends State<_VideoCommentsSheet> {
       ),
       child: Column(
         children: [
+          // Handle
           Center(
             child: Container(
               margin:
@@ -264,11 +205,13 @@ final class _VideoCommentsSheetState extends State<_VideoCommentsSheet> {
               ),
             ),
           ),
+          // Title
           const Padding(
             padding: EdgeInsets.symmetric(vertical: AppDimens.paddingSm),
             child: Text('评论', style: AppTextStyles.titleMedium),
           ),
           const Divider(height: 1, color: AppColors.divider),
+          // Comments list
           Expanded(
             child: _isLoading
                 ? const Center(
@@ -351,6 +294,7 @@ final class _VideoCommentsSheetState extends State<_VideoCommentsSheet> {
                             },
                           ),
           ),
+          // Input bar
           Container(
             padding: EdgeInsets.only(
               left: AppDimens.paddingMd,
@@ -408,6 +352,7 @@ final class _VideoCommentsSheetState extends State<_VideoCommentsSheet> {
   }
 }
 
+/// Bottom loading / retry indicator for paginated lists.
 final class _LoadMoreIndicator extends StatelessWidget {
   const _LoadMoreIndicator({
     required this.isLoading,
@@ -432,6 +377,7 @@ final class _LoadMoreIndicator extends StatelessWidget {
         ),
       );
     }
+
     if (hasError) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: AppDimens.paddingMd),
@@ -443,6 +389,7 @@ final class _LoadMoreIndicator extends StatelessWidget {
         ),
       );
     }
+
     return const SizedBox.shrink();
   }
 }

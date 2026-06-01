@@ -5,7 +5,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/app_constants.dart';
 import '../../models/cart_model.dart';
+import '../../models/coupon_model.dart';
 import '../../provider/cart_provider.dart';
+import '../../provider/coupon_provider.dart';
+import '../../widgets/coupon_picker_sheet.dart';
 import '../../widgets/recommend_products.dart';
 
 final class CartPage extends ConsumerStatefulWidget {
@@ -24,33 +27,36 @@ final class _CartPageState extends ConsumerState<CartPage> {
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(cartProvider);
+    final cart = ref.watch(cartProvider);
     final notifier = ref.read(cartProvider.notifier);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('购物车'),
         actions: [
-          if (state.items.isNotEmpty)
+          if (cart.items.isNotEmpty)
             TextButton(
-              onPressed: notifier.toggleSelectAll,
+              onPressed: () {
+                ref.read(selectedCartItemCouponsProvider.notifier).clearAll();
+                notifier.toggleSelectAll();
+              },
               child: Text(
-                state.allSelected ? '取消全选' : '全选',
-                style: const TextStyle(color: AppColors.textSecondary),
+                cart.allSelected ? '取消全选' : '全选',
+                style: TextStyle(color: AppColors.textSecondary),
               ),
             ),
         ],
       ),
-      body: state.isLoading && state.items.isEmpty
-          ? const Center(
+      body: cart.isLoading && cart.items.isEmpty
+          ? Center(
               child: CircularProgressIndicator(color: AppColors.primary),
             )
-          : state.items.isEmpty
+          : cart.items.isEmpty
               ? Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.shopping_cart_outlined,
                         size: 64,
                         color: AppColors.textHint,
@@ -76,23 +82,27 @@ final class _CartPageState extends ConsumerState<CartPage> {
                     Expanded(
                       child: ListView.builder(
                         addAutomaticKeepAlives: false,
-                        padding: const EdgeInsets.symmetric(
+                        padding: EdgeInsets.symmetric(
                           vertical: AppDimens.paddingSm,
                         ),
-                        itemCount: state.items.length + 1,
+                        itemCount: cart.items.length + 1,
                         itemBuilder: (context, index) {
-                          if (index == state.items.length) {
-                            return const Padding(
+                          if (index == cart.items.length) {
+                            return Padding(
                               padding: EdgeInsets.only(top: AppDimens.paddingMd),
-                              child: RecommendProducts(),
+                              child: const RecommendProducts(),
                             );
                           }
+                          final item = cart.items[index];
+                          final itemCoupons = ref.watch(selectedCartItemCouponsProvider);
+                          final selectedCoupon = itemCoupons[item.id];
+
                           return _CartItemTile(
-                            item: state.items[index],
+                            item: item,
+                            selectedCoupon: selectedCoupon,
                             onToggle: () =>
-                                notifier.toggleSelect(state.items[index].id),
+                                notifier.toggleSelect(item.id),
                             onIncrease: () {
-                              final item = state.items[index];
                               if (item.quantity < item.productStock) {
                                 notifier.updateQuantity(
                                   item.id,
@@ -101,7 +111,6 @@ final class _CartPageState extends ConsumerState<CartPage> {
                               }
                             },
                             onDecrease: () {
-                              final item = state.items[index];
                               if (item.quantity > 1) {
                                 notifier.updateQuantity(
                                   item.id,
@@ -109,47 +118,132 @@ final class _CartPageState extends ConsumerState<CartPage> {
                                 );
                               }
                             },
-                            onDelete: () =>
-                                notifier.deleteItem(state.items[index].id),
+                            onDelete: () {
+                              ref.read(selectedCartItemCouponsProvider.notifier).removeCoupon(item.id);
+                              notifier.deleteItem(item.id);
+                            },
+                            onCouponTap: () async {
+                              final result = await showCouponPickerSheet(
+                                context: context,
+                                type: CouponType.product,
+                                productId: item.productId,
+                                productName: item.productName,
+                                productPrice: item.productPrice * item.quantity,
+                                currentSelected: selectedCoupon,
+                              );
+                              ref.read(selectedCartItemCouponsProvider.notifier)
+                                  .setCoupon(item.id, result);
+                            },
                           );
                         },
                       ),
                     ),
                     _CartBottomBar(
-                      total: state.totalAmount,
-                      selectedCount: state.selectedCount,
-                      onCheckout: state.selectedCount > 0
-                          ? () {
-                              context.pushNamed(
-                                'orderConfirm',
-                                queryParameters: <String, String>{
-                                  'total': state.totalAmount.toString(),
-                                  'count': state.selectedCount.toString(),
-                                },
-                              );
-                            }
-                          : null,
+                      cart: cart,
+                      onCouponTap: () async {
+                        final amountAfterProductCoupons =
+                            _calcAmountAfterProductCoupons(cart, ref.read(selectedCartItemCouponsProvider));
+                        final result = await showCouponPickerSheet(
+                          context: context,
+                          type: CouponType.fullReduction,
+                          cartTotal: amountAfterProductCoupons,
+                          currentSelected:
+                              ref.read(selectedFullReductionCouponProvider),
+                        );
+                        if (result != null || result == null) {
+                          ref.read(selectedFullReductionCouponProvider.notifier).state = result;
+                        }
+                      },
+                      onClearCoupon: () {
+                        ref.read(selectedFullReductionCouponProvider.notifier).state = null;
+                      },
+                      onCheckout: () {
+                        final selectedCount = cart.selectedCount;
+                        if (selectedCount <= 0) return;
+
+                        final itemCoupons = ref.read(selectedCartItemCouponsProvider);
+                        final fullReductionCoupon = ref.read(selectedFullReductionCouponProvider);
+
+                        final productCouponDiscount =
+                            _calcProductCouponDiscount(cart, itemCoupons);
+                        final afterProduct = cart.totalAmount - productCouponDiscount;
+                        final fullReductionDiscount =
+                            fullReductionCoupon?.discountAmount ?? 0;
+
+                        final usedCouponIds = <String>[];
+                        for (final item in cart.selectedItems) {
+                          final c = itemCoupons[item.id];
+                          if (c != null) usedCouponIds.add(c.id);
+                        }
+                        if (fullReductionCoupon != null) {
+                          usedCouponIds.add(fullReductionCoupon.id);
+                        }
+
+                        context.pushNamed(
+                          'orderConfirm',
+                          queryParameters: <String, String>{
+                            'total': cart.totalAmount.toString(),
+                            'count': selectedCount.toString(),
+                            'product_coupon_discount': productCouponDiscount.toString(),
+                            'full_reduction_discount': fullReductionDiscount.toString(),
+                            'pay_amount': (afterProduct - fullReductionDiscount).toString(),
+                            'coupon_ids': usedCouponIds.join(','),
+                          },
+                        );
+                      },
                     ),
                   ],
                 ),
     );
+  }
+
+  double _calcAmountAfterProductCoupons(
+      CartState cart, Map<String, CouponModel?> itemCoupons) {
+    double total = 0;
+    for (final item in cart.selectedItems) {
+      final coupon = itemCoupons[item.id];
+      final itemTotal = item.productPrice * item.quantity;
+      if (coupon != null) {
+        total += coupon.getPriceAfterDiscount(itemTotal);
+      } else {
+        total += itemTotal;
+      }
+    }
+    return total;
+  }
+
+  double _calcProductCouponDiscount(
+      CartState cart, Map<String, CouponModel?> itemCoupons) {
+    double discount = 0;
+    for (final item in cart.selectedItems) {
+      final coupon = itemCoupons[item.id];
+      if (coupon != null) {
+        final itemTotal = item.productPrice * item.quantity;
+        discount += itemTotal - coupon.getPriceAfterDiscount(itemTotal);
+      }
+    }
+    return discount;
   }
 }
 
 final class _CartItemTile extends StatelessWidget {
   const _CartItemTile({
     required this.item,
+    this.selectedCoupon,
     required this.onToggle,
     required this.onIncrease,
     required this.onDecrease,
     required this.onDelete,
+    required this.onCouponTap,
   });
 
   final CartItemModel item;
+  final CouponModel? selectedCoupon;
   final VoidCallback onToggle;
   final VoidCallback onIncrease;
   final VoidCallback onDecrease;
   final VoidCallback onDelete;
+  final VoidCallback onCouponTap;
 
   @override
   Widget build(BuildContext context) {
@@ -222,8 +316,8 @@ final class _CartItemTile extends StatelessWidget {
                       ),
                       GestureDetector(
                         onTap: onDelete,
-                        child: const Padding(
-                          padding: EdgeInsets.only(left: AppDimens.paddingSm),
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: AppDimens.paddingSm),
                           child: Icon(Icons.delete_outline, size: 18, color: AppColors.textHint),
                         ),
                       ),
@@ -250,9 +344,75 @@ final class _CartItemTile extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        '¥${item.productPrice.toStringAsFixed(0)}',
-                        style: AppTextStyles.priceSmall,
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '¥${item.productPrice.toStringAsFixed(0)}',
+                            style: AppTextStyles.priceSmall,
+                          ),
+                          if (item.selected)
+                            GestureDetector(
+                              onTap: onCouponTap,
+                              child: Container(
+                                margin: const EdgeInsets.only(top: 4),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: selectedCoupon != null
+                                        ? AppColors.primary
+                                        : AppColors.textHint.withOpacity(0.5),
+                                    width: 0.5,
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.local_offer,
+                                      size: 10,
+                                      color: selectedCoupon != null
+                                          ? AppColors.primary
+                                          : AppColors.textHint,
+                                    ),
+                                    const SizedBox(width: 2),
+                                    Text(
+                                      selectedCoupon != null
+                                          ? '已省¥${selectedCoupon!.discountAmount.toStringAsFixed(0)}'
+                                          : '领券',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: selectedCoupon != null
+                                            ? AppColors.primary
+                                            : AppColors.textHint,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    if (selectedCoupon != null) ...[
+                                      const SizedBox(width: 2),
+                                      Text(
+                                        '×',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: AppColors.textHint,
+                                        ),
+                                      ),
+                                    ],
+                                    Icon(
+                                      Icons.chevron_right,
+                                      size: 10,
+                                      color: selectedCoupon != null
+                                          ? AppColors.primary
+                                          : AppColors.textHint,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                       Row(
                         children: [
@@ -313,19 +473,21 @@ final class _QtyBtn extends StatelessWidget {
 
 final class _CartBottomBar extends StatelessWidget {
   const _CartBottomBar({
-    required this.total,
-    required this.selectedCount,
+    required this.cart,
+    this.onCouponTap,
+    this.onClearCoupon,
     this.onCheckout,
   });
 
-  final double total;
-  final int selectedCount;
+  final CartState cart;
+  final VoidCallback? onCouponTap;
+  final VoidCallback? onClearCoupon;
   final VoidCallback? onCheckout;
 
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).padding.bottom;
-    final isPriceInvalid = total <= 0 && selectedCount > 0;
+    final selectedCount = cart.selectedCount;
 
     return Container(
       padding: EdgeInsets.only(
@@ -334,47 +496,190 @@ final class _CartBottomBar extends StatelessWidget {
         top: AppDimens.paddingMd,
         bottom: AppDimens.paddingMd + bottomInset,
       ),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.surface,
         border: Border(top: BorderSide(color: AppColors.divider)),
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(isPriceInvalid ? '价格异常' : '合计',
-                  style: TextStyle(
-                      fontSize: 13,
-                      color: isPriceInvalid ? AppColors.error : AppColors.textSecondary)),
-              Text(
-                isPriceInvalid ? '不可结算' : '¥${total.toStringAsFixed(0)}',
-                style: isPriceInvalid
-                    ? const TextStyle(fontSize: 14, color: AppColors.error)
-                    : AppTextStyles.price,
-              ),
-            ],
+          // 满减券选择行
+          GestureDetector(
+            onTap: onCouponTap,
+            child: Row(
+              children: [
+                Icon(Icons.local_offer_outlined,
+                    color: AppColors.primary, size: 14),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    '满减优惠: ',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+                Consumer(
+                  builder: (context, ref, _) {
+                    final fullReductionCoupon =
+                        ref.watch(selectedFullReductionCouponProvider);
+                    return GestureDetector(
+                      onTap: onCouponTap,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            fullReductionCoupon != null
+                                ? '${fullReductionCoupon.title}'
+                                : '选择满减券',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                          if (fullReductionCoupon != null) ...[
+                            const SizedBox(width: 2),
+                            GestureDetector(
+                              onTap: onClearCoupon,
+                              child: Icon(Icons.close,
+                                  color: AppColors.textHint, size: 14),
+                            ),
+                          ],
+                          Icon(Icons.chevron_right,
+                              color: AppColors.primary, size: 14),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
-          const Spacer(),
+          const SizedBox(height: 4),
+          // 价格明细
+          Consumer(
+            builder: (context, ref, _) {
+              final itemCoupons = ref.watch(selectedCartItemCouponsProvider);
+              final fullReductionCoupon =
+                  ref.watch(selectedFullReductionCouponProvider);
+
+              double productDiscount = 0;
+              double afterProductTotal = 0;
+              for (final item in cart.selectedItems) {
+                final itemTotal = item.productPrice * item.quantity;
+                final coupon = itemCoupons[item.id];
+                if (coupon != null) {
+                  final after = coupon.getPriceAfterDiscount(itemTotal);
+                  productDiscount += itemTotal - after;
+                  afterProductTotal += after;
+                } else {
+                  afterProductTotal += itemTotal;
+                }
+              }
+
+              final fullReductionDiscount =
+                  fullReductionCoupon?.discountAmount ?? 0;
+              final finalAmount = afterProductTotal - fullReductionDiscount;
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (productDiscount > 0)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Text(
+                          '商品券优惠: ',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textHint,
+                          ),
+                        ),
+                        Text(
+                          '-¥${productDiscount.toStringAsFixed(0)}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.success,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '商品小计',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: productDiscount > 0
+                                  ? AppColors.textHint
+                                  : AppColors.textSecondary,
+                              decoration: productDiscount > 0
+                                  ? TextDecoration.lineThrough
+                                  : null,
+                            ),
+                          ),
+                          if (productDiscount > 0 || fullReductionDiscount > 0)
+                            Text(
+                              '券后实付',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                        ],
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            '¥${cart.totalAmount.toStringAsFixed(0)}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: productDiscount > 0
+                                  ? AppColors.textHint
+                                  : AppColors.primary,
+                              decoration: productDiscount > 0
+                                  ? TextDecoration.lineThrough
+                                  : null,
+                            ),
+                          ),
+                          if (productDiscount > 0 || fullReductionDiscount > 0)
+                            Text(
+                              '¥${finalAmount.toStringAsFixed(0)}',
+                              style: AppTextStyles.price,
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: AppDimens.paddingSm),
           ElevatedButton(
-            onPressed: isPriceInvalid ? null : onCheckout,
+            onPressed: selectedCount > 0 ? onCheckout : null,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
               disabledBackgroundColor: AppColors.card,
               disabledForegroundColor: AppColors.textHint,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 32,
-                vertical: AppDimens.paddingMd,
-              ),
+              padding: const EdgeInsets.symmetric(vertical: AppDimens.paddingMd),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(AppDimens.radiusXl),
               ),
             ),
             child: Text(
               '结算($selectedCount)',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
                 color: Colors.white,

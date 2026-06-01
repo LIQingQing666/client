@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/app_constants.dart';
 import '../../models/order_model.dart';
 import '../../provider/order_provider.dart';
+import '../../utils/toast.dart';
 
 final class OrderPage extends ConsumerStatefulWidget {
   const OrderPage({super.key});
@@ -152,8 +153,11 @@ final class _OrderCard extends ConsumerWidget {
                 onConfirmSuccess();
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-            child: const Text('确认收到'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('确认收到', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -161,14 +165,7 @@ final class _OrderCard extends ConsumerWidget {
   }
 
   void _showAfterSaleNotAvailable(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('客服功能正在开发中，敬请期待'),
-        backgroundColor: AppColors.textHint,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
-    );
+    showToast('客服功能正在开发中，敬请期待', type: ToastType.info);
   }
 
   @override
