@@ -303,14 +303,14 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
     showProductDetailSheet(
       context: context,
       product: product,
-      onAddToCart: (spec, quantity) {
+      onAddToCart: (spec, quantity, couponId) {
         ref.read(cartProvider.notifier).addToCart(
           productId: product.id,
           spec: spec,
           quantity: quantity,
         );
       },
-      onBuyNow: (spec, quantity) {
+      onBuyNow: (spec, quantity, couponId) {
         // Dismiss the product detail bottom sheet first.
         Navigator.of(context).pop();
         // Enter PIP mode before navigating away so the live stream keeps playing.

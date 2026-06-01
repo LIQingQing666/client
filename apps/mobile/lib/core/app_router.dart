@@ -16,6 +16,7 @@ import '../pages/live/live_page.dart';
 import '../pages/live/live_room_page.dart';
 import '../pages/message/message_detail_page.dart';
 import '../pages/message/message_page.dart';
+import '../pages/mine/coupon_list_page.dart';
 import '../pages/mine/edit_profile_page.dart';
 import '../pages/mine/favorites_page.dart';
 import '../pages/mine/following_page.dart';
@@ -73,6 +74,10 @@ final class AppRouter {
             productCover: q['product_cover'],
             spec: q['product_spec'],
             quantity: int.parse(q['quantity'] ?? '1'),
+            productCouponDiscount: double.parse(q['product_coupon_discount'] ?? '0'),
+            fullReductionDiscount: double.parse(q['full_reduction_discount'] ?? '0'),
+            payAmount: q['pay_amount'] != null ? double.tryParse(q['pay_amount']!) : null,
+            couponIds: q['coupon_ids'] ?? '',
           );
         },
       ),
@@ -217,6 +222,11 @@ final class AppRouter {
             payAmount: query['amount'] != null ? double.tryParse(query['amount']!) : null,
           );
         },
+      ),
+      GoRoute(
+        path: '/coupons',
+        name: 'couponList',
+        builder: (context, state) => const CouponListPage(),
       ),
       GoRoute(
         path: '/recharge/result',
