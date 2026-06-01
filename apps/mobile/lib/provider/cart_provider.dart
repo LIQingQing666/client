@@ -68,20 +68,42 @@ final class CartNotifier extends StateNotifier<CartState> {
 
     try {
       final items = await api.getCart(_userId);
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       state = state.copyWith(items: items, isLoading: false);
+      _persist();
+    } on Exception catch (e) {
+      if (!mounted) return;
+      // Fall back to locally persisted cart on network failure.
+      try {
+        final localItems = storage.getCartItems();
+        if (localItems.isNotEmpty) {
+          final restored =
+              localItems.map((j) => CartItemModel.fromJson(j)).toList();
+          state = state.copyWith(items: restored, isLoading: false);
+          return;
+        }
+      } catch (_) {}
+      state = state.copyWith(isLoading: false, errorMessage: e.toString());
     }
-    on Exception catch (e) {
-      if (!mounted) {
-        return;
-      }
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage: e.toString(),
-      );
-    }
+  }
+
+  void _persist() {
+    final jsonList = state.items
+        .map((item) => <String, dynamic>{
+              'id': item.id,
+              'user_id': item.userId,
+              'product_id': item.productId,
+              'product_name': item.productName,
+              'product_cover': item.productCover,
+              'product_price': item.productPrice,
+              'product_original_price': item.productOriginalPrice,
+              'product_stock': item.productStock,
+              'spec': item.spec,
+              'quantity': item.quantity,
+              'selected': item.selected,
+            })
+        .toList();
+    storage.saveCartItems(jsonList);
   }
 
   Future<void> addToCart({
@@ -133,6 +155,7 @@ final class CartNotifier extends StateNotifier<CartState> {
     on Exception {
       state = state.copyWith(items: original);
     }
+    _persist();
   }
 
   Future<void> toggleSelect(String itemId) async {
@@ -168,6 +191,7 @@ final class CartNotifier extends StateNotifier<CartState> {
       state = state.copyWith(items: original);
       showToast('操作失败');
     }
+    _persist();
   }
 
   Future<void> toggleSelectAll() async {
@@ -201,12 +225,14 @@ final class CartNotifier extends StateNotifier<CartState> {
       state = state.copyWith(items: original);
       showToast('操作失败');
     }
+    _persist();
   }
 
   void clearSelectedItems() {
     state = state.copyWith(
       items: state.items.where((item) => !item.selected).toList(),
     );
+    _persist();
   }
 
   Future<void> deleteItem(String itemId) async {
@@ -214,14 +240,17 @@ final class CartNotifier extends StateNotifier<CartState> {
     state = state.copyWith(
       items: original.where((item) => item.id != itemId).toList(),
     );
+    _persist();
 
     try {
       await api.deleteCartItem(itemId);
     }
     on Exception {
       state = state.copyWith(items: original);
+      _persist();
       showToast('删除失败，已恢复');
     }
+    _persist();
   }
 }
 
