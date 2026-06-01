@@ -37,6 +37,7 @@ final class ProductModel {
     required this.aiSalesPoint,
     this.highlightTime = 0,
     this.segments = const [],
+    this.status = 'active',
   });
 
   factory ProductModel.fromJson(Map<String, dynamic> json) {
@@ -63,6 +64,7 @@ final class ProductModel {
       segments: rawSegments
           .map((e) => ProductSegment.fromJson(e as Map<String, dynamic>))
           .toList(),
+      status: (json['status'] as String?) ?? 'active',
     );
   }
 
@@ -82,6 +84,9 @@ final class ProductModel {
   final String aiSalesPoint;
   final int highlightTime;
   final List<ProductSegment> segments;
+  final String status;
+
+  bool get isActive => status == 'active';
 
   /// Effective seek time: prefer the first segment's startTime if available,
   /// otherwise fall back to highlightTime.
@@ -107,6 +112,7 @@ final class ProductModel {
     String? aiSalesPoint,
     int? highlightTime,
     List<ProductSegment>? segments,
+    String? status,
   }) {
     return ProductModel(
       id: id ?? this.id,
@@ -125,6 +131,7 @@ final class ProductModel {
       aiSalesPoint: aiSalesPoint ?? this.aiSalesPoint,
       highlightTime: highlightTime ?? this.highlightTime,
       segments: segments ?? this.segments,
+      status: status ?? this.status,
     );
   }
 

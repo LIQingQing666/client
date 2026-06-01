@@ -12,6 +12,7 @@ final class ProductApi {
     int pageSize = 10,
     String? category,
     String? keyword,
+    String? status,
   }) async {
     final query = <String, dynamic>{'page': page, 'page_size': pageSize};
     if (category != null) {
@@ -19,6 +20,9 @@ final class ProductApi {
     }
     if (keyword != null) {
       query['keyword'] = keyword;
+    }
+    if (status != null) {
+      query['status'] = status;
     }
 
     final response = await client.get<Map<String, dynamic>>(
@@ -159,6 +163,36 @@ final class ProductApi {
         .map((e) => e as String)
         .toList();
   }
+
+  /// 下架商品
+  Future<void> deactivateProduct(String id) async {
+    await client.put(
+      '/products/$id',
+      data: {'status': 'inactive'},
+    );
+  }
+
+  /// 上架商品
+  Future<void> activateProduct(String id) async {
+    await client.put(
+      '/products/$id',
+      data: {'status': 'active'},
+    );
+  }
+
+  /// 批量更新商品状态
+  Future<void> batchUpdateStatus({
+    required List<String> ids,
+    required String status,
+  }) async {
+    await client.put(
+      '/products/batch-status',
+      data: {
+        'ids': ids,
+        'status': status,
+      },
+    );
+  }
 }
 
 final class ProductListResponse {
@@ -230,6 +264,7 @@ final class ProductCreateRequest {
     required this.coverUrl,
     required this.images,
     this.aiSalesPoint,
+    this.status = 'active',
   });
 
   final String name;
@@ -242,6 +277,7 @@ final class ProductCreateRequest {
   final String coverUrl;
   final List<String> images;
   final String? aiSalesPoint;
+  final String status;
 
   Map<String, dynamic> toJson() => {
     'name': name,
@@ -254,6 +290,7 @@ final class ProductCreateRequest {
     'cover_url': coverUrl,
     'images': images,
     if (aiSalesPoint != null) 'ai_sales_point': aiSalesPoint,
+    'status': status,
   };
 }
 
