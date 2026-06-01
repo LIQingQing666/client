@@ -13,6 +13,9 @@ import '../routes/api/videos/[videoId]/comments.dart' as api_videos_$video_id_co
 import '../routes/api/users/register.dart' as api_users_register;
 import '../routes/api/users/profile.dart' as api_users_profile;
 import '../routes/api/users/login.dart' as api_users_login;
+import '../routes/api/uploads/[type]/[filename].dart' as api_uploads_$type_$filename;
+import '../routes/api/upload/video.dart' as api_upload_video;
+import '../routes/api/upload/image.dart' as api_upload_image;
 import '../routes/api/products/index.dart' as api_products_index;
 import '../routes/api/products/[productId].dart' as api_products_$product_id;
 import '../routes/api/orders/index.dart' as api_orders_index;
@@ -44,6 +47,8 @@ Handler buildRootHandler() {
     ..mount('/api/videos', (context) => buildApiVideosHandler()(context))
     ..mount('/api/videos/<videoId>', (context,videoId,) => buildApiVideos$videoIdHandler(videoId,)(context))
     ..mount('/api/users', (context) => buildApiUsersHandler()(context))
+    ..mount('/api/uploads/<type>', (context,type,) => buildApiUploads$typeHandler(type,)(context))
+    ..mount('/api/upload', (context) => buildApiUploadHandler()(context))
     ..mount('/api/products', (context) => buildApiProductsHandler()(context))
     ..mount('/api/orders', (context) => buildApiOrdersHandler()(context))
     ..mount('/api/orders/<orderId>', (context,orderId,) => buildApiOrders$orderIdHandler(orderId,)(context))
@@ -71,6 +76,20 @@ Handler buildApiUsersHandler() {
   final pipeline = const Pipeline();
   final router = Router()
     ..all('/login', (context) => api_users_login.onRequest(context,))..all('/profile', (context) => api_users_profile.onRequest(context,))..all('/register', (context) => api_users_register.onRequest(context,));
+  return pipeline.addHandler(router);
+}
+
+Handler buildApiUploadHandler() {
+  final pipeline = const Pipeline();
+  final router = Router()
+    ..all('/image', (context) => api_upload_image.onRequest(context,))..all('/video', (context) => api_upload_video.onRequest(context,));
+  return pipeline.addHandler(router);
+}
+
+Handler buildApiUploads$typeHandler(String type,) {
+  final pipeline = const Pipeline();
+  final router = Router()
+    ..all('/<filename>', (context,filename,) => api_uploads_$type_$filename.onRequest(context,type,filename,));
   return pipeline.addHandler(router);
 }
 

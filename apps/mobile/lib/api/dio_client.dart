@@ -10,15 +10,16 @@ import 'api_exception.dart';
 final class DioClient {
   DioClient({required this._storage})
       : _dio = Dio(
-          BaseOptions(
-            baseUrl: AppConstants.baseUrl,
-            connectTimeout: AppConstants.connectTimeout,
-            receiveTimeout: AppConstants.receiveTimeout,
-            contentType: 'application/json',
-          ),
-        ) {
+    BaseOptions(
+      baseUrl: AppConstants.baseUrl,
+      connectTimeout: AppConstants.connectTimeout,
+      receiveTimeout: AppConstants.receiveTimeout,
+      // 移除默认 contentType，避免与请求头冲突
+    ),
+  ) {
     _dio.interceptors.addAll([
       _AuthInterceptor(_storage),
+      _ContentTypeInterceptor(), // 新增：智能处理 Content-Type
       _LogInterceptor(),
       RetryInterceptor(_dio),
     ]);
@@ -30,13 +31,13 @@ final class DioClient {
   String get baseUrl => _dio.options.baseUrl;
 
   Future<Response<T>> get<T>(
-    String path, {
-    Map<String, dynamic>? queryParameters,
-    Options? options,
-    CancelToken? cancelToken,
-  }) {
+      String path, {
+        Map<String, dynamic>? queryParameters,
+        Options? options,
+        CancelToken? cancelToken,
+      }) {
     return _request(
-      () => _dio.get<T>(
+          () => _dio.get<T>(
         path,
         queryParameters: queryParameters,
         options: options,
@@ -46,62 +47,76 @@ final class DioClient {
   }
 
   Future<Response<T>> post<T>(
-    String path, {
-    dynamic data,
-    Map<String, dynamic>? queryParameters,
-    Options? options,
-    CancelToken? cancelToken,
-  }) {
+      String path, {
+        dynamic data,
+        Map<String, dynamic>? queryParameters,
+        Options? options,
+        CancelToken? cancelToken,
+      }) {
     return _request(
-      () => _dio.post<T>(
+          () => _dio.post<T>(
         path,
         data: data,
         queryParameters: queryParameters,
-        options: options,
+        options: _setContentType(options, data),
         cancelToken: cancelToken,
       ),
     );
   }
 
   Future<Response<T>> put<T>(
-    String path, {
-    dynamic data,
-    Map<String, dynamic>? queryParameters,
-    Options? options,
-    CancelToken? cancelToken,
-  }) {
+      String path, {
+        dynamic data,
+        Map<String, dynamic>? queryParameters,
+        Options? options,
+        CancelToken? cancelToken,
+      }) {
     return _request(
-      () => _dio.put<T>(
+          () => _dio.put<T>(
         path,
         data: data,
         queryParameters: queryParameters,
-        options: options,
+        options: _setContentType(options, data),
         cancelToken: cancelToken,
       ),
     );
   }
 
   Future<Response<T>> delete<T>(
-    String path, {
-    dynamic data,
-    Map<String, dynamic>? queryParameters,
-    Options? options,
-    CancelToken? cancelToken,
-  }) {
+      String path, {
+        dynamic data,
+        Map<String, dynamic>? queryParameters,
+        Options? options,
+        CancelToken? cancelToken,
+      }) {
     return _request(
-      () => _dio.delete<T>(
+          () => _dio.delete<T>(
         path,
         data: data,
         queryParameters: queryParameters,
-        options: options,
+        options: _setContentType(options, data),
         cancelToken: cancelToken,
       ),
     );
   }
 
+  /// 智能设置 Content-Type
+  Options? _setContentType(Options? options, dynamic data) {
+    if (data == null) return options;
+
+    // FormData 不需要设置 application/json
+    if (data is FormData) return options;
+
+    final contentType = 'application/json';
+    if (options != null) {
+      return options.copyWith(contentType: contentType);
+    }
+    return Options(contentType: contentType);
+  }
+
   Future<Response<T>> _request<T>(
-    Future<Response<T>> Function() request,
-  ) async {
+      Future<Response<T>> Function() request,
+      ) async {
     try {
       final response = await request();
       return response;
@@ -173,6 +188,23 @@ final class DioClient {
   }
 }
 
+// ========== 新增拦截器 ==========
+
+/// 智能 Content-Type 拦截器
+final class _ContentTypeInterceptor extends Interceptor {
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    // 清除可能冲突的 header
+    if (options.data == null) {
+      options.headers.remove('content-type');
+      options.headers.remove('Content-Type');
+    }
+    handler.next(options);
+  }
+}
+
+// ========== 其他拦截器保持不变 ==========
+
 final class _AuthInterceptor extends Interceptor {
   _AuthInterceptor(this._storage);
 
@@ -180,9 +212,9 @@ final class _AuthInterceptor extends Interceptor {
 
   @override
   void onRequest(
-    RequestOptions options,
-    RequestInterceptorHandler handler,
-  ) {
+      RequestOptions options,
+      RequestInterceptorHandler handler,
+      ) {
     final token = _storage.token;
     if (token != null) {
       options.headers['Authorization'] = 'Bearer $token';
@@ -204,6 +236,9 @@ final class _LogInterceptor extends Interceptor {
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     if (kDebugMode) {
       debugPrint('[HTTP] ${options.method} ${options.uri}');
+      if (options.data != null) {
+        debugPrint('[HTTP] body: ${options.data}');
+      }
     }
     handler.next(options);
   }
@@ -220,6 +255,7 @@ final class _LogInterceptor extends Interceptor {
   void onError(DioException err, ErrorInterceptorHandler handler) {
     if (kDebugMode) {
       debugPrint('[HTTP] error ${err.type} ${err.message}');
+      debugPrint('[HTTP] error response: ${err.response?.data}');
     }
     handler.next(err);
   }

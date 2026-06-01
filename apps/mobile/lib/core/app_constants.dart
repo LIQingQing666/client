@@ -5,8 +5,8 @@ abstract final class AppConstants {
   static const String appName = 'LiveCommerce';
 
   // API 配置
-  static const String baseUrl = 'http://192.168.50.174:3000/api';
-  static const String wsUrl = 'http://192.168.50.174:3000';
+  static const String baseUrl = 'http://127.0.0.1:3000/api';
+  static const String wsUrl = 'http://127.0.0.1:3000/api';
   static const Duration connectTimeout = Duration(seconds: 10);
   static const Duration receiveTimeout = Duration(seconds: 10);
 

@@ -281,8 +281,17 @@ final class _AddProductPageState extends ConsumerState<AddProductPage> {
     try {
       final client = ref.read(dioClientProvider);
       final api = ProductApi(client: client);
-      // 使用一个临时 ID 或特定端点来生成卖点
-      final salesPoint = await api.getAiSalesPoint('new');
+      final tags = _tagsController.text
+          .split(',')
+          .map((t) => t.trim())
+          .where((t) => t.isNotEmpty)
+          .toList();
+      final salesPoint = await api.generateAiSalesPoint(
+        name: name,
+        description: _descriptionController.text.trim(),
+        category: _selectedCategory,
+        tags: tags.isEmpty ? null : tags,
+      );
 
       if (mounted) {
         _aiSalesPointController.text = salesPoint;

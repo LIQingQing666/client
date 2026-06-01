@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../api/admin_api.dart';
@@ -165,6 +166,9 @@ final class _ProductManagementTabState
   bool _isLoading = true;
   String? _error;
 
+  bool _isSelectionMode = false;
+  final Set<String> _selectedIds = {};
+
   @override
   void initState() {
     super.initState();
@@ -192,16 +196,150 @@ final class _ProductManagementTabState
     }
   }
 
+  // 切换选择模式
+  void _toggleSelectionMode() {
+    setState(() {
+      _isSelectionMode = !_isSelectionMode;
+      if (!_isSelectionMode) {
+        _selectedIds.clear();
+      }
+    });
+  }
+
+  // 切换单个商品选中状态
+  void _toggleProductSelection(String productId) {
+    setState(() {
+      if (_selectedIds.contains(productId)) {
+        _selectedIds.remove(productId);
+        if (_selectedIds.isEmpty) {
+          _isSelectionMode = false;
+        }
+      } else {
+        _selectedIds.add(productId);
+      }
+    });
+  }
+
+  // 全选/取消全选
+  void _toggleSelectAll() {
+    setState(() {
+      if (_selectedIds.length == _products.length) {
+        _selectedIds.clear();
+      } else {
+        _selectedIds.addAll(_products.map((p) => p.id));
+      }
+    });
+  }
+
+  // 删除选中商品
+  Future<void> _deleteSelected() async {
+    if (_selectedIds.isEmpty) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('确认删除'),
+        content: Text('确定要删除选中的 ${_selectedIds.length} 件商品吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    // 显示加载
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Row(
+          children: [
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+            ),
+            SizedBox(width: 12),
+            Text('正在删除...'),
+          ],
+        ),
+        duration: Duration(seconds: 30),
+      ),
+    );
+
+    try {
+      final client = ref.read(dioClientProvider);
+      final api = ProductApi(client: client);
+
+      // 逐个删除选中的商品
+      int successCount = 0;
+      int failCount = 0;
+
+      for (final id in _selectedIds.toList()) {
+        try {
+          await api.deleteProduct(id);
+          successCount++;
+        } catch (e) {
+          failCount++;
+          debugPrint('删除商品 $id 失败: $e');
+        }
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+        if (failCount == 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('成功删除 $successCount 件商品'),
+              backgroundColor: AppColors.success,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('成功删除 $successCount 件，失败 $failCount 件'),
+              backgroundColor: AppColors.warning,
+            ),
+          );
+        }
+
+        _loadProducts(); // 重新加载列表
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('删除失败: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return Stack(
       children: [
-        // 顶部操作栏
-        _buildActionBar(context),
-        // 商品列表
-        Expanded(
-          child: _buildProductList(context),
+        Column(
+          children: [
+            _buildActionBar(context),
+            Expanded(
+              child: _buildProductList(context),
+            ),
+          ],
         ),
+        if (_isSelectionMode && _selectedIds.isNotEmpty)
+          _buildBottomDeleteBar(),
       ],
     );
   }
@@ -216,45 +354,71 @@ final class _ProductManagementTabState
       ),
       child: Row(
         children: [
-          Expanded(
-            child: Text(
-              '共 ${_products.length} 件商品',
-              style: AppTextStyles.bodySmall,
-            ),
-          ),
-          ElevatedButton.icon(
-            onPressed: () async {
-              final result = await Navigator.push<bool>(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const AddProductPage(),
+          if (_isSelectionMode) ...[
+            // select mode
+            GestureDetector(
+              onTap: _toggleSelectAll,
+              child: Text(
+                _selectedIds.length == _products.length ? '取消全选' : '全选',
+                style: AppTextStyles.bodyMedium?.copyWith(
+                  color: AppColors.primary,
                 ),
-              );
-              if (result == true) {
-                _loadProducts(); // 刷新列表
-              }
-            },
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('添加商品'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppDimens.paddingMd,
-                vertical: AppDimens.paddingSm,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppDimens.radiusSm),
               ),
             ),
-          ),
+            const Spacer(),
+            Text(
+              '已选 ${_selectedIds.length} 件',
+              style: AppTextStyles.bodyMedium,
+            ),
+            const SizedBox(width: AppDimens.paddingMd),
+            GestureDetector(
+              onTap: _toggleSelectionMode,
+              child: const Text(
+                '取消',
+                style: TextStyle(color: AppColors.primary),
+              ),
+            ),
+          ] else ...[
+            // check mode
+            Expanded(
+              child: Text(
+                '共 ${_products.length} 件商品',
+                style: AppTextStyles.bodySmall,
+              ),
+            ),
+            ElevatedButton.icon(
+              onPressed: () async {
+                final result = await Navigator.push<bool>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const AddProductPage(),
+                  ),
+                );
+                if (result == true) {
+                  _loadProducts();
+                }
+              },
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('添加商品'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppDimens.paddingMd,
+                  vertical: AppDimens.paddingSm,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppDimens.radiusSm),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
 
-  @override
   Widget _buildProductList(BuildContext context) {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator(color: AppColors.primary));
@@ -287,20 +451,256 @@ final class _ProductManagementTabState
         ),
       );
     }
-    return ListView.builder(
-      padding: const EdgeInsets.all(AppDimens.paddingLg),
-      itemCount: _products.length,
-      itemBuilder: (context, index) {
-        final p = _products[index];
-        return _ManagementCard(
-          imageUrl: p.coverUrl,
-          title: p.name,
-          subtitle: '¥${p.price.toStringAsFixed(0)} | 库存${p.stock} | 售${p.sales}',
-          tag: p.category,
-          tagColor: AppColors.primary,
-          onTap: () => context.pushNamed('adminProductDetail', pathParameters: {'id': p.id}),
-        );
-      },
+    return RefreshIndicator(
+      onRefresh: _loadProducts,
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(
+          AppDimens.paddingLg,
+          0,
+          AppDimens.paddingLg,
+          AppDimens.paddingLg,
+        ),
+        itemCount: _products.length,
+        itemBuilder: (context, index) {
+          final p = _products[index];
+          final isSelected = _selectedIds.contains(p.id);
+          final isLastItem = index == _products.length - 1;
+
+          return _ProductCard(
+            product: p,
+            isSelectionMode: _isSelectionMode,
+            isSelected: isSelected,
+            isLastItem: isLastItem,
+            hasSelectionBar: _isSelectionMode && _selectedIds.isNotEmpty,
+            onTap: () {
+              if (_isSelectionMode) {
+                _toggleProductSelection(p.id);
+              } else {
+                _navigateToDetail(p.id);
+              }
+            },
+            onLongPress: () {
+              if (!_isSelectionMode) {
+                setState(() {
+                  _isSelectionMode = true;
+                  _selectedIds.add(p.id);
+                });
+                HapticFeedback.mediumImpact();
+              }
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _navigateToDetail(String productId) async {
+    final result = await context.pushNamed<bool>(
+      'adminProductDetail',
+      pathParameters: {'id': productId},
+    );
+
+    // 如果详情页返回 true（商品被删除），立即刷新列表
+    if (result == true) {
+      _loadProducts();
+    }
+  }
+
+  Widget _buildBottomDeleteBar() {
+    return Positioned(
+      bottom: 0,
+      left: 0,
+      right: 0,
+      child: Container(
+        width: MediaQuery.of(context).size.width,
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).padding.bottom + AppDimens.paddingMd,
+          top: AppDimens.paddingMd,
+          left: AppDimens.paddingLg,
+          right: AppDimens.paddingLg,
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.background,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.1),
+              blurRadius: 8,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: SafeArea(
+          child: SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: ElevatedButton.icon(
+              onPressed: _selectedIds.isNotEmpty ? _deleteSelected : null,
+              icon: const Icon(Icons.delete_outline, color: Colors.white),
+              label: Text(
+                '删除选中 (${_selectedIds.length})',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.error,
+                disabledBackgroundColor: AppColors.error.withValues(alpha: 0.5),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// 商品卡片组件
+final class _ProductCard extends StatelessWidget {
+  const _ProductCard({
+    required this.product,
+    required this.isSelectionMode,
+    required this.isSelected,
+    required this.isLastItem,
+    required this.hasSelectionBar,
+    required this.onTap,
+    required this.onLongPress,
+  });
+
+  final ProductModel product;
+  final bool isSelectionMode;
+  final bool isSelected;
+  final bool isLastItem;
+  final bool hasSelectionBar;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      onLongPress: onLongPress,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        margin: EdgeInsets.only(
+          bottom: isLastItem && hasSelectionBar ? 80 : AppDimens.paddingSm,
+        ),
+        padding: const EdgeInsets.all(AppDimens.paddingMd),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppColors.primary.withValues(alpha: 0.05)
+              : AppColors.card,
+          borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+          border: isSelected
+              ? Border.all(
+            color: AppColors.primary.withValues(alpha: 0.3),
+            width: 1.5,
+          )
+              : null,
+        ),
+        child: Row(
+          children: [
+            // 左侧：始终显示商品图片
+            _buildProductImage(),
+            const SizedBox(width: AppDimens.paddingMd),
+            // 中间：商品信息
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    product.name,
+                    style: AppTextStyles.bodyMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '¥${product.price.toStringAsFixed(0)} | 库存${product.stock} | 售${product.sales}',
+                    style: AppTextStyles.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: AppDimens.paddingSm),
+            // 右侧：选择模式显示勾选框，普通模式显示分类标签
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              transitionBuilder: (child, animation) {
+                return ScaleTransition(scale: animation, child: child);
+              },
+              child: isSelectionMode
+                  ? _buildCheckbox()
+                  : _buildCategoryTag(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProductImage() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(AppDimens.radiusSm),
+      child: Image.network(
+        product.coverUrl,
+        width: 48,
+        height: 48,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => Container(
+          width: 48,
+          height: 48,
+          color: AppColors.divider,
+          child: const Icon(
+            Icons.image,
+            size: 24,
+            color: AppColors.textHint,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCheckbox() {
+    return Container(
+      width: 24,
+      height: 24,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: isSelected ? AppColors.primary : Colors.transparent,
+        border: Border.all(
+          color: isSelected ? AppColors.primary : AppColors.textHint.withValues(alpha: 0.5),
+          width: 2,
+        ),
+      ),
+      child: isSelected
+          ? const Icon(Icons.check, color: Colors.white, size: 16)
+          : null,
+    );
+  }
+
+  Widget _buildCategoryTag() {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppDimens.paddingSm,
+        vertical: AppDimens.paddingXs,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(AppDimens.radiusSm),
+      ),
+      child: Text(
+        product.category,
+        style: const TextStyle(
+          fontSize: 11,
+          color: AppColors.primary,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
     );
   }
 }

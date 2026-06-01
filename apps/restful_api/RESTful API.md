@@ -60,6 +60,50 @@
 | `/api/comments/{commentId}` | DELETE | 删除评论     | 需要 token，仅允许删除自己的评论                             |
 | `/api/comments`             | GET    | 获取评论列表 | 按 `targetType` 和 `targetId` 筛选，支持分页                 |
 
+### 七、文件上传 API
+| 端点                                | 方法     | 功能           | 要求                                                                                                                                          |
+| ----------------------------------- | -------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/api/upload/image`                 | POST     | 上传图片       | 需要 token；`multipart/form-data`，字段名 `file`；支持 jpg/jpeg/png/gif/webp/bmp；单文件 ≤ 10MB；返回 `{url, filename, size, contentType}`     |
+| `/api/upload/video`                 | POST     | 上传视频       | 需要 token；`multipart/form-data`，字段名 `file`；支持 mp4/mov/avi/webm/m4v/mkv；单文件 ≤ 200MB；以流式写盘，超限自动清理；返回同上格式         |
+| `/api/uploads/{type}/{filename}`    | GET/HEAD | 获取上传的资源 | `type` 限定 `images` 或 `videos`；支持 `Range` 头（视频播放器拖动）；正确的 `Content-Type` 与 `Cache-Control: public, max-age=31536000`         |
+
+**示例请求**
+
+```bash
+# 上传图片
+curl -X POST http://localhost:8080/api/upload/image \
+  -H "Authorization: Bearer token-u1-abc123" \
+  -F "file=@./avatar.png"
+
+# 响应
+{
+  "code": 200,
+  "message": "上传成功",
+  "data": {
+    "url": "/api/uploads/images/1717200000000_a1b2c3.png",
+    "filename": "1717200000000_a1b2c3.png",
+    "size": 12345,
+    "contentType": "image/png"
+  }
+}
+
+# 上传视频
+curl -X POST http://localhost:8080/api/upload/video \
+  -H "Authorization: Bearer token-u1-abc123" \
+  -F "file=@./clip.mp4"
+
+# 拉取资源（直接通过浏览器/<img>/<video> 标签）
+GET http://localhost:8080/api/uploads/videos/1717200000000_a1b2c3.mp4
+```
+
+**存储位置**：所有上传文件落盘到 `apps/restful_api/data/uploads/{images,videos}/`，由项目持久化目录管理。文件名由 `时间戳_随机十六进制.扩展名` 生成，避免冲突。
+
+**前端用法**：将返回的 `url`（相对路径）拼接到服务端 base URL 即可使用，例如：
+```dart
+final fullUrl = '$apiBaseUrl${response.data['url']}';
+// 用于 Image.network(fullUrl) 或 VideoPlayerController.networkUrl(Uri.parse(fullUrl))
+```
+
 ## 技术约束
 - 使用 **Dart Frog** 框架（轻量、快速）。如果项目中没有，请提供完整的 `pubspec.yaml` 和启动命令。
 - 使用 **模拟数据存储**：在内存中维护 `List` / `Map`（例如 `Map<String, List<Map>>`），每次启动时初始化少量示例数据（至少 2 个用户、5 个商品、3 个视频、若干评论和购物车数据）。

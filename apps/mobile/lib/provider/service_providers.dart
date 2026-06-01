@@ -7,6 +7,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import '../api/dio_client.dart';
 import '../api/recharge_api.dart';
 import '../api/upload_api.dart';
+import '../api/product_api.dart';
 import '../services/player_pool.dart';
 import '../services/storage_service.dart';
 import '../services/video_preload_manager.dart';
@@ -80,4 +81,9 @@ final videoPreloadManagerProvider = Provider<VideoPreloadManager>((ref) {
   final pool = ref.watch(playerPoolProvider);
   final connectivity = ref.watch(connectivityProvider);
   return VideoPreloadManager(pool: pool, connectivity: connectivity);
+});
+
+final productApiProvider = Provider<ProductApi>((ref) {
+  final client = ref.watch(dioClientProvider);
+  return ProductApi(client: client);
 });
