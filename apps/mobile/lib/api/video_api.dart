@@ -1,4 +1,5 @@
 import '../models/video_model.dart';
+import '../models/video_create_request.dart';
 import 'dio_client.dart';
 
 final class VideoApi {
@@ -6,23 +7,31 @@ final class VideoApi {
 
   final DioClient client;
 
-  Future<VideoListResponse> getVideos({int page = 1, int pageSize = 10}) async {
+  Future<VideoListResponse> getVideos({
+    int page = 1,
+    int pageSize = 100,
+    String? status,
+  }) async {
+    final query = <String, dynamic>{'page': page, 'page_size': pageSize};
+    if (status != null) {
+      query['status'] = status;
+    }
     final response = await client.get<Map<String, dynamic>>(
       '/videos',
-      queryParameters: <String, dynamic>{
-        'page': page,
-        'page_size': pageSize,
-      },
+      queryParameters: query,
     );
-
-    final data = response.data!;
-    return VideoListResponse.fromJson(data['data'] as Map<String, dynamic>);
+    return VideoListResponse.fromJson(
+      response.data!['data'] as Map<String, dynamic>,
+    );
   }
 
   Future<VideoDetailResponse> getVideoDetail(String id) async {
-    final response = await client.get<Map<String, dynamic>>('/videos/$id');
-    final data = response.data!;
-    return VideoDetailResponse.fromJson(data['data'] as Map<String, dynamic>);
+    final response = await client.get<Map<String, dynamic>>(
+      '/videos/$id',
+    );
+    return VideoDetailResponse.fromJson(
+      response.data!['data'] as Map<String, dynamic>,
+    );
   }
 
   Future<VideoListResponse> getRecommend({int page = 1, int pageSize = 10}) async {
@@ -72,6 +81,28 @@ final class VideoApi {
     final result = data['data'] as Map<String, dynamic>;
     return result['liked'] as bool;
   }
+
+  Future<VideoModel> createVideo(VideoCreateRequest request) async {
+    final response = await client.post<Map<String, dynamic>>(
+      '/videos',
+      data: request.toJson(),
+    );
+    final data = response.data!['data'] as Map<String, dynamic>;
+    return VideoModel.fromJson(data);
+  }
+
+  Future<void> updateVideoStatus(String id, String status) async {
+    await client.patch(
+      '/videos/$id',
+      data: {'status': status},
+    );
+  }
+
+  Future<void> publishVideo(String id) => updateVideoStatus(id, 'published');
+
+  Future<void> deactivateVideo(String id) => updateVideoStatus(id, 'inactive');
+
+  Future<void> reactivateVideo(String id) => updateVideoStatus(id, 'published');
 }
 
 final class VideoListResponse {

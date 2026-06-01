@@ -100,6 +100,24 @@ final class DioClient {
     );
   }
 
+  Future<Response<T>> patch<T>(
+      String path, {
+        dynamic data,
+        Map<String, dynamic>? queryParameters,
+        Options? options,
+        CancelToken? cancelToken,
+      }) {
+    return _request(
+          () => _dio.patch<T>(
+        path,
+        data: data,
+        queryParameters: queryParameters,
+        options: _setContentType(options, data),
+        cancelToken: cancelToken,
+      ),
+    );
+  }
+
   /// 智能设置 Content-Type
   Options? _setContentType(Options? options, dynamic data) {
     if (data == null) return options;

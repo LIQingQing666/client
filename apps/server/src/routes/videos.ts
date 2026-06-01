@@ -1,31 +1,75 @@
 import { FastifyInstance, FastifyRequest } from 'fastify';
 import { getDb } from '../db/schema.js';
+import { requireMerchant } from '../middleware/auth.js';
 
 interface PaginationQuery {
   page?: string;
   page_size?: string;
 }
 
+const VALID_VIDEO_STATUSES = new Set(['draft', 'published', 'inactive']);
+
+interface VideoCreateBody {
+  title?: unknown;
+  description?: unknown;
+  cover_url?: unknown;
+  video_url?: unknown;
+  author_id?: unknown;
+  author_name?: unknown;
+  author_avatar?: unknown;
+  tags?: unknown;
+  linked_product_ids?: unknown;
+  duration?: unknown;
+  status?: unknown;
+}
+
+function asString(v: unknown): string {
+  return typeof v === 'string' ? v.trim() : '';
+}
+
+function asStringArray(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return v.filter((x): x is string => typeof x === 'string' && x.length > 0);
+}
+
+function rowToVideo(row: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...row,
+    tags: JSON.parse((row.tags as string) || '[]'),
+  };
+}
+
 export async function videoRoutes(app: FastifyInstance) {
   // GET /api/videos - 视频列表（分页）
-  app.get('/api/videos', async (req: FastifyRequest<{ Querystring: PaginationQuery }>) => {
+  // `status` query param: omitted/'published' = consumer default (published only),
+  // 'draft' | 'inactive' = exact match, 'all' = no status filter.
+  app.get('/api/videos', async (req: FastifyRequest<{ Querystring: PaginationQuery & { status?: string } }>) => {
     const db = getDb();
     const page = Math.max(1, parseInt(req.query.page ?? '1', 10));
     const pageSize = Math.min(50, Math.max(1, parseInt(req.query.page_size ?? '10', 10)));
     const offset = (page - 1) * pageSize;
 
+    const statusFilter = req.query.status;
+    let where: string;
+    const params: unknown[] = [];
+    if (statusFilter === 'all') {
+      where = 'WHERE 1=1';
+    } else if (statusFilter === 'draft' || statusFilter === 'inactive') {
+      where = 'WHERE status = ?';
+      params.push(statusFilter);
+    } else {
+      where = "WHERE status = 'published'";
+    }
+
     const total = (db.prepare(
-      'SELECT COUNT(*) as count FROM videos WHERE status = ?'
-    ).get('published') as { count: number }).count;
+      `SELECT COUNT(*) as count FROM videos ${where}`,
+    ).get(...params) as { count: number }).count;
 
     const videos = db.prepare(
-      'SELECT * FROM videos WHERE status = ? ORDER BY created_at DESC LIMIT ? OFFSET ?'
-    ).all('published', pageSize, offset) as Array<Record<string, unknown>>;
+      `SELECT * FROM videos ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+    ).all(...params, pageSize, offset) as Array<Record<string, unknown>>;
 
-    const list = videos.map((v) => ({
-      ...v,
-      tags: JSON.parse(v.tags as string),
-    }));
+    const list = videos.map(rowToVideo);
 
     return {
       code: 0,
@@ -161,6 +205,123 @@ export async function videoRoutes(app: FastifyInstance) {
       data: { list, total, page, page_size: pageSize, has_more: offset + pageSize < total },
     };
   });
+
+  // POST /api/videos - 创建视频（仅商家）
+  app.post<{ Body: VideoCreateBody }>(
+    '/api/videos',
+    { preHandler: [requireMerchant] },
+    async (req, reply) => {
+      if (!req.user) return;
+      const body = req.body ?? {};
+
+      const title = asString(body.title);
+      const videoUrl = asString(body.video_url);
+      if (!title) {
+        reply.status(400).send({ code: 400, message: '视频标题不能为空' });
+        return;
+      }
+      if (!videoUrl) {
+        reply.status(400).send({ code: 400, message: '视频地址不能为空' });
+        return;
+      }
+
+      const description = asString(body.description);
+      const coverUrl = asString(body.cover_url);
+      // Author defaults to the merchant token's user, but accept overrides so the
+      // mobile add-video form (which already fills these from the merchant profile)
+      // doesn't have to round-trip through us.
+      const authorId = asString(body.author_id) || req.user.userId;
+      const authorName = asString(body.author_name);
+      const authorAvatar = asString(body.author_avatar);
+      const duration = typeof body.duration === 'number' && body.duration >= 0
+        ? Math.floor(body.duration)
+        : 0;
+      const tags = asStringArray(body.tags);
+      const linkedProductIds = asStringArray(body.linked_product_ids);
+
+      const rawStatus = asString(body.status) || 'draft';
+      if (!VALID_VIDEO_STATUSES.has(rawStatus)) {
+        reply.status(400).send({
+          code: 400,
+          message: "status 必须是 'draft' / 'published' / 'inactive'",
+        });
+        return;
+      }
+
+      const db = getDb();
+      const id = crypto.randomUUID();
+      db.prepare(
+        `INSERT INTO videos
+          (id, title, description, cover_url, video_url, author_id, author_name,
+           author_avatar, duration, tags, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        id,
+        title,
+        description,
+        coverUrl,
+        videoUrl,
+        authorId,
+        authorName,
+        authorAvatar,
+        duration,
+        JSON.stringify(tags),
+        rawStatus,
+      );
+
+      // Link products → this video. The products table stores a single video_id
+      // per product, so we just point each selected product at the new video.
+      if (linkedProductIds.length > 0) {
+        const link = db.prepare(
+          "UPDATE products SET video_id = ?, updated_at = datetime('now') WHERE id = ?",
+        );
+        for (const pid of linkedProductIds) {
+          link.run(id, pid);
+        }
+      }
+
+      const row = db
+        .prepare('SELECT * FROM videos WHERE id = ?')
+        .get(id) as Record<string, unknown>;
+      return { code: 0, data: rowToVideo(row) };
+    },
+  );
+
+  // PATCH /api/videos/:id - 更新视频状态（仅商家）
+  app.patch<{ Params: { id: string }; Body: { status?: unknown } }>(
+    '/api/videos/:id',
+    { preHandler: [requireMerchant] },
+    async (req, reply) => {
+      if (!req.user) return;
+      const db = getDb();
+
+      const existing = db
+        .prepare('SELECT id FROM videos WHERE id = ?')
+        .get(req.params.id) as { id: string } | undefined;
+      if (!existing) {
+        reply.status(404).send({ code: 404, message: '视频不存在' });
+        return;
+      }
+
+      const status = asString(req.body?.status);
+      if (!VALID_VIDEO_STATUSES.has(status)) {
+        reply.status(400).send({
+          code: 400,
+          message: "status 必须是 'draft' / 'published' / 'inactive'",
+        });
+        return;
+      }
+
+      db.prepare(
+        "UPDATE videos SET status = ?, updated_at = datetime('now') WHERE id = ?",
+      ).run(status, req.params.id);
+
+      const row = db
+        .prepare('SELECT * FROM videos WHERE id = ?')
+        .get(req.params.id) as Record<string, unknown>;
+      return { code: 0, data: rowToVideo(row) };
+    },
+  );
 
   // POST /api/videos/:id/like - 点赞/取消点赞
   app.post('/api/videos/:id/like', async (req: FastifyRequest<{ Params: { id: string }; Body: { user_id: string } }>) => {
