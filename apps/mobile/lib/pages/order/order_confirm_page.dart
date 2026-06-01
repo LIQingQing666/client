@@ -9,6 +9,7 @@ import '../../models/cart_model.dart';
 import '../../models/order_model.dart';
 import '../../provider/cart_provider.dart';
 import '../../provider/order_provider.dart';
+import '../../utils/toast.dart';
 
 /// 订单确认页面
 ///
@@ -141,9 +142,7 @@ final class _OrderConfirmPageState extends ConsumerState<OrderConfirmPage> {
   }
 
   void _showToast(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: AppColors.error),
-    );
+    showToast(message, type: ToastType.error);
   }
 
   @override

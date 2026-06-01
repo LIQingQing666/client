@@ -15,6 +15,7 @@ import '../../provider/follow_provider.dart';
 import '../../provider/live_provider.dart';
 import '../../provider/pip_provider.dart';
 import '../../widgets/coupon_countdown.dart';
+import '../../utils/toast.dart';
 import '../../widgets/danmaku_overlay.dart';
 import '../../widgets/floating_product_card.dart';
 import '../../widgets/product_detail_sheet.dart';
@@ -693,9 +694,7 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
               child: CouponCountdown(
                 coupon: state.coupons.first,
                 onClaim: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('优惠券已领取！'), backgroundColor: AppColors.success),
-                  );
+                showToast('优惠券已领取！', type: ToastType.success);
                 },
               ),
             ),

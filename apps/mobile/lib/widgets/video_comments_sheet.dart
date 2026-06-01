@@ -173,7 +173,7 @@ final class _VideoCommentsSheetState extends State<_VideoCommentsSheet> {
           _comments.removeWhere((c) => c['id'] == optimisticId);
         });
       }
-      showToast('评论发送失败，请重试', isError: true);
+      showToast('评论发送失败，请重试', type: ToastType.error);
     }
   }
 

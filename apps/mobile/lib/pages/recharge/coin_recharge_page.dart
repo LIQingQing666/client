@@ -6,6 +6,7 @@ import '../../core/app_constants.dart';
 import '../../provider/auth_provider.dart';
 import '../../provider/service_providers.dart';
 import '../../provider/user_provider.dart';
+import '../../utils/toast.dart';
 
 /// 充值套餐数据模型
 final class _RechargePackage {
@@ -145,13 +146,8 @@ final class _CoinRechargePageState extends ConsumerState<CoinRechargePage>
     }
   }
 
-  void _showToast(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: AppColors.error,
-      ),
-    );
+  void _showToast(String message, {ToastType type = ToastType.warning}) {
+    showToast(message, type: type);
   }
 
   @override

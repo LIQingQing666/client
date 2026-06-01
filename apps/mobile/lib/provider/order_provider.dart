@@ -152,7 +152,7 @@ final class OrderNotifier extends StateNotifier<OrderState> {
     } on ApiException catch (e) {
       // Show backend-specific error reason (库存不足 / 优惠券失效 etc.)
       final detail = e.data is Map ? (e.data as Map)['detail'] as String? : null;
-      showToast(detail ?? e.message, isError: true);
+      showToast(detail ?? e.message, type: ToastType.error);
       return null;
     } on Exception {
       showRetryToast('网络异常，请稍后重试', onRetry: () {
@@ -208,10 +208,10 @@ final class OrderNotifier extends StateNotifier<OrderState> {
       showToast('确认收货成功');
       return true;
     } on ApiException catch (e) {
-      showToast(e.message, isError: true);
+      showToast(e.message, type: ToastType.error);
       return false;
     } on Exception {
-      showToast('确认收货失败，请重试', isError: true);
+      showToast('确认收货失败，请重试', type: ToastType.error);
       return false;
     }
   }
