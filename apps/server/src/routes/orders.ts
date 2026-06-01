@@ -11,7 +11,86 @@ function processOrder(row: Record<string, unknown>) {
 }
 
 export async function orderRoutes(app: FastifyInstance) {
-  // POST /api/orders - 创建订单
+  // POST /api/orders/direct - 直接下单（不经过购物车，从视频/直播立即购买）
+  app.post('/api/orders/direct', async (req: FastifyRequest<{ Body: {
+    user_id: string;
+    product_id: string;
+    quantity?: number;
+    spec?: string;
+    address?: Record<string, string>;
+  } }>) => {
+    const db = getDb();
+    const { user_id, product_id, quantity = 1, spec = '', address = {} } = req.body;
+
+    if (!product_id) {
+      return { code: 400, message: '商品 ID 不能为空' };
+    }
+
+    // 查询商品
+    const product = db.prepare(
+      'SELECT id, name, cover_url, price, stock FROM products WHERE id = ? AND status = ?'
+    ).get(product_id, 'on') as Record<string, unknown> | undefined;
+
+    if (!product) {
+      return { code: 404, message: '商品不存在或已下架' };
+    }
+    if ((product.stock as number) < quantity) {
+      return { code: 422, message: `商品 ${product.name} 库存不足` };
+    }
+
+    // 计算金额
+    const totalAmount = (product.price as number) * quantity;
+    const discountAmount = 0;
+    const payAmount = totalAmount;
+
+    const orderItems = [{
+      product_id: product.id,
+      product_name: product.name,
+      product_cover: product.cover_url,
+      product_price: product.price,
+      spec,
+      quantity,
+      subtotal: totalAmount,
+    }];
+
+    const orderId = crypto.randomUUID();
+
+    // 扣减库存
+    db.prepare('UPDATE products SET stock = stock - ?, sales = sales + ? WHERE id = ?').run(
+      quantity, quantity, product_id
+    );
+
+    // 创建订单
+    db.prepare(
+      `INSERT INTO orders (id, user_id, total_amount, discount_amount, pay_amount, status, address, items)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      orderId,
+      user_id,
+      totalAmount,
+      discountAmount,
+      payAmount,
+      'pending',
+      JSON.stringify(address),
+      JSON.stringify(orderItems)
+    );
+
+    return {
+      code: 0,
+      data: {
+        id: orderId,
+        total_amount: totalAmount,
+        discount_amount: discountAmount,
+        pay_amount: payAmount,
+        status: 'pending',
+        items: orderItems,
+        product_id,
+        quantity,
+      },
+    };
+  });
+
+  // POST /api/orders - 创建订单（从购物车结算）
   app.post('/api/orders', async (req: FastifyRequest<{ Body: {
     user_id: string;
     items: Array<{ product_id: string; spec?: string; quantity: number; cart_item_id?: string }>;

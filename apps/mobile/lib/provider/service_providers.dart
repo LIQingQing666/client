@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive/hive.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../api/dio_client.dart';
 import '../api/recharge_api.dart';
 import '../api/upload_api.dart';
+import '../services/player_pool.dart';
 import '../services/storage_service.dart';
+import '../services/video_preload_manager.dart';
 import '../services/websocket_service.dart';
 
 final class ServiceProviderWidget extends StatelessWidget {
@@ -68,3 +71,13 @@ final uploadApiProvider = Provider<UploadApi>((ref) {
 });
 
 final currentTabIndexProvider = StateProvider<int>((ref) => 0);
+
+final connectivityProvider = Provider<Connectivity>((ref) => Connectivity());
+
+final playerPoolProvider = Provider<PlayerPool>((ref) => PlayerPool());
+
+final videoPreloadManagerProvider = Provider<VideoPreloadManager>((ref) {
+  final pool = ref.watch(playerPoolProvider);
+  final connectivity = ref.watch(connectivityProvider);
+  return VideoPreloadManager(pool: pool, connectivity: connectivity);
+});

@@ -52,6 +52,11 @@ final class _PaymentResultPageState extends ConsumerState<PaymentResultPage> {
       _isPaying = false;
       _payStatus = success ? 'paid' : 'failed';
     });
+
+    // Refresh the order list so the order page shows latest status.
+    if (success) {
+      ref.read(orderProvider.notifier).loadOrders();
+    }
   }
 
   @override
@@ -165,12 +170,18 @@ final class _PaymentResultPageState extends ConsumerState<PaymentResultPage> {
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: (isSuccess || isTimeout) ? AppColors.primary : AppColors.card,
+                foregroundColor: (isSuccess || isTimeout) ? Colors.white : AppColors.textHint,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 32,
                   vertical: AppDimens.paddingMd,
                 ),
               ),
-              child: const Text('查看订单'),
+              child: Text(
+                '查看订单',
+                style: TextStyle(
+                  color: (isSuccess || isTimeout) ? Colors.white : AppColors.textHint,
+                ),
+              ),
             ),
           ],
         ),

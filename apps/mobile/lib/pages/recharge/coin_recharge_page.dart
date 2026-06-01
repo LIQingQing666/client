@@ -6,6 +6,7 @@ import '../../core/app_constants.dart';
 import '../../provider/auth_provider.dart';
 import '../../provider/service_providers.dart';
 import '../../provider/user_provider.dart';
+import '../../utils/toast.dart';
 
 /// 充值套餐数据模型
 final class _RechargePackage {
@@ -145,13 +146,8 @@ final class _CoinRechargePageState extends ConsumerState<CoinRechargePage>
     }
   }
 
-  void _showToast(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: AppColors.error,
-      ),
-    );
+  void _showToast(String message, {ToastType type = ToastType.warning}) {
+    showToast(message, type: type);
   }
 
   @override
@@ -775,6 +771,9 @@ final class _CoinRechargePageState extends ConsumerState<CoinRechargePage>
             onPressed: canPay ? _doRecharge : null,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: AppColors.primary.withOpacity(0.5),
+              disabledForegroundColor: Colors.white.withOpacity(0.7),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(AppDimens.radiusMd),
               ),
@@ -794,6 +793,7 @@ final class _CoinRechargePageState extends ConsumerState<CoinRechargePage>
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
+                      color: Colors.white,
                     ),
                   ),
           ),

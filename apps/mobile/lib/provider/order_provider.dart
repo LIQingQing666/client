@@ -149,6 +149,29 @@ final class OrderNotifier extends StateNotifier<OrderState> {
         couponId: couponId,
       );
       return result;
+    } on ApiException catch (e) {
+      // Show backend-specific error reason (库存不足 / 优惠券失效 etc.)
+      final detail = e.data is Map ? (e.data as Map)['detail'] as String? : null;
+      showToast(detail ?? e.message, type: ToastType.error);
+      return null;
+    } on Exception {
+      showRetryToast('网络异常，请稍后重试', onRetry: () {
+        createOrder(items: items, address: address, couponId: couponId);
+      });
+      return null;
+    }
+  }
+
+  /// 直接下单（不经过购物车，从视频/直播立即购买）
+  Future<CreateOrderResult?> createDirectOrder({
+    required DirectOrderRequest request,
+  }) async {
+    try {
+      final result = await api.createDirectOrder(
+        userId: _userId,
+        request: request,
+      );
+      return result;
     }
     on Exception {
       showToast('下单失败，请重试');
@@ -185,10 +208,10 @@ final class OrderNotifier extends StateNotifier<OrderState> {
       showToast('确认收货成功');
       return true;
     } on ApiException catch (e) {
-      showToast(e.message, isError: true);
+      showToast(e.message, type: ToastType.error);
       return false;
     } on Exception {
-      showToast('确认收货失败，请重试', isError: true);
+      showToast('确认收货失败，请重试', type: ToastType.error);
       return false;
     }
   }

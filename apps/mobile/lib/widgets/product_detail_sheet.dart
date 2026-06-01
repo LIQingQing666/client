@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../core/app_constants.dart';
 import '../models/product_model.dart';
+import '../utils/responsive_helper.dart';
 
 final class ProductDetailSheet extends StatefulWidget {
   const ProductDetailSheet({
@@ -12,13 +13,17 @@ final class ProductDetailSheet extends StatefulWidget {
     this.onBuyNow,
     this.onRefreshAi,
     this.onSeekToTime,
+    this.onFavorite,
+    this.isFavorited = false,
   });
 
   final ProductModel product;
-  final VoidCallback? onAddToCart;
-  final VoidCallback? onBuyNow;
+  final void Function(String spec, int quantity)? onAddToCart;
+  final void Function(String spec, int quantity)? onBuyNow;
   final VoidCallback? onRefreshAi;
-  final VoidCallback? onSeekToTime;
+  final void Function(int seekTime)? onSeekToTime;
+  final VoidCallback? onFavorite;
+  final bool isFavorited;
 
   @override
   State<ProductDetailSheet> createState() => _ProductDetailSheetState();
@@ -49,11 +54,12 @@ final class _ProductDetailSheetState extends State<ProductDetailSheet> {
   Widget build(BuildContext context) {
     final product = widget.product;
     final bottomInset = MediaQuery.of(context).padding.bottom;
+    final isSmall = ResponsiveHelper.isSmallScreen(context);
 
     return DraggableScrollableSheet(
-      initialChildSize: 0.75,
+      initialChildSize: isSmall ? 0.6 : 0.75,
       maxChildSize: 0.92,
-      minChildSize: 0.5,
+      minChildSize: isSmall ? 0.45 : 0.5,
       expand: false,
       builder: (context, scrollController) {
         return Container(
@@ -159,9 +165,21 @@ final class _ProductDetailSheetState extends State<ProductDetailSheet> {
                       style: AppTextStyles.titleMedium,
                     ),
                     const SizedBox(height: AppDimens.paddingXs),
-                    Text(
-                      '已售 ${product.sales}件',
-                      style: AppTextStyles.bodyMedium,
+                    Row(
+                      children: [
+                        Text(
+                          '已售 ${product.sales}件',
+                          style: AppTextStyles.bodyMedium,
+                        ),
+                        const SizedBox(width: AppDimens.paddingMd),
+                        Text(
+                          product.stock > 0 ? '库存 ${product.stock}件' : '已售罄',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: product.stock > 0 ? AppColors.textSecondary : AppColors.primary,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -325,28 +343,16 @@ final class _ProductDetailSheetState extends State<ProductDetailSheet> {
                   ),
                 ),
 
-              // Video seek to product highlight
-              if (product.highlightTime > 0 && widget.onSeekToTime != null)
+              // Video seek to product highlight / segments
+              if (widget.onSeekToTime != null &&
+                  (product.segments.isNotEmpty || product.highlightTime > 0))
                 Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: AppDimens.paddingLg,
                   ),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: widget.onSeekToTime,
-                      icon: const Icon(Icons.play_circle_outline, size: 18),
-                      label: Text(
-                        '跳转到讲解 (${_formatTime(product.highlightTime)})',
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.primary,
-                        side: const BorderSide(color: AppColors.divider),
-                        padding: const EdgeInsets.symmetric(
-                          vertical: AppDimens.paddingMd,
-                        ),
-                      ),
-                    ),
+                  child: _SegmentSeekButton(
+                    product: product,
+                    onSeekToTime: widget.onSeekToTime!,
                   ),
                 ),
 
@@ -364,15 +370,61 @@ final class _ProductDetailSheetState extends State<ProductDetailSheet> {
                 ),
               ),
 
+              // Review summary
+              const Divider(height: 1, color: AppColors.divider),
+              Padding(
+                padding: const EdgeInsets.all(AppDimens.paddingLg),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Text('商品评价', style: AppTextStyles.titleMedium),
+                        const Spacer(),
+                        const Text('好评率 ', style: AppTextStyles.bodySmall),
+                        const Text('98%',
+                            style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.success)),
+                        const Icon(Icons.chevron_right,
+                            size: 16, color: AppColors.textHint),
+                      ],
+                    ),
+                    const SizedBox(height: AppDimens.paddingMd),
+                    _ReviewTile(
+                      avatar: '匿',
+                      name: '匿名用户',
+                      content: '质量非常好，颜色和图片一样，穿上很舒服，物超所值！',
+                      rating: 5,
+                    ),
+                    const Divider(height: 1, color: AppColors.divider),
+                    _ReviewTile(
+                      avatar: '小',
+                      name: '小王同学',
+                      content: '物流很快，包装也很精致，已经是第二次购买了。',
+                      rating: 5,
+                    ),
+                  ],
+                ),
+              ),
+
               const SizedBox(height: AppDimens.paddingLg),
             ],
           ),
         ),
         _BottomActionBar(
-          onAddToCart: widget.onAddToCart,
-          onBuyNow: widget.onBuyNow,
+          onAddToCart: widget.onAddToCart != null
+              ? () => widget.onAddToCart!(_selectedSpecs.values.join(','), _quantity)
+              : null,
+          onBuyNow: (product.stock > 0 && widget.onBuyNow != null)
+              ? () => widget.onBuyNow!(_selectedSpecs.values.join(','), _quantity)
+              : null,
+          onFavorite: widget.onFavorite,
+          isFavorited: widget.isFavorited,
           price: product.price,
           bottomInset: bottomInset,
+          stock: product.stock,
         ),
       ],
     ),
@@ -384,11 +436,198 @@ final class _ProductDetailSheetState extends State<ProductDetailSheet> {
   // Exposed methods
   Map<String, String> get selectedSpecs => Map.unmodifiable(_selectedSpecs);
   int get quantity => _quantity;
+}
+
+/// A seek button that adapts to the number of product segments.
+///
+/// - 0 segments + highlightTime > 0 → single jump button (backward compat)
+/// - 1 segment → single jump button with segment label
+/// - 2+ segments → button opens a segment picker dialog
+final class _SegmentSeekButton extends StatelessWidget {
+  const _SegmentSeekButton({required this.product, required this.onSeekToTime});
+
+  final ProductModel product;
+  final void Function(int seekTime) onSeekToTime;
 
   static String _formatTime(int seconds) {
     final min = seconds ~/ 60;
     final sec = seconds % 60;
     return '${min.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasMultipleSegments = product.segments.length > 1;
+
+    if (hasMultipleSegments) {
+      return SizedBox(
+        width: double.infinity,
+        child: OutlinedButton.icon(
+          onPressed: () => _showSegmentPicker(context),
+          icon: const Icon(Icons.playlist_play, size: 18),
+          label: Text('${product.segments.length}个讲解片段'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.primary,
+            side: const BorderSide(color: AppColors.divider),
+            padding: const EdgeInsets.symmetric(vertical: AppDimens.paddingMd),
+          ),
+        ),
+      );
+    }
+
+    // Single segment or legacy highlightTime
+    final time = product.segments.isNotEmpty
+        ? product.segments.first.startTime
+        : product.highlightTime;
+    final label = product.segments.isNotEmpty
+        ? product.segments.first.label
+        : null;
+
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: () => onSeekToTime(time),
+        icon: const Icon(Icons.play_circle_outline, size: 18),
+        label: Text(
+          label != null
+              ? '$label (${_formatTime(time)})'
+              : '跳转到讲解 (${_formatTime(time)})',
+        ),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.primary,
+          side: const BorderSide(color: AppColors.divider),
+          padding: const EdgeInsets.symmetric(vertical: AppDimens.paddingMd),
+        ),
+      ),
+    );
+  }
+
+  void _showSegmentPicker(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _SegmentPickerSheet(
+        segments: product.segments,
+        onSelected: (segment) {
+          Navigator.of(ctx).pop();
+          onSeekToTime(segment.startTime);
+        },
+      ),
+    );
+  }
+}
+
+/// A bottom sheet listing all product explanation segments.
+final class _SegmentPickerSheet extends StatelessWidget {
+  const _SegmentPickerSheet({required this.segments, required this.onSelected});
+
+  final List<ProductSegment> segments;
+  final void Function(ProductSegment segment) onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppDimens.radiusXl)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: AppDimens.paddingSm),
+          Center(
+            child: Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.textHint,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: AppDimens.paddingMd),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: AppDimens.paddingLg),
+            child: Text('选择讲解片段', style: AppTextStyles.titleMedium),
+          ),
+          const SizedBox(height: AppDimens.paddingMd),
+          ...segments.map((seg) => ListTile(
+                leading: const Icon(Icons.play_circle_outline,
+                    color: AppColors.primary),
+                title: Text(seg.label, style: AppTextStyles.bodyLarge),
+                subtitle: Text(
+                  seg.endTime > 0
+                      ? '${_SegmentSeekButton._formatTime(seg.startTime)} - ${_SegmentSeekButton._formatTime(seg.endTime)}'
+                      : _SegmentSeekButton._formatTime(seg.startTime),
+                  style: AppTextStyles.bodySmall,
+                ),
+                trailing: const Icon(Icons.chevron_right,
+                    color: AppColors.textHint),
+                onTap: () => onSelected(seg),
+              )),
+          const SizedBox(height: AppDimens.paddingLg),
+        ],
+      ),
+    );
+  }
+}
+
+/// A single review entry for the review summary section.
+final class _ReviewTile extends StatelessWidget {
+  const _ReviewTile({
+    required this.avatar,
+    required this.name,
+    required this.content,
+    this.rating = 5,
+  });
+
+  final String avatar;
+  final String name;
+  final String content;
+  final int rating;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppDimens.paddingSm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 14,
+            backgroundColor: AppColors.card,
+            child: Text(avatar,
+                style: const TextStyle(fontSize: 11, color: Colors.white)),
+          ),
+          const SizedBox(width: AppDimens.paddingSm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(name,
+                        style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textSecondary)),
+                    const SizedBox(width: AppDimens.paddingXs),
+                    ...List.generate(
+                      rating,
+                      (_) => const Icon(Icons.star,
+                          size: 10, color: AppColors.accent),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(content,
+                    style: AppTextStyles.bodyMedium, maxLines: 2),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -396,17 +635,25 @@ final class _BottomActionBar extends StatelessWidget {
   const _BottomActionBar({
     this.onAddToCart,
     this.onBuyNow,
+    this.onFavorite,
+    this.isFavorited = false,
     required this.price,
     required this.bottomInset,
+    this.stock = 0,
   });
 
   final VoidCallback? onAddToCart;
   final VoidCallback? onBuyNow;
+  final VoidCallback? onFavorite;
+  final bool isFavorited;
   final double price;
   final double bottomInset;
+  final int stock;
 
   @override
   Widget build(BuildContext context) {
+    final soldOut = stock <= 0;
+
     return Container(
       padding: EdgeInsets.only(
         left: AppDimens.paddingLg,
@@ -420,11 +667,27 @@ final class _BottomActionBar extends StatelessWidget {
       ),
       child: Row(
         children: [
+          GestureDetector(
+            onTap: onFavorite,
+            behavior: HitTestBehavior.opaque,
+            child: Padding(
+              padding: const EdgeInsets.all(AppDimens.paddingSm),
+              child: Icon(
+                isFavorited ? Icons.star : Icons.star_border,
+                color: isFavorited ? AppColors.primary : AppColors.textSecondary,
+                size: 28,
+              ),
+            ),
+          ),
+          const SizedBox(width: AppDimens.paddingSm),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('价格', style: AppTextStyles.bodySmall),
+              Text(soldOut ? '已售罄' : '价格',
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: soldOut ? AppColors.error : AppColors.textHint)),
               Text(
                 '¥${price.toStringAsFixed(0)}',
                 style: AppTextStyles.price,
@@ -432,7 +695,7 @@ final class _BottomActionBar extends StatelessWidget {
             ],
           ),
           const SizedBox(width: AppDimens.paddingMd),
-          if (onAddToCart != null) ...[
+          if (onAddToCart != null && !soldOut) ...[
             Expanded(
               child: ElevatedButton(
                 onPressed: onAddToCart,
@@ -444,23 +707,30 @@ final class _BottomActionBar extends StatelessWidget {
                     borderRadius: BorderRadius.circular(AppDimens.radiusMd),
                   ),
                 ),
-                child: const Text('加入购物车', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black)),
+                child: const Text('加入购物车',
+                    style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black)),
               ),
             ),
             const SizedBox(width: AppDimens.paddingSm),
           ],
           Expanded(
             child: ElevatedButton(
-              onPressed: onBuyNow,
+              onPressed: soldOut ? null : onBuyNow,
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
+                backgroundColor: soldOut ? AppColors.card : AppColors.primary,
+                foregroundColor: soldOut ? AppColors.textHint : Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: AppDimens.paddingMd),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(AppDimens.radiusMd),
                 ),
               ),
-              child: const Text('立即购买', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white)),
+              child: Text(
+                soldOut ? '已售罄' : '立即购买',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: soldOut ? AppColors.textHint : Colors.white,
+                ),
+              ),
             ),
           ),
         ],
@@ -479,9 +749,10 @@ final class _QtyButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
+      behavior: HitTestBehavior.opaque,
       child: Container(
-        width: 28,
-        height: 28,
+        width: 44,
+        height: 44,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           border: Border.all(
@@ -490,7 +761,7 @@ final class _QtyButton extends StatelessWidget {
         ),
         child: Icon(
           icon,
-          size: 16,
+          size: 22,
           color: onTap != null ? AppColors.textSecondary : AppColors.divider,
         ),
       ),
@@ -501,10 +772,12 @@ final class _QtyButton extends StatelessWidget {
 Future<void> showProductDetailSheet({
   required BuildContext context,
   required ProductModel product,
-  required VoidCallback onAddToCart,
-  required VoidCallback onBuyNow,
+  required void Function(String spec, int quantity) onAddToCart,
+  required void Function(String spec, int quantity) onBuyNow,
   VoidCallback? onRefreshAi,
-  VoidCallback? onSeekToTime,
+  void Function(int seekTime)? onSeekToTime,
+  VoidCallback? onFavorite,
+  bool isFavorited = false,
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -512,10 +785,12 @@ Future<void> showProductDetailSheet({
     backgroundColor: Colors.transparent,
     builder: (ctx) => ProductDetailSheet(
       product: product,
-      onAddToCart: onAddToCart,
-      onBuyNow: onBuyNow,
+      onAddToCart: (spec, quantity) => onAddToCart(spec, quantity),
+      onBuyNow: (spec, quantity) => onBuyNow(spec, quantity),
       onRefreshAi: onRefreshAi,
       onSeekToTime: onSeekToTime,
+      onFavorite: onFavorite,
+      isFavorited: isFavorited,
     ),
   );
 }

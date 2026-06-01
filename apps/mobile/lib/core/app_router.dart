@@ -17,6 +17,7 @@ import '../pages/live/live_room_page.dart';
 import '../pages/message/message_detail_page.dart';
 import '../pages/message/message_page.dart';
 import '../pages/mine/edit_profile_page.dart';
+import '../pages/mine/favorites_page.dart';
 import '../pages/mine/following_page.dart';
 import '../pages/mine/mine_page.dart';
 import '../pages/mine/settings_page.dart';
@@ -29,6 +30,7 @@ import '../pages/order/payment_detail_page.dart';
 import '../pages/order/payment_result_page.dart';
 import '../pages/search/search_page.dart';
 import '../provider/auth_provider.dart';
+import '../provider/cart_provider.dart';
 import '../provider/service_providers.dart';
 
 final GlobalKey<NavigatorState> _rootNavigatorKey =
@@ -59,10 +61,20 @@ final class AppRouter {
       GoRoute(
         path: '/order/confirm',
         name: 'orderConfirm',
-        builder: (context, state) => OrderConfirmPage(
-          total: double.parse(state.uri.queryParameters['total'] ?? '0'),
-          count: int.parse(state.uri.queryParameters['count'] ?? '0'),
-        ),
+        builder: (context, state) {
+          final q = state.uri.queryParameters;
+          return OrderConfirmPage(
+            total: double.parse(q['total'] ?? '0'),
+            count: int.parse(q['count'] ?? '0'),
+            from: q['from'] ?? 'cart',
+            productId: q['product_id'],
+            productName: q['product_name'],
+            productPrice: q['product_price'] != null ? double.tryParse(q['product_price']!) : null,
+            productCover: q['product_cover'],
+            spec: q['product_spec'],
+            quantity: int.parse(q['quantity'] ?? '1'),
+          );
+        },
       ),
       GoRoute(
         path: '/admin',
@@ -178,6 +190,11 @@ final class AppRouter {
         builder: (context, state) => MessageDetailPage(
           messageId: state.pathParameters['id']!,
         ),
+      ),
+      GoRoute(
+        path: '/favorites',
+        name: 'favorites',
+        builder: (context, state) => const FavoritesPage(),
       ),
       GoRoute(
         path: '/following',
@@ -313,9 +330,9 @@ final class _ScaffoldWithNavBarState extends ConsumerState<ScaffoldWithNavBar> {
   Widget build(BuildContext context) {
     final shell = widget.navigationShell;
     final index = shell.currentIndex;
+    final cartCount = ref.watch(cartProvider.select((s) => s.items.length));
 
     // Schedule microtask to avoid "provider modified during build" error.
-    // This fires after the current frame completes.
     Future.microtask(() {
       if (mounted) {
         ref.read(currentTabIndexProvider.notifier).state = index;
@@ -329,28 +346,38 @@ final class _ScaffoldWithNavBarState extends ConsumerState<ScaffoldWithNavBar> {
         onTap: (index) {
           shell.goBranch(index, initialLocation: true);
         },
-        items: const [
-          BottomNavigationBarItem(
+        items: <BottomNavigationBarItem>[
+          const BottomNavigationBarItem(
             icon: Icon(Icons.play_circle_outline),
             activeIcon: Icon(Icons.play_circle_filled),
             label: '视频',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.live_tv_outlined),
             activeIcon: Icon(Icons.live_tv),
             label: '直播',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.shopping_cart_outlined),
-            activeIcon: Icon(Icons.shopping_cart),
+            icon: cartCount > 0
+                ? Badge(
+                    label: Text('$cartCount'),
+                    child: const Icon(Icons.shopping_cart_outlined),
+                  )
+                : const Icon(Icons.shopping_cart_outlined),
+            activeIcon: cartCount > 0
+                ? Badge(
+                    label: Text('$cartCount'),
+                    child: const Icon(Icons.shopping_cart),
+                  )
+                : const Icon(Icons.shopping_cart),
             label: '购物车',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.receipt_long_outlined),
             activeIcon: Icon(Icons.receipt_long),
             label: '订单',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.person_outline),
             activeIcon: Icon(Icons.person),
             label: '我的',

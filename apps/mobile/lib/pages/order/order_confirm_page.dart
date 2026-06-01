@@ -3,21 +3,42 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../api/order_api.dart';
 import '../../core/app_constants.dart';
 import '../../models/cart_model.dart';
 import '../../models/order_model.dart';
 import '../../provider/cart_provider.dart';
 import '../../provider/order_provider.dart';
+import '../../utils/toast.dart';
 
+/// 订单确认页面
+///
+/// 支持两种数据来源：
+/// - from=cart（默认）：从购物车已选商品结算，参数 total/count 仅用于展示
+/// - from=buy_now：从视频/直播立即购买，参数传入商品快照
 final class OrderConfirmPage extends ConsumerStatefulWidget {
   const OrderConfirmPage({
     super.key,
     required this.total,
     required this.count,
+    this.from = 'cart',
+    this.productId,
+    this.productName,
+    this.productPrice,
+    this.productCover,
+    this.spec,
+    this.quantity = 1,
   });
 
   final double total;
   final int count;
+  final String from;
+  final String? productId;
+  final String? productName;
+  final double? productPrice;
+  final String? productCover;
+  final String? spec;
+  final int quantity;
 
   @override
   ConsumerState<OrderConfirmPage> createState() => _OrderConfirmPageState();
@@ -37,29 +58,70 @@ final class _OrderConfirmPageState extends ConsumerState<OrderConfirmPage> {
     super.dispose();
   }
 
+  /// 获取用于界面展示的商品列表
+  List<CartItemModel> _getDisplayItems() {
+    if (widget.from == 'buy_now') {
+      // 从路由参数构建单商品快照
+      final price = widget.productPrice ?? 0;
+      final item = CartItemModel(
+        id: '',
+        userId: '',
+        productId: widget.productId ?? '',
+        productName: widget.productName ?? '',
+        productCover: widget.productCover ?? '',
+        productPrice: price,
+        productOriginalPrice: price,
+        productStock: 9999,
+        spec: widget.spec ?? '',
+        quantity: widget.quantity,
+        selected: true,
+        productSpecs: const [],
+      );
+      return [item];
+    }
+    // 从购物车读取已选中商品
+    final cartState = ref.read(cartProvider);
+    return cartState.selectedItems;
+  }
+
   Future<void> _submit() async {
     if (_isSubmitting) {
       return;
     }
 
-    final cartState = ref.read(cartProvider);
-    final selectedItems = cartState.selectedItems;
-
-    if (selectedItems.isEmpty) {
+    final items = _getDisplayItems();
+    if (items.isEmpty) {
       _showToast('请选择商品');
       return;
     }
 
     setState(() => _isSubmitting = true);
 
-    final result = await ref.read(orderProvider.notifier).createOrder(
-      items: selectedItems,
-      address: OrderAddress(
-        name: _nameController.text,
-        phone: _phoneController.text,
-        detail: _detailController.text,
-      ),
+    final address = OrderAddress(
+      name: _nameController.text,
+      phone: _phoneController.text,
+      detail: _detailController.text,
     );
+
+    CreateOrderResult? result;
+
+    if (widget.from == 'buy_now') {
+      // 直接下单：调用独立的 direct 接口
+      result = await ref.read(orderProvider.notifier).createDirectOrder(
+        request: DirectOrderRequest(
+          productId: widget.productId ?? '',
+          quantity: widget.quantity,
+          spec: widget.spec ?? '',
+          address: address,
+        ),
+      );
+    } else {
+      // 购物车结算：走原流程
+      result = await ref.read(orderProvider.notifier).createOrder(
+        items: items,
+        address: address,
+      );
+    }
 
     if (!mounted) {
       return;
@@ -74,22 +136,18 @@ final class _OrderConfirmPageState extends ConsumerState<OrderConfirmPage> {
           'amount': result.payAmount.toString(),
         },
       );
-    }
-    else {
+    } else {
       _showToast('创建订单失败，请重试');
     }
   }
 
   void _showToast(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: AppColors.error),
-    );
+    showToast(message, type: ToastType.error);
   }
 
   @override
   Widget build(BuildContext context) {
-    final cartState = ref.watch(cartProvider);
-    final items = cartState.selectedItems;
+    final items = _getDisplayItems();
 
     return Scaffold(
       appBar: AppBar(title: const Text('确认订单')),
@@ -191,31 +249,35 @@ final class _OrderConfirmPageState extends ConsumerState<OrderConfirmPage> {
               child: SizedBox(
                 width: double.infinity,
                 height: 48,
-                child: ElevatedButton(
-                  onPressed: _isSubmitting ? null : _submit,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+                  child: ElevatedButton(
+                    onPressed: _isSubmitting ? null : _submit,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: AppColors.primary.withOpacity(0.5),
+                      disabledForegroundColor: Colors.white.withOpacity(0.7),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+                      ),
                     ),
+                    child: _isSubmitting
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text(
+                            '提交订单 ¥${widget.total.toStringAsFixed(0)}',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
                   ),
-                  child: _isSubmitting
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Text(
-                          '提交订单 ¥${widget.total.toStringAsFixed(0)}',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                ),
               ),
             ),
           ),

@@ -5,9 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 import '../core/app_constants.dart';
+import '../models/product_model.dart';
 import '../models/video_model.dart';
 import '../services/player_pool.dart';
 import '../utils/toast.dart';
+import 'floating_product_card.dart';
 
 final class VideoPlayerWidget extends StatefulWidget {
   const VideoPlayerWidget({
@@ -15,27 +17,37 @@ final class VideoPlayerWidget extends StatefulWidget {
     required this.video,
     required this.pool,
     this.isActive = false,
+    this.isMuted = false,
+    this.product,
     this.onLike,
     this.onMessage,
     this.onShare,
     this.onProductTap,
     this.onFollow,
+    this.onMuteToggle,
+    this.onAuthorTap,
+    this.onFavorite,
+    this.isFavorited = false,
     this.isFollowing = false,
     this.seekTrigger,
-    this.productCard,
   });
 
   final VideoModel video;
   final PlayerPool pool;
   final bool isActive;
+  final bool isMuted;
+  final ProductModel? product;
   final VoidCallback? onLike;
   final VoidCallback? onMessage;
   final VoidCallback? onShare;
   final VoidCallback? onProductTap;
   final VoidCallback? onFollow;
+  final VoidCallback? onMuteToggle;
+  final VoidCallback? onAuthorTap;
+  final VoidCallback? onFavorite;
+  final bool isFavorited;
   final bool isFollowing;
   final ValueNotifier<int>? seekTrigger;
-  final Widget? productCard;
 
   @override
   State<VideoPlayerWidget> createState() => _VideoPlayerWidgetState();
@@ -48,6 +60,7 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
   late Animation<double> _fadeAnimation;
   bool _isCoverVisible = true;
   bool _isInitialized = false;
+  bool _highlightActive = false;
 
   @override
   void initState() {
@@ -66,8 +79,17 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
   void _onSeekTriggered() {
     final seekTo = widget.seekTrigger?.value;
     if (seekTo != null && seekTo > 0 && _controller != null && _isInitialized) {
-      _controller!.seekTo(Duration(seconds: seekTo));
-      _controller!.play();
+      try {
+        _controller!.seekTo(Duration(seconds: seekTo));
+        _controller!.play();
+        // Brief highlight flash when a seek is triggered.
+        setState(() => _highlightActive = true);
+        Future.delayed(const Duration(milliseconds: 1200), () {
+          if (mounted) setState(() => _highlightActive = false);
+        });
+      } on Exception {
+        showToast('跳转失败，请重试');
+      }
     }
   }
 
@@ -77,6 +99,9 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
     if (widget.video.id != oldWidget.video.id) {
       _releasePlayer();
       _initPlayer();
+    }
+    if (widget.isMuted != oldWidget.isMuted) {
+      _applyMuteState();
     }
     _syncPlayState();
   }
@@ -93,6 +118,7 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
       }
 
       _controller = controller;
+      _applyMuteState();
       controller.addListener(_onControllerUpdate);
 
       if (controller.value.isInitialized) {
@@ -155,15 +181,24 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
         return;
       }
       _controller!.play();
+      _applyMuteState();
     } else {
       _controller?.pause();
-      _releasePlayer(dispose: true);
+      // Only release from pool without disposing — the controller may
+      // be reused when the user swipes back, avoiding a full re-init.
+      _releasePlayer(dispose: false);
       if (!_isCoverVisible && mounted) {
         setState(() {
           _isCoverVisible = true;
         });
         _fadeController.value = 0;
       }
+    }
+  }
+
+  void _applyMuteState() {
+    if (_controller != null && _isInitialized) {
+      _controller!.setVolume(widget.isMuted ? 0.0 : 1.0);
     }
   }
 
@@ -208,6 +243,33 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
           // Cover overlay with fade
           if (_isCoverVisible) _buildCover(),
 
+          // Highlight flash when seek is triggered (product segment jump)
+          if (_highlightActive)
+            Positioned.fill(
+              child: AnimatedOpacity(
+                opacity: _highlightActive ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 300),
+                child: IgnorePointer(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: AppColors.accent.withAlpha(180),
+                        width: 3,
+                      ),
+                      borderRadius: BorderRadius.circular(4),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.accent.withAlpha(80),
+                          blurRadius: 20,
+                          spreadRadius: 4,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
           // Play/pause indicator
           if (widget.isActive && _isInitialized && !_controller!.value.isPlaying)
             const Center(
@@ -222,34 +284,29 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
           _VideoInfoSection(
             video: widget.video,
             onFollow: widget.onFollow,
+            onAuthorTap: widget.onAuthorTap,
             isFollowing: widget.isFollowing,
           ),
 
-          //set product card position
-          Positioned(
-            right: AppDimens.paddingMd,
-            bottom: 180, // 与 _VideoActionBar 原位置一致
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                // 商品卡片（在按钮左侧）
-                if (widget.productCard != null) ...[
-                  widget.productCard!,
-                  const SizedBox(width: AppDimens.paddingSm),
-                ],
-                //  Right action bar
-                _VideoActionBar(
-                  video: widget.video,
-                  onLike: widget.onLike,
-                  onMessage: widget.onMessage,
-                  onShare: widget.onShare,
-                  onProductTap: widget.onProductTap,
-                  onMusicTap: () => showToast('音乐详情'),
-                ),
-              ],
-            ),
+          // Right action bar (mute, like, comment, share, favorite)
+          _VideoActionBar(
+            video: widget.video,
+            onLike: widget.onLike,
+            onMessage: widget.onMessage,
+            onShare: widget.onShare,
+            onMuteToggle: widget.onMuteToggle,
+            isMuted: widget.isMuted,
+            onFavorite: widget.onFavorite,
+            isFavorited: widget.isFavorited,
           ),
+
+          // Floating product card (TikTok-style overlay)
+          if (widget.product != null)
+            FloatingProductCard(
+              product: widget.product!,
+              onTap: widget.onProductTap ?? () {},
+              disableAutoFade: true,
+            ),
 
           // Progress bar
           if (widget.isActive && _controller != null && _isInitialized)
@@ -317,10 +374,11 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
 }
 
 final class _VideoInfoSection extends StatelessWidget {
-  const _VideoInfoSection({required this.video, this.onFollow, this.isFollowing = false});
+  const _VideoInfoSection({required this.video, this.onFollow, this.onAuthorTap, this.isFollowing = false});
 
   final VideoModel video;
   final VoidCallback? onFollow;
+  final VoidCallback? onAuthorTap;
   final bool isFollowing;
 
   @override
@@ -335,14 +393,17 @@ final class _VideoInfoSection extends StatelessWidget {
         children: [
           Row(
             children: [
-              CircleAvatar(
-                radius: 18,
-                backgroundColor: AppColors.card,
-                child: Text(
-                  video.authorName.isNotEmpty
-                      ? video.authorName[0]
-                      : '?',
-                  style: AppTextStyles.bodySmall,
+              GestureDetector(
+                onTap: onAuthorTap,
+                child: CircleAvatar(
+                  radius: 18,
+                  backgroundColor: AppColors.card,
+                  child: Text(
+                    video.authorName.isNotEmpty
+                        ? video.authorName[0]
+                        : '?',
+                    style: AppTextStyles.bodySmall,
+                  ),
                 ),
               ),
               const SizedBox(width: AppDimens.paddingSm),
@@ -415,16 +476,20 @@ final class _VideoActionBar extends StatelessWidget {
     this.onLike,
     this.onMessage,
     this.onShare,
-    this.onProductTap,
-    this.onMusicTap,
+    this.onMuteToggle,
+    this.onFavorite,
+    this.isMuted = false,
+    this.isFavorited = false,
   });
 
   final VideoModel video;
   final VoidCallback? onLike;
   final VoidCallback? onMessage;
   final VoidCallback? onShare;
-  final VoidCallback? onProductTap;
-  final VoidCallback? onMusicTap;
+  final VoidCallback? onMuteToggle;
+  final VoidCallback? onFavorite;
+  final bool isMuted;
+  final bool isFavorited;
 
   @override
   Widget build(BuildContext context) {
@@ -435,6 +500,13 @@ final class _VideoActionBar extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           _ActionButton(
+            icon: isMuted ? Icons.volume_off : Icons.volume_up,
+            iconColor: isMuted ? AppColors.textHint : null,
+            label: isMuted ? '已静音' : '音量',
+            onTap: onMuteToggle,
+          ),
+          const SizedBox(height: AppDimens.paddingLg),
+          _ActionButton(
             icon: video.isLiked ? Icons.favorite : Icons.favorite_border,
             iconColor: video.isLiked ? AppColors.primary : null,
             label: video.likeCountText,
@@ -442,30 +514,22 @@ final class _VideoActionBar extends StatelessWidget {
           ),
           const SizedBox(height: AppDimens.paddingLg),
           _ActionButton(
-            icon: Icons.message,
+            icon: Icons.chat_bubble_outline,
             label: video.commentCountText,
             onTap: onMessage,
           ),
           const SizedBox(height: AppDimens.paddingLg),
           _ActionButton(
-            icon: Icons.share,
+            icon: Icons.ios_share,
             label: video.shareCount.toString(),
             onTap: onShare,
           ),
           const SizedBox(height: AppDimens.paddingLg),
           _ActionButton(
-            icon: Icons.shopping_bag_outlined,
-            label: '商品',
-            onTap: onProductTap,
-          ),
-          const SizedBox(height: AppDimens.paddingLg),
-          GestureDetector(
-            onTap: onMusicTap,
-            child: const CircleAvatar(
-              radius: 22,
-              backgroundColor: AppColors.card,
-              child: Icon(Icons.music_note, color: AppColors.primary, size: 24),
-            ),
+            icon: isFavorited ? Icons.star : Icons.star_border,
+            label: isFavorited ? '已收藏' : '收藏',
+            iconColor: isFavorited ? AppColors.accent : null,
+            onTap: onFavorite,
           ),
         ],
       ),

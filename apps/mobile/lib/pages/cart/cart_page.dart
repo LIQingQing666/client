@@ -75,6 +75,7 @@ final class _CartPageState extends ConsumerState<CartPage> {
                   children: [
                     Expanded(
                       child: ListView.builder(
+                        addAutomaticKeepAlives: false,
                         padding: const EdgeInsets.symmetric(
                           vertical: AppDimens.paddingSm,
                         ),
@@ -296,14 +297,15 @@ final class _QtyBtn extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
+      behavior: HitTestBehavior.opaque,
       child: Container(
-        width: 24,
-        height: 24,
+        width: 44,
+        height: 44,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           border: Border.all(color: AppColors.divider),
         ),
-        child: Icon(icon, size: 14, color: AppColors.textSecondary),
+        child: Icon(icon, size: 20, color: AppColors.textSecondary),
       ),
     );
   }
