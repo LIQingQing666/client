@@ -171,6 +171,21 @@ CREATE TABLE IF NOT EXISTS recharge_records (
   FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
+CREATE TABLE IF NOT EXISTS refund_records (
+  id TEXT PRIMARY KEY,
+  order_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  product_id TEXT NOT NULL,
+  product_name TEXT NOT NULL,
+  quantity INTEGER NOT NULL DEFAULT 1,
+  refund_amount REAL NOT NULL,
+  reason TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'success',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (order_id) REFERENCES orders(id),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_videos_status ON videos(status);
 CREATE INDEX IF NOT EXISTS idx_videos_created ON videos(created_at);
 CREATE INDEX IF NOT EXISTS idx_products_status ON products(status);
@@ -182,6 +197,8 @@ CREATE INDEX IF NOT EXISTS idx_comments_product ON comments(product_id);
 CREATE INDEX IF NOT EXISTS idx_user_likes_user ON user_likes(user_id);
 CREATE INDEX IF NOT EXISTS idx_recharge_user ON recharge_records(user_id);
 CREATE INDEX IF NOT EXISTS idx_recharge_created ON recharge_records(created_at);
+CREATE INDEX IF NOT EXISTS idx_refund_order ON refund_records(order_id);
+CREATE INDEX IF NOT EXISTS idx_refund_user ON refund_records(user_id);
 `;
 
 export function initDb(): Database.Database {

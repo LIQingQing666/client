@@ -201,6 +201,30 @@ final class OrderNotifier extends StateNotifier<OrderState> {
     state = state.copyWith(clearPendingTab: true);
   }
 
+  /// 退货退款，成功后返回退款结果数据
+  Future<Map<String, dynamic>?> refundOrder({
+    required String orderId,
+    required String productId,
+    required String reason,
+  }) async {
+    try {
+      final result = await api.refundOrder(
+        orderId: orderId,
+        productId: productId,
+        reason: reason,
+      );
+      // 刷新订单列表
+      loadOrders(force: true);
+      return result;
+    } on ApiException catch (e) {
+      showToast(e.message, type: ToastType.error);
+      return null;
+    } on Exception {
+      showToast('退款失败，请重试', type: ToastType.error);
+      return null;
+    }
+  }
+
   /// 确认收货，成功后返回 true
   Future<bool> confirmOrder(String orderId) async {
     try {

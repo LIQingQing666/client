@@ -9,11 +9,13 @@ final class OrderModel {
     required this.address,
     required this.items,
     required this.createdAt,
+    this.refundedProductIds = const [],
   });
 
   factory OrderModel.fromJson(Map<String, dynamic> json) {
     final rawItems = (json['items'] as List<dynamic>?) ?? [];
     final rawAddress = (json['address'] as Map<String, dynamic>?) ?? {};
+    final rawRefundedIds = (json['refunded_product_ids'] as List<dynamic>?) ?? [];
     return OrderModel(
       id: json['id'] as String,
       userId: (json['user_id'] as String?) ?? '',
@@ -26,6 +28,7 @@ final class OrderModel {
           .map((e) => OrderItem.fromJson(e as Map<String, dynamic>))
           .toList(),
       createdAt: (json['created_at'] as String?) ?? '',
+      refundedProductIds: rawRefundedIds.cast<String>(),
     );
   }
 
@@ -38,6 +41,13 @@ final class OrderModel {
   final OrderAddress address;
   final List<OrderItem> items;
   final String createdAt;
+  final List<String> refundedProductIds;
+
+  /// 查询指定商品是否已退款
+  bool isItemRefunded(String productId) => refundedProductIds.contains(productId);
+
+  /// 是否有任意商品已退款
+  bool get hasAnyRefund => refundedProductIds.isNotEmpty;
 
   String get statusText {
     return switch (status) {
@@ -47,6 +57,7 @@ final class OrderModel {
       'completed' => '已完成',
       'cancelled' => '已取消',
       'payment_failed' => '支付失败',
+      'refunded' => '已退款',
       _ => status,
     };
   }

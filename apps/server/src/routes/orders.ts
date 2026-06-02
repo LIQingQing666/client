@@ -212,11 +212,18 @@ export async function orderRoutes(app: FastifyInstance) {
       `SELECT * FROM orders ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`
     ).all(...params, pageSize, offset) as Array<Record<string, unknown>>;
 
-    const list = orders.map((o) => ({
-      ...o,
-      items: JSON.parse(o.items as string),
-      address: JSON.parse(o.address as string),
-    }));
+    const list = orders.map((o) => {
+      const oid = o.id as string;
+      const refundedRows = db.prepare(
+        'SELECT DISTINCT product_id FROM refund_records WHERE order_id = ?'
+      ).all(oid) as Array<{ product_id: string }>;
+      return {
+        ...o,
+        items: JSON.parse(o.items as string),
+        address: JSON.parse(o.address as string),
+        refunded_product_ids: refundedRows.map(r => r.product_id),
+      };
+    });
 
     return { code: 0, data: { list, total, page, page_size: pageSize, has_more: offset + pageSize < total } };
   });
@@ -230,12 +237,18 @@ export async function orderRoutes(app: FastifyInstance) {
       return { code: 404, message: '订单不存在' };
     }
 
+    const oid = order.id as string;
+    const refundedRows = db.prepare(
+      'SELECT DISTINCT product_id FROM refund_records WHERE order_id = ?'
+    ).all(oid) as Array<{ product_id: string }>;
+
     return {
       code: 0,
       data: {
         ...order,
         items: JSON.parse(order.items as string),
         address: JSON.parse(order.address as string),
+        refunded_product_ids: refundedRows.map(r => r.product_id),
       },
     };
   });
@@ -289,6 +302,84 @@ export async function orderRoutes(app: FastifyInstance) {
         status,
         message: success ? '支付成功' : '支付失败，请重试',
         new_balance: updatedUser.coin_balance,
+      },
+    };
+  });
+
+  // POST /api/orders/:id/refund - 退货退款（商品级别退款，不改变订单整体状态）
+  app.post('/api/orders/:id/refund', async (req: FastifyRequest<{ Params: { id: string }; Body: { product_id: string; reason: string } }>) => {
+    const db = getDb();
+    const orderId = req.params.id;
+    const { product_id, reason } = req.body;
+
+    if (!product_id || !reason) {
+      return { code: 400, message: '参数错误：缺少商品ID或退款原因' };
+    }
+
+    const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId) as Record<string, unknown> | undefined;
+
+    if (!order) {
+      return { code: 404, message: '订单不存在' };
+    }
+    if (order.status !== 'completed') {
+      return { code: 422, message: '仅已完成订单可以申请退款' };
+    }
+
+    // 检查该商品是否已经退过款
+    const existingRefund = db.prepare(
+      'SELECT id FROM refund_records WHERE order_id = ? AND product_id = ?'
+    ).get(orderId, product_id) as Record<string, unknown> | undefined;
+    if (existingRefund) {
+      return { code: 422, message: '该商品已申请过退款' };
+    }
+
+    const items = JSON.parse(order.items as string) as Array<Record<string, unknown>>;
+    const targetItem = items.find((item) => item.product_id === product_id);
+
+    if (!targetItem) {
+      return { code: 404, message: '订单中未找到该商品' };
+    }
+
+    const quantity = targetItem.quantity as number;
+    const productPrice = targetItem.product_price as number;
+    const totalAmount = order.total_amount as number;
+    const payAmount = order.pay_amount as number;
+
+    // 按比例计算该商品实付金额： refundAmount = (商品单价 * 数量) * (payAmount / totalAmount)
+    const itemSubtotal = productPrice * quantity;
+    const ratio = totalAmount > 0 ? payAmount / totalAmount : 1;
+    const refundAmount = Math.round(itemSubtotal * ratio * 100) / 100;
+
+    // 注意：不修改订单 status，订单保持 'completed' 状态不变
+    // 退款仅通过 refund_records 表记录
+
+    // 退还抖币到用户余额
+    db.prepare('UPDATE users SET coin_balance = coin_balance + ?, updated_at = datetime(\'now\') WHERE id = ?').run(refundAmount, order.user_id as string);
+
+    // 插入退款记录
+    const refundId = `RF${Date.now()}${crypto.randomUUID().slice(0, 8)}`;
+    db.prepare(`
+      INSERT INTO refund_records (id, order_id, user_id, product_id, product_name, quantity, refund_amount, reason)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(refundId, orderId, order.user_id as string, product_id, targetItem.product_name as string, quantity, refundAmount, reason);
+
+    // 查询该订单所有已退款商品ID
+    const refundedRows = db.prepare(
+      'SELECT DISTINCT product_id FROM refund_records WHERE order_id = ?'
+    ).all(orderId) as Array<{ product_id: string }>;
+    const refundedProductIds = refundedRows.map(r => r.product_id);
+
+    // 获取更新后的余额
+    const updated = db.prepare('SELECT coin_balance FROM users WHERE id = ?').get(order.user_id as string) as { coin_balance: number };
+
+    return {
+      code: 0,
+      data: {
+        refund_id: refundId,
+        refund_amount: refundAmount,
+        refunded_product_ids: refundedProductIds,
+        new_balance: updated.coin_balance,
+        message: '退款成功，抖币已退还到您的账户',
       },
     };
   });

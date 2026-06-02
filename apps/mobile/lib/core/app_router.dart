@@ -29,6 +29,8 @@ import '../pages/order/order_detail_page.dart';
 import '../pages/order/order_page.dart';
 import '../pages/order/payment_detail_page.dart';
 import '../pages/order/payment_result_page.dart';
+import '../pages/order/refund_reason_page.dart';
+import '../pages/order/refund_success_page.dart';
 import '../pages/search/search_page.dart';
 import '../provider/auth_provider.dart';
 import '../provider/cart_provider.dart';
@@ -241,6 +243,31 @@ final class AppRouter {
             from: query['from'],
             orderId: query['order_id'],
             payAmount: query['pay_amount'] != null ? double.tryParse(query['pay_amount']!) : null,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/order/refund/reason',
+        name: 'refundReason',
+        builder: (context, state) {
+          final q = state.uri.queryParameters;
+          return RefundReasonPage(
+            orderId: q['order_id'] ?? '',
+            productId: q['product_id'] ?? '',
+            productName: q['product_name'] ?? '',
+            productCover: q['product_cover'] ?? '',
+            amount: double.parse(q['amount'] ?? '0'),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/order/refund/success',
+        name: 'refundSuccess',
+        builder: (context, state) {
+          final q = state.uri.queryParameters;
+          return RefundSuccessPage(
+            refundAmount: double.parse(q['refund_amount'] ?? '0'),
+            newBalance: double.parse(q['new_balance'] ?? '0'),
           );
         },
       ),
