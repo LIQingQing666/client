@@ -186,6 +186,18 @@ CREATE TABLE IF NOT EXISTS refund_records (
   FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
+CREATE TABLE IF NOT EXISTS customer_service_messages (
+  id TEXT PRIMARY KEY,
+  order_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  sender_type TEXT NOT NULL DEFAULT 'user',
+  content TEXT NOT NULL,
+  msg_type TEXT NOT NULL DEFAULT 'text',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (order_id) REFERENCES orders(id),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_videos_status ON videos(status);
 CREATE INDEX IF NOT EXISTS idx_videos_created ON videos(created_at);
 CREATE INDEX IF NOT EXISTS idx_products_status ON products(status);

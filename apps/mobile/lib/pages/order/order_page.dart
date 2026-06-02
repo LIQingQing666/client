@@ -419,7 +419,37 @@ final class _OrderCard extends ConsumerWidget {
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                if (!order.hasAnyRefund) const Spacer(),
+                const Spacer(),
+                GestureDetector(
+                  onTap: () {
+                    context.pushNamed(
+                      'customerService',
+                      queryParameters: {
+                        'order_id': order.id,
+                        'order_items_json': order.itemsJson,
+                        'pay_amount': order.payAmount.toString(),
+                      },
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: AppColors.primary.withOpacity(0.6)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '售后客服',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ],

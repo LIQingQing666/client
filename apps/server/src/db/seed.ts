@@ -46,6 +46,7 @@ function seed() {
   initDb();
 
   // Clean existing data
+  db.exec('DELETE FROM customer_service_messages');
   db.exec('DELETE FROM refund_records');
   db.exec('DELETE FROM recharge_records');
   db.exec('DELETE FROM user_likes');

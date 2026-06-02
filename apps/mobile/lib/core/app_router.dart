@@ -31,6 +31,7 @@ import '../pages/order/payment_detail_page.dart';
 import '../pages/order/payment_result_page.dart';
 import '../pages/order/refund_reason_page.dart';
 import '../pages/order/refund_success_page.dart';
+import '../pages/order/customer_service_page.dart';
 import '../pages/search/search_page.dart';
 import '../provider/auth_provider.dart';
 import '../provider/cart_provider.dart';
@@ -268,6 +269,18 @@ final class AppRouter {
           return RefundSuccessPage(
             refundAmount: double.parse(q['refund_amount'] ?? '0'),
             newBalance: double.parse(q['new_balance'] ?? '0'),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/order/customer-service',
+        name: 'customerService',
+        builder: (context, state) {
+          final q = state.uri.queryParameters;
+          return CustomerServicePage(
+            orderId: q['order_id'] ?? '',
+            orderItemsJson: q['order_items_json'] ?? '[]',
+            payAmount: double.parse(q['pay_amount'] ?? '0'),
           );
         },
       ),

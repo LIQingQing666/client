@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 final class OrderModel {
   const OrderModel({
     required this.id,
@@ -48,6 +50,20 @@ final class OrderModel {
 
   /// 是否有任意商品已退款
   bool get hasAnyRefund => refundedProductIds.isNotEmpty;
+
+  /// 商品列表的 JSON 字符串（用于传递给客服页面）
+  String get itemsJson {
+    final list = items.map((item) => {
+      'product_id': item.productId,
+      'product_name': item.productName,
+      'product_cover': item.productCover,
+      'product_price': item.productPrice,
+      'spec': item.spec,
+      'quantity': item.quantity,
+      'subtotal': item.subtotal,
+    }).toList();
+    return jsonEncode(list);
+  }
 
   String get statusText {
     return switch (status) {
