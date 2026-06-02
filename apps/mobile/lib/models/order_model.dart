@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 final class OrderModel {
   const OrderModel({
     required this.id,
@@ -9,11 +11,13 @@ final class OrderModel {
     required this.address,
     required this.items,
     required this.createdAt,
+    this.refundedProductIds = const [],
   });
 
   factory OrderModel.fromJson(Map<String, dynamic> json) {
     final rawItems = (json['items'] as List<dynamic>?) ?? [];
     final rawAddress = (json['address'] as Map<String, dynamic>?) ?? {};
+    final rawRefundedIds = (json['refunded_product_ids'] as List<dynamic>?) ?? [];
     return OrderModel(
       id: json['id'] as String,
       userId: (json['user_id'] as String?) ?? '',
@@ -26,6 +30,7 @@ final class OrderModel {
           .map((e) => OrderItem.fromJson(e as Map<String, dynamic>))
           .toList(),
       createdAt: (json['created_at'] as String?) ?? '',
+      refundedProductIds: rawRefundedIds.cast<String>(),
     );
   }
 
@@ -38,6 +43,27 @@ final class OrderModel {
   final OrderAddress address;
   final List<OrderItem> items;
   final String createdAt;
+  final List<String> refundedProductIds;
+
+  /// 查询指定商品是否已退款
+  bool isItemRefunded(String productId) => refundedProductIds.contains(productId);
+
+  /// 是否有任意商品已退款
+  bool get hasAnyRefund => refundedProductIds.isNotEmpty;
+
+  /// 商品列表的 JSON 字符串（用于传递给客服页面）
+  String get itemsJson {
+    final list = items.map((item) => {
+      'product_id': item.productId,
+      'product_name': item.productName,
+      'product_cover': item.productCover,
+      'product_price': item.productPrice,
+      'spec': item.spec,
+      'quantity': item.quantity,
+      'subtotal': item.subtotal,
+    }).toList();
+    return jsonEncode(list);
+  }
 
   String get statusText {
     return switch (status) {
@@ -47,6 +73,7 @@ final class OrderModel {
       'completed' => '已完成',
       'cancelled' => '已取消',
       'payment_failed' => '支付失败',
+      'refunded' => '已退款',
       _ => status,
     };
   }

@@ -20,7 +20,7 @@ final class RechargeResultPage extends StatelessWidget {
   final double total;
   final double newBalance;
 
-  /// 来源标识：'payment' 表示从支付页面跳转过来
+  /// 来源标识：'payment'→支付页面 | 'gift'→直播间礼物
   final String? from;
 
   /// 从支付页面跳转时携带的订单 ID
@@ -29,6 +29,42 @@ final class RechargeResultPage extends StatelessWidget {
   /// 从支付页面跳转时携带的待支付金额
   final double? payAmount;
 
+  String get _buttonText {
+    switch (from) {
+      case 'payment':
+        return '返回支付页面';
+      case 'gift':
+        return '返回直播间';
+      default:
+        return '返回个人中心';
+    }
+  }
+
+  void _onBackPressed(BuildContext context) {
+    switch (from) {
+      case 'payment':
+        if (orderId != null) {
+          context.pushReplacementNamed(
+            'paymentDetail',
+            pathParameters: <String, String>{'orderId': orderId!},
+            queryParameters: <String, String>{
+              'amount': (payAmount ?? 0).toString(),
+            },
+          );
+        } else {
+          context.go('/mine');
+        }
+        break;
+      case 'gift':
+        // 返回直播间列表页
+        context.go('/live');
+        break;
+      default:
+        context.go('/mine');
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -36,7 +72,7 @@ final class RechargeResultPage extends StatelessWidget {
         title: const Text('充值结果'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.pop(),
+          onPressed: () => _onBackPressed(context),
         ),
       ),
       body: Column(
@@ -170,21 +206,7 @@ final class RechargeResultPage extends StatelessWidget {
                 width: double.infinity,
                 height: 48,
                 child: ElevatedButton(
-                  onPressed: () {
-                    // 从支付页面跳转过来的，回支付页面
-                    if (from == 'payment' && orderId != null) {
-                      context.pushReplacementNamed(
-                        'paymentDetail',
-                        pathParameters: <String, String>{'orderId': orderId!},
-                        queryParameters: <String, String>{
-                          'amount': (payAmount ?? 0).toString(),
-                        },
-                      );
-                    } else {
-                      // 从个人中心跳转过来的，回个人中心
-                      context.go('/mine');
-                    }
-                  },
+                  onPressed: () => _onBackPressed(context),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
@@ -193,7 +215,7 @@ final class RechargeResultPage extends StatelessWidget {
                     ),
                   ),
                   child: Text(
-                    from == 'payment' ? '返回支付页面' : '返回个人中心',
+                    _buttonText,
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,

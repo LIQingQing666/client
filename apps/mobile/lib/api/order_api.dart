@@ -106,6 +106,30 @@ final class OrderApi {
     return response.data!['data'] as Map<String, dynamic>;
   }
 
+  /// 退货退款（仅已完成订单可操作）
+  Future<Map<String, dynamic>> refundOrder({
+    required String orderId,
+    required String productId,
+    required String reason,
+  }) async {
+    final response = await client.post<Map<String, dynamic>>(
+      '/orders/$orderId/refund',
+      data: <String, dynamic>{
+        'product_id': productId,
+        'reason': reason,
+      },
+    );
+    final body = response.data!;
+    if (body['code'] != 0) {
+      throw BusinessException(
+        body['message'] as String? ?? '退款失败',
+        statusCode: 200,
+        data: body,
+      );
+    }
+    return body['data'] as Map<String, dynamic>;
+  }
+
   /// 确认收货（仅已支付订单可操作）
   Future<OrderModel> confirmOrder(String orderId) async {
     final response = await client.post<Map<String, dynamic>>(

@@ -98,21 +98,60 @@ export async function liveRoutes(app: FastifyInstance) {
     };
   });
 
-  // POST /api/live/gift - 发送礼物
-  app.post('/api/live/gift', async (req) => {
+  // POST /api/live/gift - 发送礼物（抖币扣减）
+  app.post('/api/live/gift', async (req, reply) => {
     const { user_id, gift_id, gift_name, price, room_id } = req.body as {
       user_id: string; gift_id: string; gift_name: string; price: number; room_id: string;
     };
     const db = getDb();
 
-    const user = db.prepare('SELECT id FROM users WHERE id = ?').get(user_id);
+    // 校验用户存在
+    const user = db.prepare('SELECT id, coin_balance FROM users WHERE id = ?').get(user_id) as
+      { id: string; coin_balance: number } | undefined;
     if (!user) {
-      return { code: 404, message: '用户不存在' };
+      return reply.status(404).send({ code: 404, message: '用户不存在' });
     }
+
+    // 校验余额是否足够
+    if (user.coin_balance < price) {
+      return reply.status(422).send({
+        code: 422,
+        message: '抖币余额不足',
+        data: { balance: user.coin_balance, need: price, diff: price - user.coin_balance },
+      });
+    }
+
+    // 扣减抖币
+    db.prepare('UPDATE users SET coin_balance = coin_balance - ?, updated_at = datetime(\'now\') WHERE id = ?')
+      .run(price, user_id);
+
+    // 获取更新后余额
+    const updated = db.prepare('SELECT coin_balance FROM users WHERE id = ?').get(user_id) as {
+      coin_balance: number;
+    };
+
+    // 通过 WebSocket 广播礼物消息到直播间
+    const io = getIO();
+    io.to(room_id).emit('danmaku', {
+      event: 'danmaku',
+      id: `gift_${Date.now()}`,
+      user_name: '赠送礼物',
+      content: `${gift_name}`,
+      type: 'system',
+      timestamp: new Date().toISOString(),
+    });
 
     return {
       code: 0,
-      data: { user_id, gift_id, gift_name, price, room_id, timestamp: new Date().toISOString() },
+      data: {
+        user_id,
+        gift_id,
+        gift_name,
+        price,
+        room_id,
+        new_balance: updated.coin_balance,
+        timestamp: new Date().toISOString(),
+      },
     };
   });
 }

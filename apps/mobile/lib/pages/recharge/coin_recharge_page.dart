@@ -135,6 +135,8 @@ final class _CoinRechargePageState extends ConsumerState<CoinRechargePage>
           queryParams['from'] = 'payment';
           queryParams['order_id'] = widget.orderId!;
           queryParams['pay_amount'] = (widget.payAmount ?? 0).toString();
+        } else if (widget.from == 'gift') {
+          queryParams['from'] = 'gift';
         }
         context.pushReplacementNamed('rechargeResult', queryParameters: queryParams);
       }

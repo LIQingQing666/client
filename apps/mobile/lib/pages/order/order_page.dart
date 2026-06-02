@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import '../../core/app_constants.dart';
 import '../../models/order_model.dart';
 import '../../provider/order_provider.dart';
-import '../../utils/toast.dart';
 
 final class OrderPage extends ConsumerStatefulWidget {
   const OrderPage({super.key});
@@ -19,6 +18,7 @@ final class _OrderPageState extends ConsumerState<OrderPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
   final List<String> _tabs = ['全部', '待支付', '已支付', '已完成'];
+  bool _isInitialized = false;
 
   @override
   void initState() {
@@ -35,33 +35,53 @@ final class _OrderPageState extends ConsumerState<OrderPage>
   }
 
   void _onTabChanged() {
-    if (!_tabController.indexIsChanging) {
-      final statusMap = <int, String?>{
-        0: null,
-        1: 'pending',
-        2: 'paid',
-        3: 'completed',
-      };
-      ref.read(orderProvider.notifier).loadOrders(
-            status: statusMap[_tabController.index],
-          );
-    }
+    if (_tabController.indexIsChanging) return;
+    if (!_isInitialized) return;
+    final statusMap = <int, String?>{
+      0: null,
+      1: 'pending',
+      2: 'paid',
+      3: 'completed',
+    };
+    ref.read(orderProvider.notifier).loadOrders(
+          status: statusMap[_tabController.index],
+        );
+  }
+
+  void _loadCurrentTab({required WidgetRef ref}) {
+    final statusMap = <int, String?>{
+      0: null,
+      1: 'pending',
+      2: 'paid',
+      3: 'completed',
+    };
+    ref.read(orderProvider.notifier).loadOrders(
+          status: statusMap[_tabController.index],
+        );
   }
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(orderProvider);
 
+    // 首次 build 时加载当前 tab 的数据（仅在页面重建时执行一次）
+    if (!_isInitialized) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _isInitialized = true;
+          _loadCurrentTab(ref: ref);
+        }
+      });
+    }
+
     // 处理外部请求的 tab 切换（支付成功后从 paymentResult 返回）
     final pendingTab = state.pendingTabIndex;
     if (pendingTab != null && pendingTab >= 0 && pendingTab < _tabs.length) {
-      // 使用 post-frame callback 避免在 build 中触发 setState
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           ref.read(orderProvider.notifier).clearPendingTab();
           _tabController.animateTo(pendingTab);
-          final statusMap = <int, String?>{0: null, 1: 'pending', 2: 'paid', 3: 'completed'};
-          ref.read(orderProvider.notifier).loadOrders(status: statusMap[pendingTab]);
+          _loadCurrentTab(ref: ref);
         }
       });
     }
@@ -164,10 +184,6 @@ final class _OrderCard extends ConsumerWidget {
     );
   }
 
-  void _showAfterSaleNotAvailable(BuildContext context) {
-    showToast('客服功能正在开发中，敬请期待', type: ToastType.info);
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return GestureDetector(
@@ -199,46 +215,116 @@ final class _OrderCard extends ConsumerWidget {
               ],
             ),
             const Divider(color: AppColors.divider),
-            ...order.items.take(3).map((item) => GestureDetector(
-                  onTap: () => context.pushNamed(
-                    'productDetail',
-                    pathParameters: {'id': item.productId},
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: AppDimens.paddingSm),
-                    child: Row(
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
-                          child: CachedNetworkImage(
-                            imageUrl: item.productCover,
-                            width: 56,
-                            height: 56,
-                            fit: BoxFit.cover,
-                            placeholder: (_, __) => Container(color: AppColors.card),
-                            errorWidget: (_, __, ___) => Container(color: AppColors.card),
-                          ),
-                        ),
-                        const SizedBox(width: AppDimens.paddingMd),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(item.productName,
-                                  style: AppTextStyles.bodyLarge,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis),
-                              Text(
-                                'x${item.quantity}  ¥${item.productPrice.toStringAsFixed(0)}',
-                                style: AppTextStyles.bodySmall,
+                    ...order.items.take(3).map((item) => Padding(
+                      padding: const EdgeInsets.only(bottom: AppDimens.paddingSm),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          GestureDetector(
+                            onTap: () => context.pushNamed(
+                              'productDetail',
+                              pathParameters: {'id': item.productId},
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: CachedNetworkImage(
+                                imageUrl: item.productCover,
+                                width: 56,
+                                height: 56,
+                                fit: BoxFit.cover,
+                                placeholder: (_, __) => Container(color: AppColors.card),
+                                errorWidget: (_, __, ___) => Container(color: AppColors.card),
                               ),
-                            ],
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                )),
+                          const SizedBox(width: AppDimens.paddingMd),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                GestureDetector(
+                                  onTap: () => context.pushNamed(
+                                    'productDetail',
+                                    pathParameters: {'id': item.productId},
+                                  ),
+                                  child: Text(item.productName,
+                                      style: AppTextStyles.bodyLarge,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis),
+                                ),
+                                const SizedBox(height: 2),
+                                if (item.spec.isNotEmpty)
+                                  Text(
+                                    item.spec,
+                                    style: AppTextStyles.bodySmall,
+                                  ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'x${item.quantity}  ¥${item.productPrice.toStringAsFixed(0)}',
+                                  style: AppTextStyles.bodySmall,
+                                ),
+                                // 已完成订单：已退款商品显示标记，未退款商品显示「退货/退款」按钮
+                                if (order.status == 'completed')
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 6),
+                                    child: order.isItemRefunded(item.productId)
+                                        ? Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                              vertical: 3,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.textHint.withOpacity(0.1),
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            child: const Text(
+                                              '已退款',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: AppColors.textHint,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          )
+                                        : GestureDetector(
+                                            onTap: () {
+                                              context.pushNamed(
+                                                'refundReason',
+                                                queryParameters: {
+                                                  'order_id': order.id,
+                                                  'product_id': item.productId,
+                                                  'product_name': item.productName,
+                                                  'product_cover': item.productCover,
+                                                  'amount': order.payAmount.toString(),
+                                                },
+                                              );
+                                            },
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(
+                                                horizontal: 10,
+                                                vertical: 3,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                border: Border.all(color: AppColors.error.withOpacity(0.6)),
+                                                borderRadius: BorderRadius.circular(12),
+                                              ),
+                                              child: Text(
+                                                '退货/退款',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: AppColors.error,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    )),
           if (order.items.length > 3)
             Padding(
               padding: const EdgeInsets.only(bottom: AppDimens.paddingSm),
@@ -322,31 +408,46 @@ final class _OrderCard extends ConsumerWidget {
                 Icon(
                   Icons.verified,
                   size: 16,
-                  color: AppColors.success,
+                  color: order.hasAnyRefund ? AppColors.textHint : AppColors.success,
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  '已确认收到',
+                  order.hasAnyRefund ? '部分商品已退款' : '已确认收到',
                   style: TextStyle(
                     fontSize: 13,
-                    color: AppColors.success,
+                    color: order.hasAnyRefund ? AppColors.textHint : AppColors.success,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
                 const Spacer(),
-                OutlinedButton.icon(
-                  onPressed: () => _showAfterSaleNotAvailable(context),
-                  icon: const Icon(Icons.headset_mic_outlined, size: 16),
-                  label: const Text('售后', style: TextStyle(fontSize: 13)),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.textSecondary,
-                    side: const BorderSide(color: AppColors.divider),
+                GestureDetector(
+                  onTap: () {
+                    context.pushNamed(
+                      'customerService',
+                      queryParameters: {
+                        'order_id': order.id,
+                        'order_items_json': order.itemsJson,
+                        'pay_amount': order.payAmount.toString(),
+                      },
+                    );
+                  },
+                  child: Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: AppDimens.paddingSm,
+                      horizontal: 10,
+                      vertical: 3,
                     ),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: AppColors.primary.withOpacity(0.6)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '售后客服',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ),
                 ),
               ],

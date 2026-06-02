@@ -16,6 +16,7 @@ import { commentRoutes } from './routes/comments.js';
 import { adminRoutes } from './routes/admin.js';
 import { liveRoutes } from './routes/live.js';
 import { rechargeRoutes } from './routes/recharge.js';
+import { customerServiceRoutes } from './routes/customer_service.js';
 import { uploadRoutes, uploadsRoot } from './routes/upload.js';
 import { createWebSocketServer } from './websocket/live.js';
 
@@ -59,8 +60,9 @@ async function main() {
   await app.register(commentRoutes);
   await app.register(liveRoutes);
   await app.register(adminRoutes);
-  await app.register(rechargeRoutes);
-  await app.register(uploadRoutes);
+await app.register(rechargeRoutes);
+await app.register(customerServiceRoutes);
+await app.register(uploadRoutes);
 
   // Health check
   app.get('/api/health', async () => ({ code: 0, message: 'ok', timestamp: new Date().toISOString() }));

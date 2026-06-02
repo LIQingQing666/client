@@ -23,6 +23,24 @@ final class LiveApi {
     final data = response.data!['data'] as Map<String, dynamic>;
     return LiveRoomDetail.fromJson(data);
   }
+
+  /// 发送礼物（扣减抖币）
+  Future<Map<String, dynamic>> sendGift({
+    required String userId,
+    required String giftId,
+    required String giftName,
+    required int price,
+    required String roomId,
+  }) async {
+    final response = await client.post<Map<String, dynamic>>('/live/gift', data: {
+      'user_id': userId,
+      'gift_id': giftId,
+      'gift_name': giftName,
+      'price': price,
+      'room_id': roomId,
+    });
+    return response.data!['data'] as Map<String, dynamic>;
+  }
 }
 
 final class LiveRoomDetail {
