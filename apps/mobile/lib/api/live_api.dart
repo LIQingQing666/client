@@ -41,6 +41,86 @@ final class LiveApi {
     });
     return response.data!['data'] as Map<String, dynamic>;
   }
+
+  /// 获取商家的直播间列表
+  Future<List<LiveRoomInfo>> getMyRooms() async {
+    final response = await client.get<Map<String, dynamic>>('/live/rooms/mine');
+    final data = response.data!['data'] as Map<String, dynamic>;
+    final list = data['list'] as List<dynamic>;
+    return list
+        .map((e) => LiveRoomInfo.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// 创建直播间（商家）
+  Future<LiveRoomInfo> createRoom({required String title, required String coverUrl, required List<String> productIds, List<String>? tags}) async {
+    final response = await client.post<Map<String, dynamic>>(
+      '/live/rooms',
+      data: {
+        'title': title,
+        'cover_url': coverUrl,
+        'product_ids': productIds,
+        'tags': tags ?? [],
+      },
+    );
+    return LiveRoomInfo.fromJson(
+      response.data!['data'] as Map<String, dynamic>,
+    );
+  }
+
+  /// 开始直播（商家）
+  Future<void> startLive(String roomId) async {
+    await client.post('/live/rooms/$roomId/start');
+  }
+
+  /// 结束直播（商家）
+  Future<void> endLive(String roomId) async {
+    await client.post('/live/rooms/$roomId/end');
+  }
+
+  /// 切换讲解商品（商家）
+  Future<void> switchProduct({
+    required String roomId,
+    required String productId,
+  }) async {
+    await client.post('/live/rooms/$roomId/product', data: {
+      'product_id': productId,
+    });
+  }
+
+  /// 进入直播间
+  // Future<void> joinRoom(String roomId) async {
+  //   await client.post('/live/rooms/$roomId/join');
+  // }
+
+  /// 离开直播间
+  // Future<void> leaveRoom(String roomId) async {
+  //   await client.post('/live/rooms/$roomId/leave');
+  // }
+
+  /// 发送消息
+  // Future<void> sendMessage({
+  //   required String roomId,
+  //   required String content,
+  // }) async {
+  //   await client.post('/live/rooms/$roomId/messages', data: {
+  //     'content': content,
+  //     'type': 'user',
+  //   });
+  // }
+
+  /// 获取直播消息
+  // Future<List<LiveMessage>> getMessages(String roomId, {int limit = 50}) async {
+  //   final response = await client.get<Map<String, dynamic>>(
+  //     '/live/rooms/$roomId/messages',
+  //     queryParameters: {'limit': limit},
+  //   );
+  //   final data = response.data!['data'] as Map<String, dynamic>;
+  //   final list = data['list'] as List<dynamic>;
+  //   return list
+  //       .map((e) => LiveMessage.fromJson(e as Map<String, dynamic>))
+  //       .toList();
+  // }
 }
 
 final class LiveRoomDetail {

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart';
 
 import '../api/live_api.dart';
 import '../models/live_model.dart';
@@ -90,7 +91,9 @@ final class LiveNotifier extends StateNotifier<LiveState> {
   LiveNotifier({
     required this.api,
     required this.wsService,
-  }) : super(const LiveState());
+  }) : super(const LiveState()){
+
+  }
 
   final LiveApi api;
   final WebSocketService wsService;
@@ -122,12 +125,16 @@ final class LiveNotifier extends StateNotifier<LiveState> {
     }
 
     // Connect WebSocket
-    await wsService.connect(roomId);
-    wsService.joinRoom(roomId);
-
-    _eventSub = wsService.eventStream.listen(_handleEvent);
-
-    state = state.copyWith(isConnected: true);
+    try {
+      await wsService.connect(roomId);
+      wsService.joinRoom(roomId);
+      _eventSub = wsService.eventStream.listen(_handleEvent);
+      state = state.copyWith(isConnected: true);
+    } catch (e) {
+      debugPrint('WebSocket 连接失败: $e');
+      // WebSocket 失败不影响页面显示
+      state = state.copyWith(isConnected: false);
+    }
   }
 
   void _handleEvent(Map<String, dynamic> event) {

@@ -1,3 +1,5 @@
+import 'product_model.dart';
+
 final class LiveMessage {
   const LiveMessage({
     required this.id,
@@ -6,6 +8,7 @@ final class LiveMessage {
     required this.type,
     this.userAvatar = '',
     this.timestamp = '',
+    this.productId,
   });
 
   factory LiveMessage.fromJson(Map<String, dynamic> json) {
@@ -16,6 +19,7 @@ final class LiveMessage {
       content: (json['content'] as String?) ?? '',
       type: (json['type'] as String?) ?? 'user',
       timestamp: (json['timestamp'] as String?) ?? '',
+      productId: json['product_id'] as String?,
     );
   }
 
@@ -25,8 +29,10 @@ final class LiveMessage {
   final String content;
   final String type;
   final String timestamp;
+  final String? productId;
 
   bool get isSystem => type == 'system';
+  bool get isProductMessage => type == 'product';
 }
 
 final class LiveRoomInfo {
@@ -40,11 +46,18 @@ final class LiveRoomInfo {
     required this.authorAvatar,
     required this.onlineCount,
     required this.tags,
+    this.status = 'preview',
+    this.productIds = const [],
+    this.currentProductId,
     this.heatCount = 0,
+    this.likeCount = 0,
+    this.startedAt,
+    this.endedAt,
   });
 
   factory LiveRoomInfo.fromJson(Map<String, dynamic> json) {
     final rawTags = (json['tags'] as List<dynamic>?) ?? [];
+    final rawProductIds = (json['product_ids'] as List<dynamic>?) ?? [];
     return LiveRoomInfo(
       id: json['id'] as String,
       title: (json['title'] as String?) ?? '',
@@ -55,7 +68,13 @@ final class LiveRoomInfo {
       authorAvatar: (json['author_avatar'] as String?) ?? '',
       onlineCount: (json['online_count'] as num?)?.toInt() ?? 0,
       heatCount: (json['heat_count'] as num?)?.toInt() ?? 0,
+      likeCount: (json['like_count'] as num?)?.toInt() ?? 0,
       tags: rawTags.cast<String>(),
+      status: (json['status'] as String?) ?? 'preview',
+      productIds: rawProductIds.cast<String>(),
+      currentProductId: json['current_product_id'] as String?,
+      startedAt: json['started_at'] as String?,
+      endedAt: json['ended_at'] as String?,
     );
   }
 
@@ -68,7 +87,17 @@ final class LiveRoomInfo {
   final String authorAvatar;
   final int onlineCount;
   final int heatCount;
+  final int likeCount;
   final List<String> tags;
+  final String status;
+  final List<String> productIds;
+  final String? currentProductId;
+  final String? startedAt;
+  final String? endedAt;
+
+  bool get isLive => status == 'live';
+  bool get isPreview => status == 'preview';
+  bool get isEnded => status == 'ended';
 
   String get onlineCountText {
     if (onlineCount >= 10000) {
@@ -82,5 +111,38 @@ final class LiveRoomInfo {
       return '${(heatCount / 10000).toStringAsFixed(1)}万热度';
     }
     return '$heatCount热度';
+  }
+
+  String get statusText {
+    switch (status) {
+      case 'live': return '直播中';
+      case 'ended': return '已结束';
+      case 'preview':
+      default: return '预告';
+    }
+  }
+}
+
+extension LiveRoomInfoCopyWith on LiveRoomInfo {
+  LiveRoomInfo copyWith({
+    String? status,
+    String? currentProductId,
+  }) {
+    return LiveRoomInfo(
+      id: id,
+      title: title,
+      coverUrl: coverUrl,
+      videoUrl: videoUrl,
+      authorId: authorId,
+      authorName: authorName,
+      authorAvatar: authorAvatar,
+      onlineCount: onlineCount,
+      tags: tags,
+      status: status ?? this.status,
+      productIds: productIds,
+      currentProductId: currentProductId ?? this.currentProductId,
+      heatCount: heatCount,
+      likeCount: likeCount,
+    );
   }
 }
