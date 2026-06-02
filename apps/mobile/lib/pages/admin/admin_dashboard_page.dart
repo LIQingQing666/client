@@ -1047,7 +1047,7 @@ final class _VideoManagementTabState
     try {
       final client = ref.read(dioClientProvider);
       final api = VideoApi(client: client);
-      final result = await api.getVideos(page: 1, pageSize: 1000);
+      final result = await api.getVideos(page: 1, pageSize: 1000, status: 'all');
       setState(() {
         _videos = result.list;
         _isLoading = false;
