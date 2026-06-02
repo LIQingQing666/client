@@ -9,11 +9,13 @@ import '../../core/app_constants.dart';
 import '../../core/app_router.dart';
 import '../../models/live_model.dart';
 import '../../models/product_model.dart';
+import '../../provider/auth_provider.dart';
 import '../../provider/cart_provider.dart';
 import '../../provider/favorite_provider.dart';
 import '../../provider/follow_provider.dart';
 import '../../provider/live_provider.dart';
 import '../../provider/pip_provider.dart';
+import '../../provider/user_provider.dart';
 import '../../widgets/coupon_countdown.dart';
 import '../../utils/toast.dart';
 import '../../widgets/danmaku_overlay.dart';
@@ -288,11 +290,142 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
       backgroundColor: Colors.transparent,
       builder: (_) => GiftPanel(
         onSelect: (gift) {
-          // Send gift notification into the scrolling comment area.
-          ref.read(liveProvider.notifier).sendGift('我', gift.icon, gift.name);
           Navigator.of(context).pop();
+          _sendGiftWithCoin(gift);
         },
         onClose: () => Navigator.of(context).pop(),
+      ),
+    );
+  }
+
+  Future<void> _sendGiftWithCoin(Gift gift) async {
+    final auth = ref.read(authProvider);
+    final userState = ref.read(userProvider);
+    final room = ref.read(liveProvider).room;
+
+    if (!auth.isLoggedIn || auth.userId == null) {
+      showToast('请先登录', type: ToastType.warning);
+      return;
+    }
+
+    if (room == null) return;
+
+    // 检查余额是否足够（前端预检）
+    if (userState.coinBalance < gift.price) {
+      _showGiftInsufficientBalanceDialog(gift.price);
+      return;
+    }
+
+    try {
+      final api = ref.read(liveApiProvider);
+      final result = await api.sendGift(
+        userId: auth.userId!,
+        giftId: gift.id,
+        giftName: gift.name,
+        price: gift.price,
+        roomId: room.id,
+      );
+
+      // 更新本地余额
+      final newBalance = (result['new_balance'] as num).toDouble();
+      ref.read(userProvider.notifier).updateCoinBalance(newBalance);
+
+      // 发送礼物弹幕
+      ref.read(liveProvider.notifier).sendGift('我', gift.icon, gift.name);
+
+      showToast('送出 ${gift.icon} ${gift.name}', type: ToastType.success);
+    } catch (e) {
+      // 余额不足的错误（服务端返回 422）
+      if (e.toString().contains('422') || e.toString().contains('余额不足')) {
+        _showGiftInsufficientBalanceDialog(gift.price);
+      } else {
+        showToast('发送礼物失败，请重试', type: ToastType.error);
+      }
+    }
+  }
+
+  void _showGiftInsufficientBalanceDialog(int requiredCoins) {
+    final userState = ref.read(userProvider);
+    final diff = (requiredCoins - userState.coinBalance).ceil();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppDimens.radiusLg),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Color(0xFFFFA500), size: 24),
+            SizedBox(width: AppDimens.paddingSm),
+            Text('抖币不足', style: AppTextStyles.titleMedium),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '当前抖币余额：${userState.coinBalance.toStringAsFixed(0)} 抖币',
+              style: AppTextStyles.bodyLarge,
+            ),
+            const SizedBox(height: AppDimens.paddingSm),
+            Text(
+              '还需充值约：$diff 抖币',
+              style: AppTextStyles.bodyMedium,
+            ),
+            const SizedBox(height: AppDimens.paddingMd),
+            Container(
+              padding: const EdgeInsets.all(AppDimens.paddingSm),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFD700).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(AppDimens.radiusSm),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.card_giftcard, size: 16, color: Color(0xFFFFA500)),
+                  SizedBox(width: AppDimens.paddingSm),
+                  Text(
+                    '充值有额外赠送抖币',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFFFFA500),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text('取消', style: TextStyle(color: AppColors.textHint)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              AppRouter.router.pushNamed(
+                'coinRecharge',
+                queryParameters: <String, String>{
+                  'from': 'gift',
+                },
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+              ),
+            ),
+            child: const Text('去充值', style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
     );
   }
