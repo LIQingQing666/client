@@ -61,6 +61,7 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
   bool _isCoverVisible = true;
   bool _isInitialized = false;
   bool _highlightActive = false;
+  bool _initializing = false; // prevents duplicate _initPlayer calls
 
   @override
   void initState() {
@@ -107,6 +108,8 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
   }
 
   Future<void> _initPlayer() async {
+    if (_initializing) return;
+    _initializing = true;
     try {
       final controller = await widget.pool.acquire(
         widget.video.id,
@@ -114,6 +117,8 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
       );
 
       if (!mounted) {
+        widget.pool.release(widget.video.id);
+        _initializing = false;
         return;
       }
 
@@ -127,6 +132,7 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
       else {
         controller.addListener(_waitForInit);
       }
+      _initializing = false;
     }
     on Exception {
       if (mounted) {
@@ -135,6 +141,7 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
         });
       }
       showToast('视频加载失败');
+      _initializing = false;
     }
   }
 
@@ -208,6 +215,7 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
     widget.pool.release(widget.video.id, dispose: dispose);
     _controller = null;
     _isInitialized = false;
+    _initializing = false;
   }
 
   @override

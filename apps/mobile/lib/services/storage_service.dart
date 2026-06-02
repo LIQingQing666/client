@@ -98,6 +98,23 @@ final class StorageService {
     await box.put(_favoritesKey, jsonEncode(items));
   }
 
+  // ---- Cart ----
+
+  static const _cartKey = 'cart_items';
+
+  List<Map<String, dynamic>> getCartItems() {
+    final raw = box.get(_cartKey);
+    if (raw is String) {
+      final list = jsonDecode(raw) as List<dynamic>;
+      return list.cast<Map<String, dynamic>>();
+    }
+    return [];
+  }
+
+  Future<void> saveCartItems(List<Map<String, dynamic>> items) async {
+    await box.put(_cartKey, jsonEncode(items));
+  }
+
   // ---- Generic ----
 
   Future<void> setString(String key, String value) => box.put(key, value);

@@ -53,6 +53,12 @@ final class PipNotifier extends StateNotifier<PipState> {
     state = state.copyWith(isActive: false);
   }
 
+  /// Transfer controller ownership to the caller without disposing it.
+  /// Used when the live-room page reuses a PIP controller.
+  void releaseController() {
+    state = const PipState();
+  }
+
   /// Completely close the PIP window and dispose resources.
   void closePip() {
     state.videoController?.pause();

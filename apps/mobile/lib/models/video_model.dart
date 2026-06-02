@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+
 final class VideoModel {
   const VideoModel({
     required this.id,
@@ -16,6 +18,7 @@ final class VideoModel {
     required this.playCount,
     required this.createdAt,
     this.isLiked = false,
+    this.status = 'draft',
   });
 
   factory VideoModel.fromJson(Map<String, dynamic> json) {
@@ -35,6 +38,7 @@ final class VideoModel {
       shareCount: (json['share_count'] as num?)?.toInt() ?? 0,
       playCount: (json['play_count'] as num?)?.toInt() ?? 0,
       createdAt: (json['created_at'] as String?) ?? '',
+      status: (json['status'] as String?) ?? 'draft',
     );
   }
 
@@ -54,6 +58,16 @@ final class VideoModel {
   final int playCount;
   final String createdAt;
   final bool isLiked;
+  final String status;
+
+  /// 是否为草稿
+  bool get isDraft => status == 'draft';
+
+  /// 是否已发布
+  bool get isPublished => status == 'published';
+
+  /// 是否已下架
+  bool get isInactive => status == 'inactive';
 
   String get playCountText => _formatCount(playCount);
   String get likeCountText => _formatCount(likeCount);
@@ -67,5 +81,31 @@ final class VideoModel {
       return '${(count / 1000).toStringAsFixed(1)}k';
     }
     return count.toString();
+  }
+
+  /// 状态显示文本
+  String get statusText {
+    switch (status) {
+      case 'published':
+        return '已发布';
+      case 'inactive':
+        return '已下架';
+      case 'draft':
+      default:
+        return '草稿';
+    }
+  }
+
+  /// 状态颜色
+  Color get statusColor {
+    switch (status) {
+      case 'published':
+        return const Color(0xFF4CAF50);  // 绿色
+      case 'inactive':
+        return const Color(0xFF9E9E9E);  // 灰色
+      case 'draft':
+      default:
+        return const Color(0xFFFF9800);  // 橙色
+    }
   }
 }

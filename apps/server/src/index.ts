@@ -1,5 +1,7 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import multipart from '@fastify/multipart';
+import fastifyStatic from '@fastify/static';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,6 +16,7 @@ import { commentRoutes } from './routes/comments.js';
 import { adminRoutes } from './routes/admin.js';
 import { liveRoutes } from './routes/live.js';
 import { rechargeRoutes } from './routes/recharge.js';
+import { uploadRoutes, uploadsRoot } from './routes/upload.js';
 import { createWebSocketServer } from './websocket/live.js';
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
@@ -32,6 +35,21 @@ async function main() {
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   });
 
+  // Multipart parser (file uploads). No global fileSize limit — each route
+  // sets its own via req.file({ limits }) so images and videos can differ.
+  await app.register(multipart);
+
+  // Static file serving for uploaded media: /uploads/images/xxx.png, /uploads/videos/yyy.mp4
+  fs.mkdirSync(uploadsRoot, { recursive: true });
+  await app.register(fastifyStatic, {
+    root: uploadsRoot,
+    prefix: '/uploads/',
+    decorateReply: false,
+    cacheControl: true,
+    maxAge: '365d',
+    acceptRanges: true, // <video> player seek support
+  });
+
   // Register routes
   await app.register(videoRoutes);
   await app.register(productRoutes);
@@ -42,6 +60,7 @@ async function main() {
   await app.register(liveRoutes);
   await app.register(adminRoutes);
   await app.register(rechargeRoutes);
+  await app.register(uploadRoutes);
 
   // Health check
   app.get('/api/health', async () => ({ code: 0, message: 'ok', timestamp: new Date().toISOString() }));

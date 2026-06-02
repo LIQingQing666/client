@@ -55,7 +55,7 @@ final class _PaymentResultPageState extends ConsumerState<PaymentResultPage> {
 
     // Refresh the order list so the order page shows latest status.
     if (success) {
-      ref.read(orderProvider.notifier).loadOrders();
+      ref.read(orderProvider.notifier).loadOrders(force: true);
     }
   }
 
