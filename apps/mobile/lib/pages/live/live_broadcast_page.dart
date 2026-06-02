@@ -14,14 +14,14 @@ import '../../provider/service_providers.dart';
 final class LiveBroadcastPage extends ConsumerStatefulWidget {
   const LiveBroadcastPage({super.key, required this.room});
 
-  final LiveRoomInfo room;  // ✅ 使用 LiveRoomInfo
+  final LiveRoomInfo room;
 
   @override
   ConsumerState<LiveBroadcastPage> createState() => _LiveBroadcastPageState();
 }
 
 final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
-  late LiveRoomInfo _room;  // ✅ 使用 LiveRoomInfo
+  late LiveRoomInfo _room;
   Timer? _viewerTimer;
   Timer? _likeTimer;
 
@@ -30,7 +30,7 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
 
   int _viewerCount = 0;
   int _likeCount = 0;
-  final List<LiveMessage> _messages = [];  // ✅ 从 live_model.dart 导入
+  final List<LiveMessage> _messages = [];
 
   @override
   void initState() {
@@ -86,7 +86,6 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
   Future<void> _switchProduct(ProductModel product) async {
     try {
       final api = LiveApi(client: ref.read(dioClientProvider));
-      // ✅ 使用命名参数
       await api.switchProduct(roomId: _room.id, productId: product.id);
       setState(() => _currentProduct = product);
       _messages.insert(0, LiveMessage(
@@ -157,7 +156,6 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(color: AppColors.error.withValues(alpha: 0.8), borderRadius: BorderRadius.circular(4)),
                     child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                      // ✅ 修复 const 错误
                       SizedBox(
                         width: 8, height: 8,
                         child: DecoratedBox(
@@ -173,43 +171,119 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
             ),
           ),
 
-          // 当前商品卡片
+          // 当前商品卡片 - 修复文字溢出问题
           if (_currentProduct != null)
-            Positioned(top: 60, left: 12, right: 120, child: _buildProductCard(_currentProduct!)),
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 50,
+              left: 12,
+              right: 120,
+              child: _buildProductCard(_currentProduct!),
+            ),
 
           // 右侧商品列表
-          Positioned(top: 60, right: 8, bottom: 80, width: 100, child: _buildProductList()),
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 50,
+            right: 8,
+            bottom: 200,
+            width: 100,
+            child: _buildProductList(),
+          ),
 
           // 聊天消息
-          Positioned(left: 8, bottom: 130, width: 200, height: 200, child: _buildChatList()),
+          Positioned(
+            left: 8,
+            bottom: 180,
+            width: 200,
+            height: 200,
+            child: _buildChatList(),
+          ),
 
-          // 底部信息栏
-          Positioned(bottom: 80, left: 0, right: 0, child: _buildInfoBar()),
-
-          // 底部控制栏
-          Positioned(bottom: 0, left: 0, right: 0, child: _buildControlBar()),
+          // 底部控制栏 - 包含观众数、点赞数和结束按钮
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: _buildBottomBar(),
+          ),
         ],
       ),
     );
   }
 
+  // 商品卡片 - 修复文字溢出问题
   Widget _buildProductCard(ProductModel product) {
     return Container(
       padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.95), borderRadius: BorderRadius.circular(12)),
-      child: Row(children: [
-        ClipRRect(borderRadius: BorderRadius.circular(6), child: CachedNetworkImage(imageUrl: product.coverUrl, width: 50, height: 50, fit: BoxFit.cover)),
-        const SizedBox(width: 10),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-          Text(product.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13), maxLines: 1),
-          const SizedBox(height: 4),
-          Text('¥${product.price.toStringAsFixed(0)}', style: const TextStyle(color: AppColors.error, fontWeight: FontWeight.w700, fontSize: 16)),
-        ])),
-      ]),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.95),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: CachedNetworkImage(
+              imageUrl: product.coverUrl,
+              width: 50,
+              height: 50,
+              fit: BoxFit.cover,
+              errorWidget: (_, __, ___) => Container(
+                width: 50,
+                height: 50,
+                color: AppColors.divider,
+                child: const Icon(Icons.image, color: AppColors.textHint),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  product.name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                  maxLines: 2, // 最多两行
+                  overflow: TextOverflow.ellipsis, // 溢出显示省略号
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '¥${product.price.toStringAsFixed(0)}',
+                  style: const TextStyle(
+                    color: AppColors.error,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildProductList() {
+    if (_products.isEmpty) {
+      return const Center(
+        child: Text(
+          '暂无商品',
+          style: TextStyle(color: Colors.white38, fontSize: 12),
+        ),
+      );
+    }
+
     return ListView.separated(
       itemCount: _products.length,
       separatorBuilder: (_, __) => const SizedBox(height: 6),
@@ -219,12 +293,47 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
         return GestureDetector(
           onTap: () => _switchProduct(product),
           child: Container(
-            padding: const EdgeInsets.all(4),
+            padding: const EdgeInsets.all(3),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: isActive ? AppColors.primary : Colors.white24, width: isActive ? 2 : 1),
+              border: Border.all(
+                color: isActive ? AppColors.primary : Colors.white24,
+                width: isActive ? 2 : 1,
+              ),
             ),
-            child: ClipRRect(borderRadius: BorderRadius.circular(6), child: CachedNetworkImage(imageUrl: product.coverUrl, width: 90, height: 90, fit: BoxFit.cover)),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: CachedNetworkImage(
+                    imageUrl: product.coverUrl,
+                    width: 90,
+                    height: 70,
+                    fit: BoxFit.cover,
+                    errorWidget: (_, __, ___) => Container(
+                      width: 90,
+                      height: 70,
+                      color: AppColors.divider,
+                      child: const Icon(Icons.image, color: AppColors.textHint),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: Text(
+                    product.name,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -232,79 +341,175 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
   }
 
   Widget _buildChatList() {
+    if (_messages.isEmpty) {
+      return const Center(
+        child: Text(
+          '暂无消息',
+          style: TextStyle(color: Colors.white38, fontSize: 12),
+        ),
+      );
+    }
+
     return ListView.builder(
       reverse: true,
       itemCount: _messages.length,
       itemBuilder: (context, index) {
         final msg = _messages[index];
+        final isSystem = msg.type == 'system';
+
         return Container(
           margin: const EdgeInsets.only(bottom: 4),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(4)),
+          decoration: BoxDecoration(
+            color: isSystem ? Colors.orange.withValues(alpha: 0.3) : Colors.black54,
+            borderRadius: BorderRadius.circular(4),
+          ),
           child: RichText(
-            text: TextSpan(children: [
-              TextSpan(text: '${msg.userName}: ', style: const TextStyle(color: Colors.yellow, fontSize: 11, fontWeight: FontWeight.w500)),
-              TextSpan(text: msg.content, style: const TextStyle(color: Colors.white, fontSize: 11)),
-            ]),
+            text: TextSpan(
+              children: [
+                if (!isSystem)
+                  TextSpan(
+                    text: '${msg.userName}: ',
+                    style: const TextStyle(
+                      color: Colors.yellow,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                TextSpan(
+                  text: msg.content,
+                  style: TextStyle(
+                    color: isSystem ? Colors.orange : Colors.white,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },
     );
   }
 
-  Widget _buildInfoBar() {
+  // 底部栏 - 包含统计信息和结束按钮
+  Widget _buildBottomBar() {
     return Container(
-      padding: const EdgeInsets.all(12),
-      color: Colors.black87,
-      child: Row(children: [
-        _buildStat(Icons.visibility, '$_viewerCount'),
-        const SizedBox(width: 16),
-        _buildStat(Icons.favorite, '$_likeCount', color: Colors.red),
-        const Spacer(),
-        Text(_room.title, style: const TextStyle(color: Colors.white)),
-      ]),
-    );
-  }
-
-  Widget _buildStat(IconData icon, String count, {Color? color}) {
-    return Row(children: [
-      Icon(icon, color: color ?? Colors.white, size: 16),
-      const SizedBox(width: 4),
-      Text(count, style: TextStyle(color: color ?? Colors.white, fontSize: 13)),
-    ]);
-  }
-
-  Widget _buildControlBar() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(gradient: const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, Colors.black87])),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Colors.transparent, Colors.black87],
+        ),
+      ),
       child: SafeArea(
-        child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-          _buildCtrlBtn(Icons.chat, '评论'),
-          _buildCtrlBtn(Icons.share, '分享'),
-          _buildCtrlBtn(Icons.shopping_bag, '商品'),
-          _buildCtrlBtn(Icons.favorite_border, '点赞', onTap: () => setState(() => _likeCount++)),
-          GestureDetector(
-            onTap: _endLive,
-            child: Container(
-              width: 56, height: 56,
-              decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.error),
-              child: const Center(child: Text('结束', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600))),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 统计信息行
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // 观众数
+                _buildStatItem(
+                  icon: Icons.visibility,
+                  label: '观众',
+                  count: _formatCount(_viewerCount),
+                ),
+                const SizedBox(width: 32),
+                // 点赞数
+                _buildStatItem(
+                  icon: Icons.favorite,
+                  label: '点赞',
+                  count: _formatCount(_likeCount),
+                  color: Colors.red,
+                ),
+              ],
             ),
-          ),
-        ]),
+            const SizedBox(height: 16),
+            // 结束按钮 - 居中显示
+            Center(
+              child: GestureDetector(
+                onTap: _endLive,
+                child: Container(
+                  width: 80,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: AppColors.error,
+                    borderRadius: BorderRadius.circular(25),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.error.withValues(alpha: 0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: const Center(
+                    child: Text(
+                      '结束',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildCtrlBtn(IconData icon, String label, {VoidCallback? onTap}) {
-    return GestureDetector(
-      onTap: onTap ?? () {},
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, color: Colors.white, size: 26),
+  // 统计项组件
+  Widget _buildStatItem({
+    required IconData icon,
+    required String label,
+    required String count,
+    Color? color,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              color: color ?? Colors.white,
+              size: 18,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              count,
+              style: TextStyle(
+                color: color ?? Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 2),
-        Text(label, style: const TextStyle(color: Colors.white, fontSize: 10)),
-      ]),
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.7),
+            fontSize: 12,
+          ),
+        ),
+      ],
     );
+  }
+
+  // 数字格式化
+  String _formatCount(int count) {
+    if (count >= 10000) {
+      return '${(count / 10000).toStringAsFixed(1)}万';
+    }
+    return count.toString();
   }
 }
