@@ -9,6 +9,7 @@ import '../../api/video_api.dart';
 import '../../core/app_constants.dart';
 import '../../models/product_model.dart';
 import '../../models/video_model.dart';
+import '../../provider/feed_provider.dart';
 import '../../provider/admin_provider.dart';
 import '../../provider/service_providers.dart';
 import 'add_product_page.dart';
@@ -1176,11 +1177,7 @@ final class _VideoManagementTabState
   }
 
   // 批量更新状态
-  Future<void> _batchUpdateStatus(
-      List<String> ids,
-      String newStatus,
-      String actionName,
-      ) async {
+  Future<void> _batchUpdateStatus(List<String> ids, String newStatus, String actionName) async {
     if (!mounted) return;
 
     _showLoadingSnackBar('正在$actionName...');
@@ -1206,6 +1203,8 @@ final class _VideoManagementTabState
           debugPrint('$actionName视频 $id 失败: $e');
         }
       }
+
+      ref.read(feedProvider.notifier).loadVideos();
 
       if (mounted) {
         _hideLoadingSnackBar();

@@ -95,9 +95,11 @@ final class VideoApi {
     required String id,
     required VideoCreateRequest request,
   }) async {
+    final requestData = request.toJson();
+    requestData['status'] = 'draft';
     final response = await client.put<Map<String, dynamic>>(
       '/videos/$id',
-      data: request.toJson(),
+      data: requestData,
     );
     final data = response.data!['data'] as Map<String, dynamic>;
     return VideoModel.fromJson(data);
