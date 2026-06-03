@@ -135,9 +135,14 @@ final class AppRouter {
       GoRoute(
         path: '/play/:videoId',
         name: 'playVideo',
-        builder: (context, state) => FeedPage(
-          initialVideoId: state.pathParameters['videoId'],
-        ),
+        builder: (context, state) {
+          final seekStr = state.uri.queryParameters['seek'];
+          final seekTo = seekStr != null ? int.tryParse(seekStr) : null;
+          return FeedPage(
+            initialVideoId: state.pathParameters['videoId'],
+            initialSeekTo: seekTo,
+          );
+        },
       ),
       GoRoute(
         path: '/live/:roomId',

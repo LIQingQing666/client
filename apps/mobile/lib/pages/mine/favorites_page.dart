@@ -132,6 +132,16 @@ final class _FavoritesPageState extends ConsumerState<FavoritesPage>
                   'quantity': quantity.toString(),
                 });
               },
+              onSeekToTime: product.videoId.isNotEmpty
+                  ? (seekTime) {
+                      Navigator.of(context).pop(); // close detail sheet
+                      context.pushNamed('playVideo',
+                          pathParameters: {'videoId': product.videoId},
+                          queryParameters: seekTime > 0
+                              ? {'seek': seekTime.toString()}
+                              : {});
+                    }
+                  : null,
               onFavorite: () {
                 ref.read(favoriteProvider.notifier).toggleProductFavorite(
                   id: product.id,

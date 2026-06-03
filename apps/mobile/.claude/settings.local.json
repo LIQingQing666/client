@@ -13,7 +13,13 @@
       "Bash(curl -s http://192.168.50.174:3000/api/videos/recommend)",
       "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(v['video_url'][:60]\\) for v in d['data']['list'][:3]]\")",
       "Bash(dart analyze *)",
-      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(f'room: {r[\\\\\"title\\\\\"][:20]}... video_url: {r[\\\\\"video_url\\\\\"][:60]}'\\) for r in d['data']['list']]\")"
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(f'room: {r[\\\\\"title\\\\\"][:20]}... video_url: {r[\\\\\"video_url\\\\\"][:60]}'\\) for r in d['data']['list']]\")",
+      "Bash(ipconfig)",
+      "Bash(findstr \"192.168\")",
+      "Bash(netsh advfirewall *)",
+      "Bash(findstr -i \"3000\")",
+      "Bash(findstr \":3000\")",
+      "Bash(curl -s http://192.168.50.174:3000/api/cart/u1)"
     ]
   }
 }

@@ -18,9 +18,10 @@ import '../../widgets/video_comments_sheet.dart';
 import '../../widgets/video_player_widget.dart';
 
 final class FeedPage extends ConsumerStatefulWidget {
-  const FeedPage({super.key, this.initialVideoId});
+  const FeedPage({super.key, this.initialVideoId, this.initialSeekTo});
 
   final String? initialVideoId;
+  final int? initialSeekTo;
 
   @override
   ConsumerState<FeedPage> createState() => _FeedPageState();
@@ -30,6 +31,7 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
   late final PageController _pageController = PageController();
   final ValueNotifier<int> _seekTrigger = ValueNotifier<int>(0);
   String? _pendingJumpVideoId;
+  int? _pendingSeekTo;
   final Map<String, ProductModel?> _productCache = {};
 
   @override
@@ -37,6 +39,7 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
     super.initState();
     if (widget.initialVideoId != null) {
       _pendingJumpVideoId = widget.initialVideoId;
+      _pendingSeekTo = widget.initialSeekTo;
     }
   }
 
@@ -346,6 +349,15 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
       if (targetIndex >= 0) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _pageController.jumpToPage(targetIndex);
+          // Schedule seek after player has time to initialize (≈800ms).
+          if (_pendingSeekTo != null && _pendingSeekTo! > 0) {
+            Future.delayed(const Duration(milliseconds: 1200), () {
+              if (mounted) {
+                _seekTrigger.value = _pendingSeekTo!;
+              }
+            });
+          }
+          _pendingSeekTo = null;
         });
       }
       _pendingJumpVideoId = null;
