@@ -5,8 +5,10 @@ abstract final class AppConstants {
   static const String appName = 'LiveCommerce';
 
   // API 配置
+  // NOTE: baseUrl includes /api prefix for REST routes (Fastify).
+  // wsUrl MUST NOT include /api — Socket.IO listens at root /socket.io.
   static const String baseUrl = 'http://192.168.50.174:3000/api';
-  static const String wsUrl = 'http://192.168.50.174:3000/api';
+  static const String wsUrl = 'http://192.168.50.174:3000';
   static const Duration connectTimeout = Duration(seconds: 10);
   static const Duration receiveTimeout = Duration(seconds: 10);
 
