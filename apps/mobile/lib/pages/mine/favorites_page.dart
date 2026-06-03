@@ -7,6 +7,7 @@ import '../../core/app_constants.dart';
 import '../../models/product_model.dart';
 import '../../provider/cart_provider.dart';
 import '../../provider/favorite_provider.dart';
+import '../../provider/service_providers.dart';
 import '../../widgets/product_detail_sheet.dart';
 
 final class FavoritesPage extends ConsumerStatefulWidget {
@@ -89,25 +90,36 @@ final class _FavoritesPageState extends ConsumerState<FavoritesPage>
         final item = products[index];
         return _FavoriteProductTile(
           item: item,
-          onTap: () {
-            final raw = item.rawData;
-            final product = ProductModel(
-              id: item.id,
-              name: item.title,
-              description: '',
-              coverUrl: item.coverUrl,
-              images: [item.coverUrl],
-              price: double.tryParse(item.subtitle.replaceFirst('¥', '')) ?? 0,
-              originalPrice: 0,
-              stock: 0,
-              sales: 0,
-              category: '',
-              tags: [],
-              specs: [],
-              videoId: (raw['video_id'] as String?) ?? '',
-              aiSalesPoint: '',
-              highlightTime: (raw['highlight_time'] as num?)?.toInt() ?? 0,
-            );
+          onTap: () async {
+            // Fetch fresh product data from API so highlight_time,
+            // video_id, specs, etc. are always up to date.
+            final productApi = ref.read(productApiProvider);
+            ProductModel product;
+            try {
+              final detail = await productApi.getProductDetail(item.id);
+              product = detail.product;
+            } catch (_) {
+              // Fallback: use stored data if API is unavailable.
+              final raw = item.rawData;
+              product = ProductModel(
+                id: item.id,
+                name: item.title,
+                description: '',
+                coverUrl: item.coverUrl,
+                images: [item.coverUrl],
+                price: double.tryParse(item.subtitle.replaceFirst('¥', '')) ?? 0,
+                originalPrice: 0,
+                stock: 0,
+                sales: 0,
+                category: '',
+                tags: [],
+                specs: [],
+                videoId: (raw['video_id'] as String?) ?? '',
+                aiSalesPoint: '',
+                highlightTime: (raw['highlight_time'] as num?)?.toInt() ?? 0,
+              );
+            }
+            if (!mounted) return;
             showProductDetailSheet(
               context: context,
               product: product,
@@ -148,6 +160,8 @@ final class _FavoritesPageState extends ConsumerState<FavoritesPage>
                   name: product.name,
                   coverUrl: product.coverUrl,
                   price: product.price,
+                  videoId: product.videoId,
+                  highlightTime: product.highlightTime,
                 );
               },
               isFavorited: true,

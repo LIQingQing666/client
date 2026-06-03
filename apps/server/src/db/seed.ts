@@ -274,7 +274,7 @@ function seed() {
       specs: '[{"name":"颜色","values":["黑色","白色","蓝色"]}]',
       video_id: videoIds[0],
       ai_sales_point: 'ANC主动降噪+30小时续航，通勤党闭眼入，性价比碾压千元耳机！',
-      highlight_time: 15,
+      highlight_time: 3,
     },
     {
       name: '春季新款法式连衣裙',
@@ -290,7 +290,7 @@ function seed() {
       specs: '[{"name":"尺码","values":["S","M","L","XL"]},{"name":"颜色","values":["米白","浅蓝","粉色"]}]',
       video_id: videoIds[1],
       ai_sales_point: '法式收腰设计显瘦又优雅，三色可选，春天穿上它温柔加倍！',
-      highlight_time: 22,
+      highlight_time: 5,
     },
     {
       name: '智能扫地机器人 S10',
@@ -306,7 +306,7 @@ function seed() {
       specs: '[{"name":"版本","values":["标准版","集尘版"]}]',
       video_id: videoIds[2],
       ai_sales_point: '激光导航+5000Pa吸力，30天免倒垃圾，打工人真正的解放双手神器！',
-      highlight_time: 28,
+      highlight_time: 2,
     },
     {
       name: '氨基酸洁面泡沫 150ml',
@@ -322,7 +322,7 @@ function seed() {
       specs: '[]',
       video_id: videoIds[3],
       ai_sales_point: '氨基酸配方温和不刺激，敏感肌闭眼入，学生党必囤！',
-      highlight_time: 8,
+      highlight_time: 4,
     },
     {
       name: '户外双人帐篷 防风防雨',
@@ -338,7 +338,7 @@ function seed() {
       specs: '[{"name":"颜色","values":["军绿","橙色","蓝色"]}]',
       video_id: videoIds[4],
       ai_sales_point: '3秒速开新手友好，防风防雨还防晒，周末露营走起！',
-      highlight_time: 35,
+      highlight_time: 6,
     },
     {
       name: '人体工学办公椅 Pro',
@@ -354,7 +354,7 @@ function seed() {
       specs: '[{"name":"颜色","values":["黑色","灰色"]}]',
       video_id: videoIds[5],
       ai_sales_point: '腰靠4D可调+透气网面，千元内久坐不累的天花板，打工人腰椎救星！',
-      highlight_time: 18,
+      highlight_time: 1,
     },
     {
       name: '低脂高蛋白鸡胸肉 10袋装',
@@ -370,7 +370,7 @@ function seed() {
       specs: '[{"name":"口味","values":["原味","黑椒","奥尔良","香辣"]}]',
       video_id: videoIds[6],
       ai_sales_point: '低卡高蛋白即食鸡胸肉，四种口味不重样，减脂期也能吃得开心！',
-      highlight_time: 12,
+      highlight_time: 3,
     },
     {
       name: '磁吸无线充电宝 10000mAh',
@@ -386,7 +386,7 @@ function seed() {
       specs: '[{"name":"颜色","values":["黑色","白色","紫色"]}]',
       video_id: videoIds[7],
       ai_sales_point: 'MagSafe磁吸即贴即充，10000mAh超薄便携，出行告别充电线！',
-      highlight_time: 25,
+      highlight_time: 5,
     },
     {
       name: '宠物驱虫套餐 内外同驱',
@@ -402,7 +402,7 @@ function seed() {
       specs: '[{"name":"适用","values":["猫咪专用","狗狗专用","通用型"]}]',
       video_id: videoIds[8],
       ai_sales_point: '大宠爱同款成分内外同驱，三个月用量只要89元，毛孩子健康必备！',
-      highlight_time: 5,
+      highlight_time: 2,
     },
     {
       name: '多功能清洁套装 5件套',
@@ -418,7 +418,7 @@ function seed() {
       specs: '[]',
       video_id: videoIds[9],
       ai_sales_point: '五件套一站式搞定全屋清洁，玻璃、霉菌、水垢统统消灭！',
-      highlight_time: 30,
+      highlight_time: 4,
     },
     // Additional 10 products
     {

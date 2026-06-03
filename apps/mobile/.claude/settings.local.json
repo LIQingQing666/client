@@ -19,7 +19,13 @@
       "Bash(netsh advfirewall *)",
       "Bash(findstr -i \"3000\")",
       "Bash(findstr \":3000\")",
-      "Bash(curl -s http://192.168.50.174:3000/api/cart/u1)"
+      "Bash(curl -s http://192.168.50.174:3000/api/cart/u1)",
+      "Bash(curl -s http://192.168.50.174:3000/api/live/rooms/eab2dc82-6ef4-4e7c-9b8d-56fb671b8e18)",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(f'{p[\\\\\"name\\\\\"][:20]}... highlight_time={p[\\\\\"highlight_time\\\\\"]}s'\\) for p in d['data']['products'][:5]]\")",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(list\\(d.keys\\(\\)\\), indent=2\\)\\); print\\('---'\\); print\\(len\\(d.get\\('data',{}\\).get\\('products',[]\\)\\), 'products'\\)\")",
+      "Bash(python -c ' *)",
+      "Bash(curl -s \"http://192.168.50.174:3000/api/live/rooms/d18300f1-b646-45f7-8464-3fbd1445a24e\")",
+      "Bash(curl -s \"http://192.168.50.174:3000/api/videos/recommend\")"
     ]
   }
 }

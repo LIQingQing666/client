@@ -81,7 +81,12 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
     final seekTo = widget.seekTrigger?.value;
     if (seekTo != null && seekTo > 0 && _controller != null && _isInitialized) {
       try {
-        _controller!.seekTo(Duration(seconds: seekTo));
+        final durationSec = _controller!.value.duration.inSeconds;
+        // Clamp: don't seek past (duration - 0.5s) so we stay within the video.
+        final clamped = durationSec > 0
+            ? seekTo.clamp(0, (durationSec - 0.5).ceil().clamp(0, durationSec))
+            : seekTo;
+        _controller!.seekTo(Duration(seconds: clamped));
         _controller!.play();
         // Brief highlight flash when a seek is triggered.
         setState(() => _highlightActive = true);
