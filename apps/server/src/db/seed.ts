@@ -49,6 +49,13 @@ function seed() {
   db.exec('DELETE FROM customer_service_messages');
   db.exec('DELETE FROM refund_records');
   db.exec('DELETE FROM recharge_records');
+  // 直播相关（必须在 products / users 之前清理，因为有 FK）
+  db.exec('DELETE FROM live_view_history');
+  db.exec('DELETE FROM gift_records');
+  db.exec('DELETE FROM live_interactions');
+  db.exec('DELETE FROM live_messages');
+  db.exec('DELETE FROM live_rooms');
+  db.exec('DELETE FROM gifts');
   db.exec('DELETE FROM user_likes');
   db.exec('DELETE FROM user_coupons');
   db.exec('DELETE FROM comments');
@@ -733,6 +740,117 @@ function seed() {
 
   const cartCount = (db.prepare('SELECT COUNT(*) as cnt FROM cart_items').get() as { cnt: number }).cnt;
   const orderCount = (db.prepare('SELECT COUNT(*) as cnt FROM orders').get() as { cnt: number }).cnt;
+
+  // ---- Live Rooms ----
+  // 给 4 个商家各自创建若干直播间，状态覆盖 preview / live / ended
+  const allProductRows = db
+    .prepare('SELECT id, video_id FROM products')
+    .all() as Array<{ id: string; video_id: string }>;
+
+  // 按 video_id 把商品聚合，方便按主播分配
+  const productsByAuthor: Record<string, string[]> = { u2: [], u3: [], u4: [], u5: [] };
+  for (let i = 0; i < allProductRows.length; i += 1) {
+    const p = allProductRows[i];
+    const ownerId = authorIds[i % authorIds.length];
+    productsByAuthor[ownerId].push(p.id);
+  }
+
+  const liveRoomSeeds: Array<{
+    author_id: string;
+    author_name: string;
+    title: string;
+    cover_url: string;
+    status: 'preview' | 'live' | 'ended';
+    tags: string[];
+    products: string[];
+  }> = [
+    {
+      author_id: 'u2',
+      author_name: '小明数码',
+      title: '【直播中】数码新品发布｜限时秒杀',
+      cover_url: 'https://picsum.photos/seed/live1/750/1334',
+      status: 'live',
+      tags: ['数码', '秒杀'],
+      products: productsByAuthor.u2.slice(0, 4),
+    },
+    {
+      author_id: 'u2',
+      author_name: '小明数码',
+      title: '周末预告｜笔记本配件专场',
+      cover_url: 'https://picsum.photos/seed/live2/750/1334',
+      status: 'preview',
+      tags: ['数码', '预告'],
+      products: productsByAuthor.u2.slice(0, 3),
+    },
+    {
+      author_id: 'u3',
+      author_name: '小红穿搭',
+      title: '【直播中】春季穿搭专场｜全场五折',
+      cover_url: 'https://picsum.photos/seed/live3/750/1334',
+      status: 'live',
+      tags: ['穿搭', '春季', '五折'],
+      products: productsByAuthor.u3.slice(0, 4),
+    },
+    {
+      author_id: 'u4',
+      author_name: '阿杰户外',
+      title: '户外装备直播间｜露营帐篷开仓',
+      cover_url: 'https://picsum.photos/seed/live4/750/1334',
+      status: 'preview',
+      tags: ['户外', '露营'],
+      products: productsByAuthor.u4.slice(0, 3),
+    },
+    {
+      author_id: 'u5',
+      author_name: '数码控小王',
+      title: '上周回顾｜工学椅深度评测',
+      cover_url: 'https://picsum.photos/seed/live5/750/1334',
+      status: 'ended',
+      tags: ['数码', '办公'],
+      products: productsByAuthor.u5.slice(0, 2),
+    },
+  ];
+
+  const insertLiveRoom = db.prepare(`
+    INSERT INTO live_rooms (
+      id, title, cover_url, video_url,
+      author_id, author_name, author_avatar,
+      status, product_ids, current_product_id, tags,
+      heat_count, like_count
+    ) VALUES (
+      @id, @title, @cover_url, @video_url,
+      @author_id, @author_name, @author_avatar,
+      @status, @product_ids, @current_product_id, @tags,
+      @heat_count, @like_count
+    )
+  `);
+  for (const r of liveRoomSeeds) {
+    insertLiveRoom.run({
+      id: uuid(),
+      title: r.title,
+      cover_url: r.cover_url,
+      video_url: '',
+      author_id: r.author_id,
+      author_name: r.author_name,
+      author_avatar: '',
+      status: r.status,
+      product_ids: JSON.stringify(r.products),
+      current_product_id: r.status === 'live' && r.products.length > 0 ? r.products[0] : null,
+      tags: JSON.stringify(r.tags),
+      heat_count: r.status === 'live' ? 8000 + Math.floor(Math.random() * 12000) : 0,
+      like_count: r.status === 'live' ? 1000 + Math.floor(Math.random() * 5000) : 0,
+    });
+  }
+
+  // 用 SQL 表达式填充 started_at / ended_at（better-sqlite3 的命名参数无法绑定 SQL 函数）
+  db.exec(`
+    UPDATE live_rooms SET started_at = datetime('now', '-1 hour')   WHERE status = 'live'   AND started_at IS NULL;
+    UPDATE live_rooms SET started_at = datetime('now', '-2 hours'),
+                          ended_at   = datetime('now', '-10 minutes') WHERE status = 'ended' AND ended_at   IS NULL;
+  `);
+
+  const liveRoomCount = (db.prepare('SELECT COUNT(*) as cnt FROM live_rooms').get() as { cnt: number }).cnt;
+
   console.log('Seed completed!');
   console.log(`  - ${users.length} users`);
   console.log(`  - ${videos.length} videos`);
@@ -741,6 +859,7 @@ function seed() {
   console.log(`  - ${sampleComments.length} comments`);
   console.log(`  - ${cartCount} cart items`);
   console.log(`  - ${orderCount} orders`);
+  console.log(`  - ${liveRoomCount} live rooms`);
 }
 
 seed();

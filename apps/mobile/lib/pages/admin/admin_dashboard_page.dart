@@ -9,10 +9,12 @@ import '../../api/video_api.dart';
 import '../../core/app_constants.dart';
 import '../../models/product_model.dart';
 import '../../models/video_model.dart';
+import '../../provider/feed_provider.dart';
 import '../../provider/admin_provider.dart';
 import '../../provider/service_providers.dart';
 import 'add_product_page.dart';
 import 'add_video_page.dart';
+import 'edit_video_page.dart';
 
 final class AdminDashboardPage extends ConsumerStatefulWidget {
   const AdminDashboardPage({super.key});
@@ -1046,7 +1048,7 @@ final class _VideoManagementTabState
     try {
       final client = ref.read(dioClientProvider);
       final api = VideoApi(client: client);
-      final result = await api.getVideos(page: 1, status: 'all');
+      final result = await api.getVideos(page: 1, pageSize: 1000, status: 'all');
       setState(() {
         _videos = result.list;
         _isLoading = false;
@@ -1073,7 +1075,6 @@ final class _VideoManagementTabState
     }
   }
 
-  // 切换选择模式
   void _toggleSelectionMode() {
     setState(() {
       _isSelectionMode = !_isSelectionMode;
@@ -1106,7 +1107,6 @@ final class _VideoManagementTabState
     });
   }
 
-  // 获取选中视频中各种状态的数量
   int _getSelectedCountByStatus(String status) {
     return _selectedIds
         .where((id) => _videos.any((v) => v.id == id && v.status == status))
@@ -1177,14 +1177,10 @@ final class _VideoManagementTabState
   }
 
   // 批量更新状态
-  Future<void> _batchUpdateStatus(
-      List<String> ids,
-      String newStatus,
-      String actionName,
-      ) async {
+  Future<void> _batchUpdateStatus(List<String> ids, String newStatus, String actionName) async {
     if (!mounted) return;
 
-    _showLoadingSnackBar('正在${actionName}...');
+    _showLoadingSnackBar('正在$actionName...');
 
     try {
       final client = ref.read(dioClientProvider);
@@ -1195,51 +1191,28 @@ final class _VideoManagementTabState
 
       for (final id in ids) {
         try {
-          switch (newStatus) {
-            case 'published':
-              await api.publishVideo(id);
-              break;
-            case 'inactive':
-              await api.deactivateVideo(id);
-              break;
-          }
+          await api.updateVideoStatus(id, newStatus);
           // 更新本地状态
           final index = _videos.indexWhere((v) => v.id == id);
           if (index != -1) {
-            _videos[index] = VideoModel(
-              id: _videos[index].id,
-              title: _videos[index].title,
-              description: _videos[index].description,
-              coverUrl: _videos[index].coverUrl,
-              videoUrl: _videos[index].videoUrl,
-              authorId: _videos[index].authorId,
-              authorName: _videos[index].authorName,
-              authorAvatar: _videos[index].authorAvatar,
-              duration: _videos[index].duration,
-              tags: _videos[index].tags,
-              likeCount: _videos[index].likeCount,
-              commentCount: _videos[index].commentCount,
-              shareCount: _videos[index].shareCount,
-              playCount: _videos[index].playCount,
-              createdAt: _videos[index].createdAt,
-              isLiked: _videos[index].isLiked,
-              status: newStatus,
-            );
+            _videos[index] = _copyVideoWithStatus(_videos[index], newStatus);
           }
           successCount++;
         } catch (e) {
           failCount++;
-          debugPrint('${actionName}视频 $id 失败: $e');
+          debugPrint('$actionName视频 $id 失败: $e');
         }
       }
+
+      ref.read(feedProvider.notifier).loadVideos();
 
       if (mounted) {
         _hideLoadingSnackBar();
 
         if (failCount == 0) {
-          _showSuccessSnackBar('成功${actionName} $successCount 个视频');
+          _showSuccessSnackBar('成功$actionName $successCount 个视频');
         } else {
-          _showWarningSnackBar('成功${actionName} $successCount 个，失败 $failCount 个');
+          _showWarningSnackBar('成功$actionName $successCount 个，失败 $failCount 个');
         }
 
         setState(() {
@@ -1250,12 +1223,35 @@ final class _VideoManagementTabState
     } catch (e) {
       if (mounted) {
         _hideLoadingSnackBar();
-        _showErrorSnackBar('${actionName}失败: $e');
+        _showErrorSnackBar('$actionName失败: $e');
       }
     }
   }
 
-  // ========== SnackBar 辅助 ==========
+  // 辅助：创建状态变更后的 VideoModel 副本
+  VideoModel _copyVideoWithStatus(VideoModel video, String newStatus) {
+    return VideoModel(
+      id: video.id,
+      title: video.title,
+      description: video.description,
+      coverUrl: video.coverUrl,
+      videoUrl: video.videoUrl,
+      authorId: video.authorId,
+      authorName: video.authorName,
+      authorAvatar: video.authorAvatar,
+      duration: video.duration,
+      tags: video.tags,
+      likeCount: video.likeCount,
+      commentCount: video.commentCount,
+      shareCount: video.shareCount,
+      playCount: video.playCount,
+      createdAt: video.createdAt,
+      isLiked: video.isLiked,
+      status: newStatus,
+    );
+  }
+
+  // ========== SnackBar 辅助方法 ==========
 
   void _showSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -1269,7 +1265,8 @@ final class _VideoManagementTabState
         content: Row(
           children: [
             const SizedBox(
-              width: 16, height: 16,
+              width: 16,
+              height: 16,
               child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
             ),
             const SizedBox(width: 12),
@@ -1315,6 +1312,19 @@ final class _VideoManagementTabState
     );
   }
 
+  // ========== 导航 ==========
+
+  Future<void> _navigateToDetail(String videoId) async {
+    final result = await context.pushNamed<bool>(
+      'adminVideoDetail',
+      pathParameters: {'id': videoId},
+    );
+
+    if (result == true) {
+      _loadVideos();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Stack(
@@ -1334,6 +1344,8 @@ final class _VideoManagementTabState
     );
   }
 
+  // ========== UI 组件 ==========
+
   Widget _buildFilterBar() {
     final draftCount = _videos.where((v) => v.isDraft).length;
     final publishedCount = _videos.where((v) => v.isPublished).length;
@@ -1341,10 +1353,8 @@ final class _VideoManagementTabState
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(
-        AppDimens.paddingLg,
-        AppDimens.paddingSm,
-        AppDimens.paddingLg,
-        AppDimens.paddingSm,
+        AppDimens.paddingLg, AppDimens.paddingSm,
+        AppDimens.paddingLg, AppDimens.paddingSm,
       ),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -1401,10 +1411,8 @@ final class _VideoManagementTabState
   Widget _buildActionBar(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
-        AppDimens.paddingLg,
-        AppDimens.paddingMd,
-        AppDimens.paddingLg,
-        0,
+        AppDimens.paddingLg, AppDimens.paddingMd,
+        AppDimens.paddingLg, 0,
       ),
       child: Row(
         children: [
@@ -1417,10 +1425,7 @@ final class _VideoManagementTabState
               ),
             ),
             const Spacer(),
-            Text(
-              '已选 ${_selectedIds.length} 个',
-              style: AppTextStyles.bodyMedium,
-            ),
+            Text('已选 ${_selectedIds.length} 个', style: AppTextStyles.bodyMedium),
             const SizedBox(width: AppDimens.paddingMd),
             GestureDetector(
               onTap: _toggleSelectionMode,
@@ -1428,22 +1433,15 @@ final class _VideoManagementTabState
             ),
           ] else ...[
             Expanded(
-              child: Text(
-                '共 ${_filteredVideos.length} 个视频',
-                style: AppTextStyles.bodySmall,
-              ),
+              child: Text('共 ${_filteredVideos.length} 个视频', style: AppTextStyles.bodySmall),
             ),
             ElevatedButton.icon(
               onPressed: () async {
                 final result = await Navigator.push<bool>(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => const AddVideoPage(),
-                  ),
+                  MaterialPageRoute(builder: (_) => const AddVideoPage()),
                 );
-                if (result == true) {
-                  _loadVideos();
-                }
+                if (result == true) _loadVideos();
               },
               icon: const Icon(Icons.add, size: 18),
               label: const Text('添加视频'),
@@ -1451,12 +1449,9 @@ final class _VideoManagementTabState
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(
-                  horizontal: AppDimens.paddingMd,
-                  vertical: AppDimens.paddingSm,
-                ),
+                    horizontal: AppDimens.paddingMd, vertical: AppDimens.paddingSm),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppDimens.radiusSm),
-                ),
+                    borderRadius: BorderRadius.circular(AppDimens.radiusSm)),
               ),
             ),
           ],
@@ -1467,9 +1462,7 @@ final class _VideoManagementTabState
 
   Widget _buildVideoList(BuildContext context) {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: AppColors.primary),
-      );
+      return const Center(child: CircularProgressIndicator(color: AppColors.primary));
     }
     if (_error != null) {
       return Center(
@@ -1515,10 +1508,8 @@ final class _VideoManagementTabState
       onRefresh: _loadVideos,
       child: ListView.builder(
         padding: const EdgeInsets.fromLTRB(
-          AppDimens.paddingLg,
-          0,
-          AppDimens.paddingLg,
-          AppDimens.paddingLg,
+          AppDimens.paddingLg, 0,
+          AppDimens.paddingLg, AppDimens.paddingLg,
         ),
         itemCount: displayVideos.length,
         itemBuilder: (context, index) {
@@ -1533,10 +1524,7 @@ final class _VideoManagementTabState
               if (_isSelectionMode) {
                 _toggleVideoSelection(v.id);
               } else {
-                context.pushNamed(
-                  'adminVideoDetail',
-                  pathParameters: {'id': v.id},
-                );
+                _navigateToDetail(v.id);
               }
             },
             onLongPress: () {
@@ -1559,70 +1547,48 @@ final class _VideoManagementTabState
     final publishedCount = _getSelectedCountByStatus('published');
     final inactiveCount = _getSelectedCountByStatus('inactive');
 
-    // 根据当前过滤页面决定主要操作
     List<Widget> actions = [];
 
     if (draftCount > 0) {
-      actions.add(
-        _buildActionButton(
-          icon: Icons.publish,
-          label: '发布 ($draftCount)',
-          color: AppColors.success,
-          onPressed: _publishSelected,
-        ),
-      );
+      actions.add(_buildActionButton(
+        icon: Icons.publish, label: '发布($draftCount)',
+        color: AppColors.success, onPressed: _publishSelected,
+      ));
     }
-
     if (publishedCount > 0) {
-      actions.add(const SizedBox(width: 8));
-      actions.add(
-        _buildActionButton(
-          icon: Icons.arrow_downward,
-          label: '下架 ($publishedCount)',
-          color: AppColors.warning,
-          onPressed: _deactivateSelected,
-        ),
-      );
+      if (actions.isNotEmpty) actions.add(const SizedBox(width: 8));
+      actions.add(_buildActionButton(
+        icon: Icons.arrow_downward, label: '下架($publishedCount)',
+        color: AppColors.warning, onPressed: _deactivateSelected,
+      ));
     }
-
     if (inactiveCount > 0) {
-      actions.add(const SizedBox(width: 8));
-      actions.add(
-        _buildActionButton(
-          icon: Icons.publish,
-          label: '上架 ($inactiveCount)',
-          color: AppColors.primary,
-          onPressed: _reactivateSelected,
-        ),
-      );
+      if (actions.isNotEmpty) actions.add(const SizedBox(width: 8));
+      actions.add(_buildActionButton(
+        icon: Icons.publish, label: '上架($inactiveCount)',
+        color: AppColors.primary, onPressed: _reactivateSelected,
+      ));
     }
 
     if (actions.isEmpty) return const SizedBox.shrink();
 
     return Positioned(
-      bottom: 0,
-      left: 0,
-      right: 0,
+      bottom: 0, left: 0, right: 0,
       child: Container(
         padding: EdgeInsets.only(
           bottom: MediaQuery.of(context).padding.bottom + 12,
-          top: 12,
-          left: 16,
-          right: 16,
+          top: 12, left: 16, right: 16,
         ),
         decoration: BoxDecoration(
           color: AppColors.background,
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.1),
-              blurRadius: 8,
-              offset: const Offset(0, -2),
+              blurRadius: 8, offset: const Offset(0, -2),
             ),
           ],
         ),
-        child: Row(
-          children: actions,
-        ),
+        child: Row(children: actions),
       ),
     );
   }
@@ -1639,15 +1605,11 @@ final class _VideoManagementTabState
         child: ElevatedButton.icon(
           onPressed: onPressed,
           icon: Icon(icon, color: Colors.white, size: 18),
-          label: Text(
-            label,
-            style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
-          ),
+          label: Text(label, style: const TextStyle(
+              color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
           style: ElevatedButton.styleFrom(
             backgroundColor: color,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         ),
       ),
@@ -1689,7 +1651,6 @@ final class _VideoCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // 封面
             ClipRRect(
               borderRadius: BorderRadius.circular(AppDimens.radiusSm),
               child: Image.network(
@@ -1706,7 +1667,6 @@ final class _VideoCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: AppDimens.paddingMd),
-            // 信息
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1726,7 +1686,6 @@ final class _VideoCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: AppDimens.paddingSm),
-            // 状态标签或选择框
             if (isSelectionMode)
               _buildCheckbox()
             else
@@ -1769,23 +1728,11 @@ final class _VideoCard extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: video.statusColor,
-            ),
-          ),
+          Container(width: 6, height: 6, decoration: BoxDecoration(
+              shape: BoxShape.circle, color: video.statusColor)),
           const SizedBox(width: 6),
-          Text(
-            video.statusText,
-            style: TextStyle(
-              fontSize: 11,
-              color: video.statusColor,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+          Text(video.statusText, style: TextStyle(
+              fontSize: 11, color: video.statusColor, fontWeight: FontWeight.w600)),
         ],
       ),
     );

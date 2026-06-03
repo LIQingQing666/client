@@ -213,8 +213,110 @@ CREATE INDEX IF NOT EXISTS idx_refund_order ON refund_records(order_id);
 CREATE INDEX IF NOT EXISTS idx_refund_user ON refund_records(user_id);
 `;
 
+const LIVE_TABLES_SQL = `
+-- 直播间表
+CREATE TABLE IF NOT EXISTS live_rooms (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  cover_url TEXT NOT NULL DEFAULT '',
+  video_url TEXT DEFAULT '',
+  author_id TEXT NOT NULL,
+  author_name TEXT NOT NULL DEFAULT '',
+  author_avatar TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'preview' CHECK(status IN ('preview', 'live', 'ended')),
+  product_ids TEXT NOT NULL DEFAULT '[]',
+  current_product_id TEXT,
+  tags TEXT NOT NULL DEFAULT '[]',
+  heat_count INTEGER NOT NULL DEFAULT 0,
+  like_count INTEGER NOT NULL DEFAULT 0,
+  started_at TEXT,
+  ended_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (author_id) REFERENCES users(id),
+  FOREIGN KEY (current_product_id) REFERENCES products(id)
+);
+
+-- 直播消息表
+CREATE TABLE IF NOT EXISTS live_messages (
+  id TEXT PRIMARY KEY,
+  room_id TEXT NOT NULL,
+  user_id TEXT,
+  user_name TEXT NOT NULL DEFAULT '',
+  user_avatar TEXT NOT NULL DEFAULT '',
+  content TEXT NOT NULL,
+  type TEXT NOT NULL DEFAULT 'user' CHECK(type IN ('user', 'system', 'product')),
+  product_id TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (room_id) REFERENCES live_rooms(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- 直播互动表
+CREATE TABLE IF NOT EXISTS live_interactions (
+  id TEXT PRIMARY KEY,
+  room_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  type TEXT NOT NULL CHECK(type IN ('like', 'share', 'join', 'leave')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (room_id) REFERENCES live_rooms(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- 礼物记录表
+CREATE TABLE IF NOT EXISTS gift_records (
+  id TEXT PRIMARY KEY,
+  room_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  gift_id TEXT NOT NULL,
+  gift_name TEXT NOT NULL,
+  gift_icon TEXT DEFAULT '',
+  price INTEGER NOT NULL DEFAULT 0,
+  quantity INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (room_id) REFERENCES live_rooms(id),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- 礼物配置表
+CREATE TABLE IF NOT EXISTS gifts (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  icon TEXT NOT NULL DEFAULT '',
+  price INTEGER NOT NULL DEFAULT 0,
+  animation_type TEXT DEFAULT 'default',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'inactive')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- 直播观看历史
+CREATE TABLE IF NOT EXISTS live_view_history (
+  id TEXT PRIMARY KEY,
+  room_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  watch_duration INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (room_id) REFERENCES live_rooms(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- 索引
+CREATE INDEX IF NOT EXISTS idx_live_rooms_status ON live_rooms(status);
+CREATE INDEX IF NOT EXISTS idx_live_rooms_author ON live_rooms(author_id);
+CREATE INDEX IF NOT EXISTS idx_live_rooms_created ON live_rooms(created_at);
+CREATE INDEX IF NOT EXISTS idx_live_messages_room ON live_messages(room_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_live_messages_type ON live_messages(room_id, type);
+CREATE INDEX IF NOT EXISTS idx_live_interactions_room ON live_interactions(room_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_live_interactions_user ON live_interactions(user_id, room_id);
+CREATE INDEX IF NOT EXISTS idx_gift_records_room ON gift_records(room_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_gift_records_user ON gift_records(user_id);
+CREATE INDEX IF NOT EXISTS idx_live_view_history_user ON live_view_history(user_id, created_at);
+`;
+
 export function initDb(): Database.Database {
   const database = getDb();
   database.exec(CREATE_TABLES_SQL);
+  database.exec(LIVE_TABLES_SQL);
   return database;
 }

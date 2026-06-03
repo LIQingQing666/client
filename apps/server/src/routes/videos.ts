@@ -53,7 +53,8 @@ export async function videoRoutes(app: FastifyInstance) {
     let where: string;
     const params: unknown[] = [];
     if (statusFilter === 'all') {
-      where = 'WHERE 1=1';
+      // 'all' is the merchant management view — show every status except deleted.
+      where = "WHERE status != 'deleted'";
     } else if (statusFilter === 'draft' || statusFilter === 'inactive') {
       where = 'WHERE status = ?';
       params.push(statusFilter);
@@ -287,6 +288,111 @@ export async function videoRoutes(app: FastifyInstance) {
     },
   );
 
+  // PUT /api/videos/:id - 修改视频信息（仅商家）
+  app.put<{ Params: { id: string }; Body: VideoCreateBody }>(
+    '/api/videos/:id',
+    { preHandler: [requireMerchant] },
+    async (req, reply) => {
+      if (!req.user) return;
+      const db = getDb();
+
+      const existing = db
+        .prepare('SELECT id FROM videos WHERE id = ?')
+        .get(req.params.id) as { id: string } | undefined;
+      if (!existing) {
+        reply.status(404).send({ code: 404, message: '视频不存在' });
+        return;
+      }
+
+      const body = req.body ?? {};
+      const title = asString(body.title);
+      const videoUrl = asString(body.video_url);
+      if (!title) {
+        reply.status(400).send({ code: 400, message: '视频标题不能为空' });
+        return;
+      }
+      if (!videoUrl) {
+        reply.status(400).send({ code: 400, message: '视频地址不能为空' });
+        return;
+      }
+
+      const description = asString(body.description);
+      const coverUrl = asString(body.cover_url);
+      const authorId = asString(body.author_id) || req.user.userId;
+      const authorName = asString(body.author_name);
+      const authorAvatar = asString(body.author_avatar);
+      const duration = typeof body.duration === 'number' && body.duration >= 0
+        ? Math.floor(body.duration)
+        : 0;
+      const tags = asStringArray(body.tags);
+
+      // status only enforced when present — omitting it keeps the current value.
+      const hasStatus = body.status !== undefined;
+      const rawStatus = hasStatus ? asString(body.status) : '';
+      if (hasStatus && !VALID_VIDEO_STATUSES.has(rawStatus)) {
+        reply.status(400).send({
+          code: 400,
+          message: "status 必须是 'draft' / 'published' / 'inactive'",
+        });
+        return;
+      }
+
+      if (hasStatus) {
+        db.prepare(
+          `UPDATE videos
+              SET title = ?, description = ?, cover_url = ?, video_url = ?,
+                  author_id = ?, author_name = ?, author_avatar = ?,
+                  duration = ?, tags = ?, status = ?,
+                  updated_at = datetime('now')
+            WHERE id = ?`,
+        ).run(
+          title, description, coverUrl, videoUrl,
+          authorId, authorName, authorAvatar,
+          duration, JSON.stringify(tags), rawStatus,
+          req.params.id,
+        );
+      } else {
+        db.prepare(
+          `UPDATE videos
+              SET title = ?, description = ?, cover_url = ?, video_url = ?,
+                  author_id = ?, author_name = ?, author_avatar = ?,
+                  duration = ?, tags = ?,
+                  updated_at = datetime('now')
+            WHERE id = ?`,
+        ).run(
+          title, description, coverUrl, videoUrl,
+          authorId, authorName, authorAvatar,
+          duration, JSON.stringify(tags),
+          req.params.id,
+        );
+      }
+
+      // Re-sync product links only when the field is explicitly provided.
+      // Omitting `linked_product_ids` from the body preserves existing links.
+      if (body.linked_product_ids !== undefined) {
+        const linkedIds = asStringArray(body.linked_product_ids);
+        // Detach products previously linked to this video, then re-link the
+        // provided set — empty array means "clear all links".
+        db.prepare(
+          "UPDATE products SET video_id = '', updated_at = datetime('now') WHERE video_id = ?",
+        ).run(req.params.id);
+        if (linkedIds.length > 0) {
+          const attach = db.prepare(
+            "UPDATE products SET video_id = ?, updated_at = datetime('now') WHERE id = ?",
+          );
+          for (const pid of linkedIds) {
+            attach.run(req.params.id, pid);
+          }
+        }
+      }
+
+      const row = db
+        .prepare('SELECT * FROM videos WHERE id = ?')
+        .get(req.params.id) as Record<string, unknown>;
+      return { code: 0, data: rowToVideo(row) };
+    },
+  );
+
   // PATCH /api/videos/:id - 更新视频状态（仅商家）
   app.patch<{ Params: { id: string }; Body: { status?: unknown } }>(
     '/api/videos/:id',
@@ -320,6 +426,32 @@ export async function videoRoutes(app: FastifyInstance) {
         .prepare('SELECT * FROM videos WHERE id = ?')
         .get(req.params.id) as Record<string, unknown>;
       return { code: 0, data: rowToVideo(row) };
+    },
+  );
+
+  // DELETE /api/videos/:id - 软删除视频（仅商家）
+  // Marks the row as 'deleted' so it's hidden from every list view but the row
+  // stays put — orders.items, comments.video_id, products.video_id all keep
+  // their references intact.
+  app.delete<{ Params: { id: string } }>(
+    '/api/videos/:id',
+    { preHandler: [requireMerchant] },
+    async (req, reply) => {
+      if (!req.user) return;
+      const db = getDb();
+
+      const info = db
+        .prepare(
+          "UPDATE videos SET status = 'deleted', updated_at = datetime('now') WHERE id = ? AND status != 'deleted'",
+        )
+        .run(req.params.id);
+
+      if (info.changes === 0) {
+        reply.status(404).send({ code: 404, message: '视频不存在' });
+        return;
+      }
+
+      return { code: 0, data: { id: req.params.id } };
     },
   );
 
