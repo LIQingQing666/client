@@ -41,6 +41,14 @@ final class _LiveRoomPageState extends ConsumerState<LiveRoomPage> {
   @override
   void initState() {
     super.initState();
+    // When returning from PIP we already have a video controller and room info
+    // — mark initialized immediately so the spinner is skipped and the
+    // PIP controller can be reused right away.
+    final pipState = ref.read(pipProvider);
+    final hasPip = pipState.videoController != null && pipState.roomInfo != null;
+    if (hasPip) {
+      _initialized = true;
+    }
     Future.microtask(() {
       final rooms = ref.read(roomListProvider);
       final index = rooms.indexWhere((r) => r.id == widget.roomId);
@@ -84,10 +92,16 @@ final class _LiveRoomPageState extends ConsumerState<LiveRoomPage> {
     }
 
     // When the room list is empty (e.g. returning from PIP), use the live
-    // provider's room as a single-item list.
+    // provider's room or the PIP room info as a single-item list so the
+    // video player can be created immediately without waiting for the API.
+    final pipState = ref.watch(pipProvider);
     final displayRooms = rooms.isNotEmpty
         ? rooms
-        : (liveState.room != null ? [liveState.room!] : <LiveRoomInfo>[]);
+        : (liveState.room != null
+            ? [liveState.room!]
+            : (pipState.videoController != null && pipState.roomInfo != null
+                ? [pipState.roomInfo!]
+                : <LiveRoomInfo>[]));
 
     if (displayRooms.isEmpty) {
       return const Scaffold(
@@ -441,9 +455,13 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
     );
   }
 
+  /// Returns the best available room for PIP entry — live state first,
+  /// falling back to the widget prop (e.g. when returning from PIP).
+  LiveRoomInfo get _currentRoom =>
+      ref.read(liveProvider).room ?? widget.room;
+
   void _showProductDetail(BuildContext context, ProductModel product) {
     final favState = ref.read(favoriteProvider);
-    final room = ref.read(liveProvider).room;
     showProductDetailSheet(
       context: context,
       product: product,
@@ -458,8 +476,8 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
         // Dismiss the product detail bottom sheet first.
         Navigator.of(context).pop();
         // Enter PIP mode before navigating away so the live stream keeps playing.
-        if (_videoController != null && _videoReady && room != null) {
-          ref.read(pipProvider.notifier).enterPip(_videoController!, room);
+        if (_videoController != null && _videoReady) {
+          ref.read(pipProvider.notifier).enterPip(_videoController!, _currentRoom);
         }
         // Use the global router — context from inside a bottom sheet is stale after pop.
         AppRouter.router.pushNamed('orderConfirm', queryParameters: <String, String>{
@@ -510,7 +528,14 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
     final followState = ref.watch(followProvider);
     final bottomInset = MediaQuery.of(context).padding.bottom;
 
-    if (state.room == null && !state.isLoading && state.errorMessage != null) {
+    // When returning from PIP we may have video playing but state.room
+    // hasn't loaded yet — use widget.room as fallback so the UI renders
+    // immediately instead of showing a spinner or error.
+    final effectiveRoom = state.room ?? widget.room;
+    final hasVideo = _videoController != null && _videoReady;
+
+    // Only show full-screen error when we have no video at all.
+    if (!hasVideo && state.errorMessage != null && !state.isLoading) {
       return Scaffold(
         backgroundColor: AppColors.background,
         body: Center(
@@ -534,14 +559,9 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
       );
     }
 
-    if (state.room == null) {
-      return const Scaffold(
-        backgroundColor: AppColors.background,
-        body: Center(child: CircularProgressIndicator(color: AppColors.primary)),
-      );
-    }
-
-    final room = state.room!;
+    // effectiveRoom is always non-null (widget.room is required) so we
+    // always have enough data to render the UI — even before state loads.
+    final room = effectiveRoom;
     final isFollowing = followState.followingIds.contains(room.authorId);
 
     return PopScope(
@@ -549,8 +569,8 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         // Enter PIP mode if video is playing, then pop.
-        final currentRoom = state.room;
-        if (_videoController != null && _videoReady && currentRoom != null) {
+        final currentRoom = _currentRoom;
+        if (_videoController != null && _videoReady) {
           ref.read(pipProvider.notifier).enterPip(_videoController!, currentRoom);
         }
         context.pop();
@@ -675,9 +695,9 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
                   GestureDetector(
                     onTap: () {
                       // Enter PIP mode if video is playing, then pop back.
-                      final room = ref.read(liveProvider).room;
-                      if (_videoController != null && _videoReady && room != null) {
-                        ref.read(pipProvider.notifier).enterPip(_videoController!, room);
+                      if (_videoController != null && _videoReady) {
+                        ref.read(pipProvider.notifier).enterPip(
+                            _videoController!, _currentRoom);
                       }
                       context.pop();
                     },
@@ -918,13 +938,10 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
                     icon: Icons.shopping_cart_outlined,
                     onTap: () {
                       // Enter PIP before navigating to cart.
-                      final room = ref.read(liveProvider).room;
-                      if (_videoController != null &&
-                          _videoReady &&
-                          room != null) {
+                      if (_videoController != null && _videoReady) {
                         ref
                             .read(pipProvider.notifier)
-                            .enterPip(_videoController!, room);
+                            .enterPip(_videoController!, _currentRoom);
                       }
                       AppRouter.router.go('/cart');
                     },
