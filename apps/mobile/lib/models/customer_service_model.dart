@@ -3,7 +3,7 @@ final class CsMessageModel {
   final String id;
   final String orderId;
   final String userId;
-  final String senderType; // 'user' | 'admin'
+  final String senderType; // 'user' | 'admin' | 'ai' | 'system'
   final String content;
   final String msgType; // 'text' | 'order_card'
   final String createdAt;
@@ -32,4 +32,6 @@ final class CsMessageModel {
 
   bool get isUser => senderType == 'user';
   bool get isAdmin => senderType == 'admin';
+  bool get isAi => senderType == 'ai';
+  bool get isSystem => senderType == 'system';
 }

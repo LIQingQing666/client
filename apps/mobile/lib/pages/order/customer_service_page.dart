@@ -119,6 +119,34 @@ final class _CustomerServicePageState extends ConsumerState<CustomerServicePage>
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.pop(),
         ),
+        actions: [
+          if (!state.isHumanService)
+            state.isTransferring
+                ? const Padding(
+                    padding: EdgeInsets.only(right: 12),
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  )
+                : TextButton.icon(
+                    onPressed: () => ref
+                        .read(customerServiceProvider.notifier)
+                        .transferToHuman(
+                          orderId: widget.orderId,
+                          userId: _userId,
+                        ),
+                    icon: const Icon(Icons.support_agent, size: 18),
+                    label: const Text('转人工'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                    ),
+                  ),
+        ],
       ),
       body: Column(
         children: [
@@ -230,6 +258,56 @@ final class _CustomerServicePageState extends ConsumerState<CustomerServicePage>
   }
 }
 
+/// 系统提示气泡（转人工提示等）
+final class _SystemBubble extends StatelessWidget {
+  const _SystemBubble({required this.message});
+
+  final CsMessageModel message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        vertical: AppDimens.paddingSm,
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppDimens.paddingMd,
+                vertical: AppDimens.paddingSm,
+              ),
+              decoration: BoxDecoration(
+                color: AppColors.textHint.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(AppDimens.radiusSm),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.info_outline, size: 14, color: AppColors.textHint),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      message.content,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textHint,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// 消息气泡组件
 final class _MessageBubble extends StatelessWidget {
   const _MessageBubble({required this.message});
@@ -240,6 +318,9 @@ final class _MessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     if (message.msgType == 'order_card') {
       return _OrderCardBubble(message: message);
+    }
+    if (message.isSystem) {
+      return _SystemBubble(message: message);
     }
     return _TextBubble(message: message);
   }
@@ -254,6 +335,16 @@ final class _TextBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isUser = message.isUser;
+    final isAi = message.isAi;
+
+    // 用户标签
+    final label = isUser
+        ? null
+        : isAi
+            ? '🤖 智能助手'
+            : '👤 人工客服';
+    final labelColor = isAi ? AppColors.textHint : AppColors.primary;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: AppDimens.paddingSm),
       child: Row(
@@ -264,17 +355,15 @@ final class _TextBubble extends StatelessWidget {
             Container(
               width: 36,
               height: 36,
-              decoration: const BoxDecoration(
-                color: AppColors.primary,
+              decoration: BoxDecoration(
+                color: isAi ? AppColors.textHint.withOpacity(0.3) : AppColors.primary,
                 shape: BoxShape.circle,
               ),
-              child: const Center(
+              child: Center(
                 child: Text(
-                  '客',
-                  style: TextStyle(
-                    color: Colors.white,
+                  isAi ? '🤖' : '客',
+                  style: const TextStyle(
                     fontSize: 14,
-                    fontWeight: FontWeight.bold,
                   ),
                 ),
               ),
@@ -282,31 +371,56 @@ final class _TextBubble extends StatelessWidget {
             const SizedBox(width: AppDimens.paddingSm),
           ],
           Flexible(
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppDimens.paddingMd,
-                vertical: 10,
-              ),
-              decoration: BoxDecoration(
-                color: isUser ? AppColors.primary : AppColors.card,
-                borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(AppDimens.radiusMd),
-                  topRight: const Radius.circular(AppDimens.radiusMd),
-                  bottomLeft: Radius.circular(
-                    isUser ? AppDimens.radiusMd : 4,
+            child: Column(
+              crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (label != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: labelColor,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ),
-                  bottomRight: Radius.circular(
-                    isUser ? 4 : AppDimens.radiusMd,
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppDimens.paddingMd,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isUser
+                        ? AppColors.primary
+                        : isAi
+                            ? AppColors.card
+                            : AppColors.card,
+                    borderRadius: BorderRadius.only(
+                      topLeft: const Radius.circular(AppDimens.radiusMd),
+                      topRight: const Radius.circular(AppDimens.radiusMd),
+                      bottomLeft: Radius.circular(
+                        isUser ? AppDimens.radiusMd : 4,
+                      ),
+                      bottomRight: Radius.circular(
+                        isUser ? 4 : AppDimens.radiusMd,
+                      ),
+                    ),
+                    border: isAi
+                        ? Border.all(color: AppColors.divider)
+                        : null,
+                  ),
+                  child: Text(
+                    message.content,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: isUser ? Colors.white : AppColors.textPrimary,
+                    ),
                   ),
                 ),
-              ),
-              child: Text(
-                message.content,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: isUser ? Colors.white : AppColors.textPrimary,
-                ),
-              ),
+              ],
             ),
           ),
           if (isUser) ...[

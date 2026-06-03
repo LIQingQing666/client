@@ -13,24 +13,32 @@ final class CustomerServiceState {
     this.messages = const [],
     this.isLoading = false,
     this.isSending = false,
+    this.isHumanService = false,
+    this.isTransferring = false,
     this.errorMessage,
   });
 
   final List<CsMessageModel> messages;
   final bool isLoading;
   final bool isSending;
+  final bool isHumanService;
+  final bool isTransferring;
   final String? errorMessage;
 
   CustomerServiceState copyWith({
     List<CsMessageModel>? messages,
     bool? isLoading,
     bool? isSending,
+    bool? isHumanService,
+    bool? isTransferring,
     String? errorMessage,
   }) {
     return CustomerServiceState(
       messages: messages ?? this.messages,
       isLoading: isLoading ?? this.isLoading,
       isSending: isSending ?? this.isSending,
+      isHumanService: isHumanService ?? this.isHumanService,
+      isTransferring: isTransferring ?? this.isTransferring,
       errorMessage: errorMessage,
     );
   }
@@ -62,6 +70,34 @@ final class CustomerServiceNotifier extends StateNotifier<CustomerServiceState> 
       if (mounted) {
         state = state.copyWith(
           isLoading: false,
+          errorMessage: e.toString(),
+        );
+      }
+    }
+  }
+
+  /// 转接人工客服
+  Future<void> transferToHuman({
+    required String orderId,
+    required String userId,
+  }) async {
+    state = state.copyWith(isTransferring: true);
+    try {
+      final newMessages = await api.transferToHuman(
+        orderId: orderId,
+        userId: userId,
+      );
+      if (mounted) {
+        state = state.copyWith(
+          messages: [...state.messages, ...newMessages],
+          isHumanService: true,
+          isTransferring: false,
+        );
+      }
+    } on Exception catch (e) {
+      if (mounted) {
+        state = state.copyWith(
+          isTransferring: false,
           errorMessage: e.toString(),
         );
       }

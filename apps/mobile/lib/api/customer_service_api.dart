@@ -30,6 +30,25 @@ final class CustomerServiceApi {
     return messages;
   }
 
+  /// 转接人工客服
+  Future<List<CsMessageModel>> transferToHuman({
+    required String orderId,
+    required String userId,
+  }) async {
+    final resp = await client.post(
+      '${AppConstants.baseUrl}/customer-service/transfer',
+      data: {
+        'order_id': orderId,
+        'user_id': userId,
+      },
+    );
+    final data = resp.data as Map<String, dynamic>;
+    final messages = (data['data']['messages'] as List)
+        .map((e) => CsMessageModel.fromJson(e as Map<String, dynamic>))
+        .toList();
+    return messages;
+  }
+
   /// 获取聊天历史
   Future<List<CsMessageModel>> getMessages({
     required String orderId,
