@@ -61,6 +61,7 @@ final class LiveApi {
         'cover_url': coverUrl,
         'product_ids': productIds,
         'tags': tags ?? [],
+        'video_url': 'https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4',
       },
     );
     return LiveRoomInfo.fromJson(
@@ -87,40 +88,6 @@ final class LiveApi {
       'product_id': productId,
     });
   }
-
-  /// 进入直播间
-  // Future<void> joinRoom(String roomId) async {
-  //   await client.post('/live/rooms/$roomId/join');
-  // }
-
-  /// 离开直播间
-  // Future<void> leaveRoom(String roomId) async {
-  //   await client.post('/live/rooms/$roomId/leave');
-  // }
-
-  /// 发送消息
-  // Future<void> sendMessage({
-  //   required String roomId,
-  //   required String content,
-  // }) async {
-  //   await client.post('/live/rooms/$roomId/messages', data: {
-  //     'content': content,
-  //     'type': 'user',
-  //   });
-  // }
-
-  /// 获取直播消息
-  // Future<List<LiveMessage>> getMessages(String roomId, {int limit = 50}) async {
-  //   final response = await client.get<Map<String, dynamic>>(
-  //     '/live/rooms/$roomId/messages',
-  //     queryParameters: {'limit': limit},
-  //   );
-  //   final data = response.data!['data'] as Map<String, dynamic>;
-  //   final list = data['list'] as List<dynamic>;
-  //   return list
-  //       .map((e) => LiveMessage.fromJson(e as Map<String, dynamic>))
-  //       .toList();
-  // }
 }
 
 final class LiveRoomDetail {

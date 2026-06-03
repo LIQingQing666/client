@@ -763,6 +763,7 @@ function seed() {
     status: 'preview' | 'live' | 'ended';
     tags: string[];
     products: string[];
+    video_url: 'https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4',
   }> = [
     {
       author_id: 'u2',
@@ -829,7 +830,7 @@ function seed() {
       id: uuid(),
       title: r.title,
       cover_url: r.cover_url,
-      video_url: '',
+      video_url: 'https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4',
       author_id: r.author_id,
       author_name: r.author_name,
       author_avatar: '',

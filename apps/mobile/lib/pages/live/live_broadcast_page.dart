@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:video_player/video_player.dart';
 
 import '../../api/live_api.dart';
 import '../../core/app_constants.dart';
@@ -32,6 +33,12 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
   int _likeCount = 0;
   final List<LiveMessage> _messages = [];
 
+  // 视频播放器相关
+  VideoPlayerController? _videoController;
+  bool _isVideoReady = false;
+  bool _hasVideoError = false;
+  String? _errorMessage;
+
   @override
   void initState() {
     super.initState();
@@ -40,6 +47,75 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
     _likeCount = _room.likeCount;
     _startSimulation();
     _loadProducts();
+    _initVideoPlayer();
+  }
+
+  // 初始化视频播放器
+  Future<void> _initVideoPlayer() async {
+    final videoUrl = _room.videoUrl;
+
+    if (videoUrl.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _hasVideoError = true;
+          _errorMessage = '视频地址为空\n请确认创建直播间时设置了视频地址';
+        });
+      }
+      return;
+    }
+
+    try {
+      _videoController = VideoPlayerController.network(
+        videoUrl,
+        videoPlayerOptions: VideoPlayerOptions(mixWithOthers: false),
+      );
+      await _videoController!.initialize();
+      if (mounted) {
+        setState(() {
+          _isVideoReady = true;
+          _hasVideoError = false;
+        });
+        _videoController!.play();
+        _videoController!.setLooping(true);
+      }
+    } catch (e, stackTrace) {
+      if (mounted) {
+        setState(() {
+          _hasVideoError = true;
+          _errorMessage = '视频加载失败\n请检查视频地址是否有效';
+        });
+      }
+    }
+  }
+
+  // 重新加载视频
+  Future<void> _reloadVideo() async {
+    setState(() {
+      _isVideoReady = false;
+      _hasVideoError = false;
+      _errorMessage = null;
+    });
+
+    _videoController?.dispose();
+    _videoController = null;
+
+    // 重新获取房间详情以更新视频URL
+    try {
+      final api = LiveApi(client: ref.read(dioClientProvider));
+      final detail = await api.getRoomDetail(_room.id);
+
+      if (mounted) {
+        // 👇 通过 detail.room 访问 LiveRoomInfo
+        final updatedRoom = detail.room;
+        setState(() {
+          _room = updatedRoom;
+        });
+      }
+    } catch (e) {
+    }
+
+    // 重新初始化播放器
+    _initVideoPlayer();
   }
 
   Future<void> _loadProducts() async {
@@ -47,10 +123,31 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
       final api = LiveApi(client: ref.read(dioClientProvider));
       final detail = await api.getRoomDetail(_room.id);
       if (mounted) {
-        setState(() => _products = detail.products);
+        setState(() {
+          _products = detail.products;
+
+          // 👇 通过 detail.room 访问房间信息
+          final roomInfo = detail.room;
+
+          // 设置当前讲解商品
+          if (detail.products.isNotEmpty) {
+            final currentId = roomInfo.currentProductId;
+
+            if (currentId != null && currentId.isNotEmpty) {
+              try {
+                _currentProduct = detail.products.firstWhere(
+                      (p) => p.id == currentId,
+                );
+              } catch (e) {
+                _currentProduct = detail.products.first;
+              }
+            } else {
+              _currentProduct = detail.products.first;
+            }
+          }
+        });
       }
-    } catch (e) {
-      debugPrint('加载商品失败: $e');
+    } catch (e, stackTrace) {
     }
   }
 
@@ -128,6 +225,7 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
   void dispose() {
     _viewerTimer?.cancel();
     _likeTimer?.cancel();
+    _videoController?.dispose();
     super.dispose();
   }
 
@@ -137,41 +235,8 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // 模拟直播画面
-          Container(
-            color: const Color(0xFF1A1A2E),
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 80, height: 80,
-                    decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: AppColors.primary, width: 3)),
-                    child: const Icon(Icons.videocam, color: Colors.white, size: 40),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text('模拟直播画面', style: TextStyle(color: Colors.white54, fontSize: 16)),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(color: AppColors.error.withValues(alpha: 0.8), borderRadius: BorderRadius.circular(4)),
-                    child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                      SizedBox(
-                        width: 8, height: 8,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white),
-                        ),
-                      ),
-                      SizedBox(width: 6),
-                      Text('直播中', style: TextStyle(color: Colors.white, fontSize: 12)),
-                    ]),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          _buildVideoPlayer(),
 
-          // 当前商品卡片 - 修复文字溢出问题
           if (_currentProduct != null)
             Positioned(
               top: MediaQuery.of(context).padding.top + 50,
@@ -198,7 +263,6 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
             child: _buildChatList(),
           ),
 
-          // 底部控制栏 - 包含观众数、点赞数和结束按钮
           Positioned(
             bottom: 0,
             left: 0,
@@ -210,7 +274,145 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
     );
   }
 
-  // 商品卡片 - 修复文字溢出问题
+  Widget _buildVideoPlayer() {
+    if (_hasVideoError) {
+      return Container(
+        color: const Color(0xFF1A1A2E),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                const SizedBox(height: 16),
+                Text(
+                  _errorMessage ?? '视频加载失败',
+                  style: const TextStyle(color: Colors.white70, fontSize: 14),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton.icon(
+                  onPressed: _reloadVideo,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('重新加载'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (!_isVideoReady) {
+      return Container(
+        color: const Color(0xFF1A1A2E),
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: 48,
+                height: 48,
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 3,
+                ),
+              ),
+              SizedBox(height: 16),
+              Text(
+                '视频加载中...',
+                style: TextStyle(color: Colors.white70, fontSize: 16),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: () {
+        if (_videoController!.value.isPlaying) {
+          _videoController!.pause();
+        } else {
+          _videoController!.play();
+        }
+        setState(() {});
+      },
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // 视频播放器
+          Center(
+            child: AspectRatio(
+              aspectRatio: _videoController!.value.aspectRatio,
+              child: VideoPlayer(_videoController!),
+            ),
+          ),
+
+          // 播放/暂停按钮覆盖层
+          if (!_videoController!.value.isPlaying)
+            Container(
+              color: Colors.black26,
+              child: Center(
+                child: Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withValues(alpha: 0.8),
+                  ),
+                  child: const Icon(
+                    Icons.play_arrow,
+                    color: Colors.black87,
+                    size: 36,
+                  ),
+                ),
+              ),
+            ),
+
+          // 直播标签
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 10,
+            left: 12,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.error.withValues(alpha: 0.8),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 8,
+                    height: 8,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 6),
+                  Text(
+                    '直播中',
+                    style: TextStyle(color: Colors.white, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 商品卡片
   Widget _buildProductCard(ProductModel product) {
     return Container(
       padding: const EdgeInsets.all(10),
@@ -254,8 +456,8 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
                     fontWeight: FontWeight.w600,
                     fontSize: 13,
                   ),
-                  maxLines: 2, // 最多两行
-                  overflow: TextOverflow.ellipsis, // 溢出显示省略号
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -391,7 +593,7 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
     );
   }
 
-  // 底部栏 - 包含统计信息和结束按钮
+  // 底部栏
   Widget _buildBottomBar() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -406,18 +608,15 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // 统计信息行
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // 观众数
                 _buildStatItem(
                   icon: Icons.visibility,
                   label: '观众',
                   count: _formatCount(_viewerCount),
                 ),
                 const SizedBox(width: 32),
-                // 点赞数
                 _buildStatItem(
                   icon: Icons.favorite,
                   label: '点赞',
@@ -427,7 +626,6 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
               ],
             ),
             const SizedBox(height: 16),
-            // 结束按钮 - 居中显示
             Center(
               child: GestureDetector(
                 onTap: _endLive,
@@ -464,7 +662,6 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
     );
   }
 
-  // 统计项组件
   Widget _buildStatItem({
     required IconData icon,
     required String label,
@@ -505,7 +702,6 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
     );
   }
 
-  // 数字格式化
   String _formatCount(int count) {
     if (count >= 10000) {
       return '${(count / 10000).toStringAsFixed(1)}万';
