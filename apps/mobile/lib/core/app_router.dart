@@ -12,6 +12,7 @@ import '../pages/admin/video_detail_page.dart';
 import '../pages/auth/login_page.dart';
 import '../pages/cart/cart_page.dart';
 import '../pages/feed/feed_page.dart';
+import '../pages/video/single_video_player_page.dart';
 import '../pages/live/live_page.dart';
 import '../pages/live/live_room_page.dart';
 import '../pages/message/message_detail_page.dart';
@@ -131,6 +132,18 @@ final class AppRouter {
         builder: (context, state) => CategorySalesListPage(
           category: state.pathParameters['category']!,
         ),
+      ),
+      GoRoute(
+        path: '/video/:videoId',
+        name: 'singleVideo',
+        builder: (context, state) {
+          final seekStr = state.uri.queryParameters['seek'];
+          final seekTo = seekStr != null ? int.tryParse(seekStr) : null;
+          return SingleVideoPlayerPage(
+            videoId: state.pathParameters['videoId']!,
+            seekTo: seekTo,
+          );
+        },
       ),
       GoRoute(
         path: '/play/:videoId',

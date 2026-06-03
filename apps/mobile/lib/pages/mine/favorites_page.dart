@@ -70,7 +70,7 @@ final class _FavoritesPageState extends ConsumerState<FavoritesPage>
         final item = videos[index];
         return _FavoriteVideoTile(
           item: item,
-          onTap: () => context.pushNamed('playVideo', pathParameters: {'videoId': item.id}),
+          onTap: () => context.pushNamed('singleVideo', pathParameters: {'videoId': item.id}),
           onRemove: () => ref.read(favoriteProvider.notifier).removeFavorite(item.id),
         );
       },
@@ -147,7 +147,7 @@ final class _FavoritesPageState extends ConsumerState<FavoritesPage>
               onSeekToTime: product.videoId.isNotEmpty
                   ? (seekTime) {
                       Navigator.of(context).pop(); // close detail sheet
-                      context.pushNamed('playVideo',
+                      context.pushNamed('singleVideo',
                           pathParameters: {'videoId': product.videoId},
                           queryParameters: seekTime > 0
                               ? {'seek': seekTime.toString()}
