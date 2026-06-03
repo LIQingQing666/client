@@ -7,7 +7,13 @@
       "Bash(curl -s -X POST http://localhost:3000/api/auth/login -H \"Content-Type: application/json\" --data-raw '{\"nickname\":\"u1\",\"password\":\"123456\"}')",
       "Bash(curl -s -X POST http://localhost:3000/api/auth/login -H \"Content-Type: application/json\" --data-raw '{\"nickname\":\"testuser\",\"password\":\"123456\"}')",
       "Bash(git *)",
-      "Bash(flutter run *)"
+      "Bash(flutter run *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://192.168.50.174:3000/api/health)",
+      "Bash(curl -s http://192.168.50.174:3000/api/live/rooms)",
+      "Bash(curl -s http://192.168.50.174:3000/api/videos/recommend)",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(v['video_url'][:60]\\) for v in d['data']['list'][:3]]\")",
+      "Bash(dart analyze *)",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(f'room: {r[\\\\\"title\\\\\"][:20]}... video_url: {r[\\\\\"video_url\\\\\"][:60]}'\\) for r in d['data']['list']]\")"
     ]
   }
 }
