@@ -343,13 +343,13 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
       );
     }
 
-    // Handle pending jump to specific video
+    // Handle pending jump to specific video (e.g. from favorites).
     if (_pendingJumpVideoId != null && feedState.videos.isNotEmpty) {
       final targetIndex = feedState.videos.indexWhere((v) => v.id == _pendingJumpVideoId);
       if (targetIndex >= 0) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _pageController.jumpToPage(targetIndex);
-          // Schedule seek after player has time to initialize (≈800ms).
+          // Schedule seek after player has time to initialize (≈1.2s).
           if (_pendingSeekTo != null && _pendingSeekTo! > 0) {
             Future.delayed(const Duration(milliseconds: 1200), () {
               if (mounted) {
@@ -361,6 +361,46 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
         });
       }
       _pendingJumpVideoId = null;
+    }
+
+    // If the pending video is NOT in the feed list, fetch it directly and
+    // insert at the front so the user can play it immediately.
+    if (_pendingJumpVideoId == null) {
+      // Already handled above.
+    } else {
+      final videoId = _pendingJumpVideoId!;
+      _pendingJumpVideoId = null;
+      final seekTo = _pendingSeekTo;
+      _pendingSeekTo = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        try {
+          final api = ref.read(videoApiProvider);
+          final detail = await api.getVideoDetail(videoId);
+          if (!mounted) return;
+          // Insert the single video at the beginning so it becomes visible.
+          ref.read(feedProvider.notifier).insertVideoAtFront(detail.video);
+          // Store product for the video so the floating card shows.
+          if (detail.products.isNotEmpty && mounted) {
+            setState(() {
+              _productCache[videoId] =
+                  ProductModel.fromJson(detail.products.first);
+            });
+          }
+          // Jump and seek after the list rebuilds.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _pageController.jumpToPage(0);
+              if (seekTo != null && seekTo > 0) {
+                Future.delayed(const Duration(milliseconds: 1200), () {
+                  if (mounted) _seekTrigger.value = seekTo;
+                });
+              }
+            }
+          });
+        } on Exception {
+          // Silently fail — the video will show in the normal feed.
+        }
+      });
     }
 
     if (feedState.videos.isEmpty) {
