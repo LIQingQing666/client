@@ -299,14 +299,64 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
 
   void _showAudienceList() {
     final state = ref.read(liveProvider);
+    final audiences = _generateAudiences(state.onlineCount);
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (_) => AudienceList(
-        audiences: const [],
+        audiences: audiences,
         onlineCount: state.onlineCount,
       ),
     );
+  }
+
+  /// Generate a realistic mock audience list based on the online count.
+  /// Shows up to ~30 users — a mix of known seed users and random viewers.
+  List<Audience> _generateAudiences(int onlineCount) {
+    // Known "seed" users that appear in most live rooms.
+    const known = [
+      ('u2', '小明数码'),
+      ('u3', '小红穿搭'),
+      ('u4', '阿杰户外'),
+      ('u5', '数码控小王'),
+    ];
+
+    // Random viewer name parts for natural-looking names.
+    const prefixes = ['观众', '粉丝', '用户', '网友', '买家', '路人'];
+    const suffixes = [
+      '小明', '小红', '阿杰', '小王', '阿花', '小美', '大壮', '老李',
+      '小陈', '阿强', '张三', '李四', '王五', '赵六', '七七', '八哥',
+      '小柒', '阿星', '大刘', '老周', '小吴', '阿林', '阿辉', '菜菜',
+      '球球', '豆豆', '米粒', '糖糖', '果果', '乐乐', '星星', '月亮',
+    ];
+
+    final list = <Audience>[];
+    final rand = DateTime.now().millisecondsSinceEpoch; // pseudo-random seed
+
+    // Always show the known users first (if they fit).
+    final knownCount = (onlineCount >= 5) ? known.length : (onlineCount > 0 ? 1 : 0);
+    for (int i = 0; i < knownCount; i++) {
+      list.add(Audience(
+        userId: known[i].$1,
+        name: known[i].$2,
+        avatar: '',
+      ));
+    }
+
+    // Fill up to min(onlineCount, 30) with random viewers.
+    final maxShow = (onlineCount.clamp(0, 30)) - list.length;
+    for (int i = 0; i < maxShow; i++) {
+      final prefix = prefixes[(rand + i * 7) % prefixes.length];
+      final suffix = suffixes[(rand + i * 13) % suffixes.length];
+      final num = (rand + i * 17 + 1000) % 10000; // 1000-10999
+      list.add(Audience(
+        userId: 'viewer_${num}_$i',
+        name: '$prefix$suffix$num',
+        avatar: '',
+      ));
+    }
+
+    return list;
   }
 
   void _showGiftPanel() {
