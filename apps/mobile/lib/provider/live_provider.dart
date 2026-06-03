@@ -77,7 +77,7 @@ final class LiveState {
       likeCount: likeCount ?? this.likeCount,
       isLiked: isLiked ?? this.isLiked,
       heatCount: heatCount ?? this.heatCount,
-      currentProduct: currentProduct,
+      currentProduct: currentProduct ?? this.currentProduct,
       products: products ?? this.products,
       coupons: coupons ?? this.coupons,
       isLoading: isLoading ?? this.isLoading,
@@ -108,11 +108,24 @@ final class LiveNotifier extends StateNotifier<LiveState> {
 
     try {
       final detail = await api.getRoomDetail(roomId);
+      ProductModel? initialProduct;
+      if (detail.room.currentProductId != null && detail.products.isNotEmpty) {
+        try {
+          initialProduct = detail.products.firstWhere(
+                (p) => p.id == detail.room.currentProductId,
+          );
+        } catch (e) {
+          initialProduct = detail.products.first;
+        }
+      } else if (detail.products.isNotEmpty) {
+        initialProduct = detail.products.first;
+      }
       state = state.copyWith(
         room: detail.room,
         products: detail.products,
         coupons: detail.coupons,
         heatCount: detail.room.heatCount,
+        currentProduct: initialProduct,
         isLoading: false,
       );
     }
@@ -138,45 +151,68 @@ final class LiveNotifier extends StateNotifier<LiveState> {
   }
 
   void _handleEvent(Map<String, dynamic> event) {
-    final eventName = event['event'] as String? ?? '';
+    try {
+      final eventName = event['event'] as String? ?? '';
 
-    switch (eventName) {
-      case 'danmaku':
-        _addMessage(LiveMessage.fromJson(event));
-      case 'online_count':
-        final count = (event['count'] as num?)?.toInt() ?? state.onlineCount;
-        state = state.copyWith(onlineCount: count);
-      case 'explaining_product':
-        final rawProduct = event['product'] as Map<String, dynamic>?;
-        if (rawProduct != null) {
-          state = state.copyWith(
-            currentProduct: ProductModel.fromJson(rawProduct),
-          );
-        }
-      case 'new_comment':
-        // Live room user comment broadcast.
-        _addMessage(LiveMessage.fromJson(event));
-      case 'stock_update':
-        // Product stock change pushed by server.
-        final productId = event['product_id'] as String?;
-        final newStock = (event['stock'] as num?)?.toInt();
-        if (productId != null && newStock != null) {
-          final updated = state.products.map((p) {
-            if (p.id != productId) return p;
-            return p.copyWith(stock: newStock);
-          }).toList();
-          state = state.copyWith(products: updated);
-        }
-      case 'room_state':
-        final count = (event['online_count'] as num?)?.toInt() ?? 0;
-        final heat = (event['heat_count'] as num?)?.toInt();
-        state = state.copyWith(onlineCount: count, heatCount: heat);
-      case 'room_products':
-        final rawList = (event['list'] as List<dynamic>?) ?? [];
-        final products = rawList
-            .map((e) => ProductModel.fromJson(e as Map<String, dynamic>))
-            .toList();
-        state = state.copyWith(products: products);
+      switch (eventName) {
+        case 'danmaku':
+          _addMessage(LiveMessage.fromJson(event));
+        case 'online_count':
+          final count = (event['count'] as num?)?.toInt() ?? state.onlineCount;
+          state = state.copyWith(onlineCount: count);
+        case 'explaining_product':
+          final rawProduct = event['product'] as Map<String, dynamic>?;
+          if (rawProduct != null) {
+            state = state.copyWith(
+              currentProduct: ProductModel.fromJson(rawProduct),
+            );
+          }
+        case 'new_comment':
+          // Live room user comment broadcast.
+          _addMessage(LiveMessage.fromJson(event));
+        case 'stock_update':
+          // Product stock change pushed by server.
+          final productId = event['product_id'] as String?;
+          final newStock = (event['stock'] as num?)?.toInt();
+          if (productId != null && newStock != null) {
+            final updated = state.products.map((p) {
+              if (p.id != productId) return p;
+              return p.copyWith(stock: newStock);
+            }).toList();
+            state = state.copyWith(products: updated);
+          }
+        case 'room_state':
+          final count = (event['online_count'] as num?)?.toInt() ?? 0;
+          final heat = (event['heat_count'] as num?)?.toInt();
+          state = state.copyWith(onlineCount: count, heatCount: heat);
+
+          // Handle current explaining product for new joiners
+          final rawCurrentProduct = event['current_product'] as Map<String, dynamic>?;
+          if (rawCurrentProduct != null) {
+            state = state.copyWith(
+              currentProduct: ProductModel.fromJson(rawCurrentProduct),
+            );
+          }
+        case 'room_products':
+          final rawList = (event['list'] as List<dynamic>?) ?? [];
+          final products = rawList
+              .map((e) => ProductModel.fromJson(e as Map<String, dynamic>))
+              .toList();
+          ProductModel? updatedCurrentProduct = state.currentProduct;
+          if (updatedCurrentProduct != null) {
+            try {
+              updatedCurrentProduct = products.firstWhere(
+                    (p) => p.id == updatedCurrentProduct!.id,
+              );
+            } catch (_) {
+              // 当前商品不在新列表中，保持原值或设为第一个
+              updatedCurrentProduct = products.isNotEmpty ? products.first : null;
+            }
+          }
+          state = state.copyWith(products: products);
+      }
+    } catch (e, stack) {
+      debugPrint(stack.toString());
     }
   }
 

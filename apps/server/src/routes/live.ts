@@ -246,7 +246,7 @@ export async function liveRoutes(app: FastifyInstance) {
     }
 
     const product = db.prepare(
-      'SELECT id, name, cover_url, price, original_price, sales, ai_sales_point FROM products WHERE id = ?'
+      'SELECT * FROM products WHERE id = ?'
     ).get(product_id) as Record<string, unknown> | undefined;
     if (!product) {
       return reply.status(404).send({ code: 404, message: '商品不存在' });
@@ -256,13 +256,20 @@ export async function liveRoutes(app: FastifyInstance) {
       'UPDATE live_rooms SET current_product_id = ?, updated_at = datetime(\'now\') WHERE id = ?'
     ).run(product_id, id);
 
+    const serializedProduct = {
+      ...product,
+      tags: safeJsonParse<string[]>(product.tags as string, []),
+      images: safeJsonParse<string[]>(product.images as string, []),
+      specs: safeJsonParse<unknown[]>(product.specs as string, []),
+    };
+
     try {
       getIO().to(id).emit('explaining_product', {
-        product,
+        product: serializedProduct,
         timestamp: new Date().toISOString(),
       });
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error('[HTTP] 广播讲解商品失败:', err);
     }
 
     return {
@@ -349,7 +356,7 @@ export async function liveRoutes(app: FastifyInstance) {
     }
 
     const product = db.prepare(
-      'SELECT id, name, cover_url, price, original_price, sales, ai_sales_point FROM products WHERE id = ?'
+      'SELECT * FROM products WHERE id = ?'
     ).get(product_id) as Record<string, unknown> | undefined;
 
     if (!product) {
@@ -360,10 +367,21 @@ export async function liveRoutes(app: FastifyInstance) {
       'UPDATE live_rooms SET current_product_id = ?, updated_at = datetime(\'now\') WHERE id = ?'
     ).run(product_id, roomId);
 
-    getIO().to(roomId).emit('explaining_product', {
-      product,
-      timestamp: new Date().toISOString(),
-    });
+    const serializedProduct = {
+      ...product,
+      tags: safeJsonParse<string[]>(product.tags as string, []),
+      images: safeJsonParse<string[]>(product.images as string, []),
+      specs: safeJsonParse<unknown[]>(product.specs as string, []),
+    };
+
+    try {
+      getIO().to(roomId).emit('explaining_product', {
+        product: serializedProduct,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error('[HTTP] 广播讲解商品失败:', err);
+    }
 
     return {
       code: 0,
