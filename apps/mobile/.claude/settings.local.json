@@ -7,7 +7,28 @@
       "Bash(curl -s -X POST http://localhost:3000/api/auth/login -H \"Content-Type: application/json\" --data-raw '{\"nickname\":\"u1\",\"password\":\"123456\"}')",
       "Bash(curl -s -X POST http://localhost:3000/api/auth/login -H \"Content-Type: application/json\" --data-raw '{\"nickname\":\"testuser\",\"password\":\"123456\"}')",
       "Bash(git *)",
-      "Bash(flutter run *)"
+      "Bash(flutter run *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://192.168.50.174:3000/api/health)",
+      "Bash(curl -s http://192.168.50.174:3000/api/live/rooms)",
+      "Bash(curl -s http://192.168.50.174:3000/api/videos/recommend)",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(v['video_url'][:60]\\) for v in d['data']['list'][:3]]\")",
+      "Bash(dart analyze *)",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(f'room: {r[\\\\\"title\\\\\"][:20]}... video_url: {r[\\\\\"video_url\\\\\"][:60]}'\\) for r in d['data']['list']]\")",
+      "Bash(ipconfig)",
+      "Bash(findstr \"192.168\")",
+      "Bash(netsh advfirewall *)",
+      "Bash(findstr -i \"3000\")",
+      "Bash(findstr \":3000\")",
+      "Bash(curl -s http://192.168.50.174:3000/api/cart/u1)",
+      "Bash(curl -s http://192.168.50.174:3000/api/live/rooms/eab2dc82-6ef4-4e7c-9b8d-56fb671b8e18)",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(f'{p[\\\\\"name\\\\\"][:20]}... highlight_time={p[\\\\\"highlight_time\\\\\"]}s'\\) for p in d['data']['products'][:5]]\")",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(list\\(d.keys\\(\\)\\), indent=2\\)\\); print\\('---'\\); print\\(len\\(d.get\\('data',{}\\).get\\('products',[]\\)\\), 'products'\\)\")",
+      "Bash(python -c ' *)",
+      "Bash(curl -s \"http://192.168.50.174:3000/api/live/rooms/d18300f1-b646-45f7-8464-3fbd1445a24e\")",
+      "Bash(curl -s \"http://192.168.50.174:3000/api/videos/recommend\")",
+      "Bash(curl -s \"http://192.168.50.174:3000/api/videos/f4ecdefe-c96a-4040-9a95-356db40e256f\")",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d.get\\('code'\\), d.get\\('message',''\\)\\)\")",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); v=d['data']['list'][0]; print\\(f'id={v[\\\\\"id\\\\\"][:16]}... url={v[\\\\\"video_url\\\\\"][:60]}'\\)\")"
     ]
   }
 }

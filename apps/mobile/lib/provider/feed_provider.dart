@@ -124,6 +124,19 @@ final class FeedNotifier extends StateNotifier<FeedState> {
     await loadVideos();
   }
 
+  void insertVideoAtFront(VideoModel video) {
+    // Don't duplicate if the video is already in the list.
+    final existingIndex = state.videos.indexWhere((v) => v.id == video.id);
+    if (existingIndex >= 0) {
+      state = state.copyWith(currentIndex: existingIndex);
+      return;
+    }
+    state = state.copyWith(
+      videos: [video, ...state.videos],
+      currentIndex: 0,
+    );
+  }
+
   void setCurrentIndex(int index) {
     if (index == state.currentIndex) {
       return;

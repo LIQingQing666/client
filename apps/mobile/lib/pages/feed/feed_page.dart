@@ -18,9 +18,10 @@ import '../../widgets/video_comments_sheet.dart';
 import '../../widgets/video_player_widget.dart';
 
 final class FeedPage extends ConsumerStatefulWidget {
-  const FeedPage({super.key, this.initialVideoId});
+  const FeedPage({super.key, this.initialVideoId, this.initialSeekTo});
 
   final String? initialVideoId;
+  final int? initialSeekTo;
 
   @override
   ConsumerState<FeedPage> createState() => _FeedPageState();
@@ -30,6 +31,7 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
   late final PageController _pageController = PageController();
   final ValueNotifier<int> _seekTrigger = ValueNotifier<int>(0);
   String? _pendingJumpVideoId;
+  int? _pendingSeekTo;
   final Map<String, ProductModel?> _productCache = {};
 
   @override
@@ -37,6 +39,7 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
     super.initState();
     if (widget.initialVideoId != null) {
       _pendingJumpVideoId = widget.initialVideoId;
+      _pendingSeekTo = widget.initialSeekTo;
     }
   }
 
@@ -340,15 +343,58 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
       );
     }
 
-    // Handle pending jump to specific video
+    // Handle pending jump to specific video (e.g. from favorites).
     if (_pendingJumpVideoId != null && feedState.videos.isNotEmpty) {
       final targetIndex = feedState.videos.indexWhere((v) => v.id == _pendingJumpVideoId);
       if (targetIndex >= 0) {
+        // Found in feed list — jump directly.
+        final seekTo = _pendingSeekTo;
+        _pendingJumpVideoId = null;
+        _pendingSeekTo = null;
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _pageController.jumpToPage(targetIndex);
+          if (seekTo != null && seekTo > 0) {
+            Future.delayed(const Duration(milliseconds: 1200), () {
+              if (mounted) _seekTrigger.value = seekTo;
+            });
+          }
         });
       }
+    }
+
+    // If the pending video is NOT in the feed list, fetch it directly via API
+    // and insert at the front so the user can play it immediately.
+    if (_pendingJumpVideoId != null) {
+      final videoId = _pendingJumpVideoId!;
       _pendingJumpVideoId = null;
+      final seekTo = _pendingSeekTo;
+      _pendingSeekTo = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        try {
+          final api = ref.read(videoApiProvider);
+          final detail = await api.getVideoDetail(videoId);
+          if (!mounted) return;
+          ref.read(feedProvider.notifier).insertVideoAtFront(detail.video);
+          if (detail.products.isNotEmpty && mounted) {
+            setState(() {
+              _productCache[videoId] =
+                  ProductModel.fromJson(detail.products.first);
+            });
+          }
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _pageController.jumpToPage(0);
+              if (seekTo != null && seekTo > 0) {
+                Future.delayed(const Duration(milliseconds: 1200), () {
+                  if (mounted) _seekTrigger.value = seekTo;
+                });
+              }
+            }
+          });
+        } on Exception {
+          // Silently fail — the video will show in the normal feed.
+        }
+      });
     }
 
     if (feedState.videos.isEmpty) {
