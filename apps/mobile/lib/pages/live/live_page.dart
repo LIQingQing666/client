@@ -62,11 +62,10 @@ final class _LivePageState extends ConsumerState<LivePage> {
       final rooms = await api.getRooms();
       if (!mounted) return;
       setState(() {
-        _rooms = rooms;
+        _rooms = rooms.where((r) => r.isLive).toList();
         _isLoading = false;
       });
-    } catch (e, stackTrace) {
-
+    } on Exception catch (e) {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
@@ -371,9 +370,6 @@ final class _LivePageState extends ConsumerState<LivePage> {
               onTap: () {
                 context.pushNamed('liveRoom', pathParameters: {'roomId': room.id});
               },
-              onPreviewTap: () {
-                _reserveLive(room);
-              },
             );
           },
         ),
@@ -492,7 +488,7 @@ final class _LivePageState extends ConsumerState<LivePage> {
             child: const Icon(Icons.live_tv, color: AppColors.primary, size: 36),
           ),
           const SizedBox(height: 20),
-          const Text('还没有直播', style: TextStyle(color: Colors.white70, fontSize: 16)),
+          const Text('当前没有正在进行的直播', style: TextStyle(color: Colors.white70, fontSize: 16)),
           const SizedBox(height: 8),
           const Text('点击右上角"开播"创建直播间', style: TextStyle(color: Colors.white38, fontSize: 13)),
           const SizedBox(height: 32),
@@ -514,11 +510,7 @@ final class _LivePageState extends ConsumerState<LivePage> {
 
   /// 我的直播间卡片
   Widget _buildMyRoomCard(LiveRoomInfo room) {
-    final statusColor = room.isLive
-        ? AppColors.error
-        : room.isPreview
-        ? AppColors.primary
-        : AppColors.textHint;
+    if (!room.isLive) return const SizedBox.shrink();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -531,18 +523,13 @@ final class _LivePageState extends ConsumerState<LivePage> {
         color: Colors.transparent,
         child: InkWell(
           onTap: () {
-            if (room.isLive) {
-              _enterBroadcastPage(room);
-            } else if (room.isPreview) {
-              _startLive(room);
-            }
+            _enterBroadcastPage(room);
           },
           borderRadius: BorderRadius.circular(12),
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Row(
               children: [
-                // 封面
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: CachedNetworkImage(
@@ -555,7 +542,6 @@ final class _LivePageState extends ConsumerState<LivePage> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                // 信息
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -563,47 +549,29 @@ final class _LivePageState extends ConsumerState<LivePage> {
                       Text(
                         room.title,
                         style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                        maxLines: 2, overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 6),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(
-                          color: statusColor.withValues(alpha: 0.2),
+                          color: AppColors.error.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(4),
                         ),
-                        child: Text(
-                          room.statusText,
-                          style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.w600),
+                        child: const Text(
+                          '直播中',
+                          style: TextStyle(color: AppColors.error, fontSize: 11, fontWeight: FontWeight.w600),
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${room.productIds.length}件商品',
+                        '${room.productIds.length}件商品 · ${room.onlineCountText}观看',
                         style: TextStyle(color: Colors.white.withAlpha(120), fontSize: 11),
                       ),
                     ],
                   ),
                 ),
-                // 操作按钮
-                if (room.isPreview)
-                  GestureDetector(
-                    onTap: () => _startLive(room),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Text(
-                        '开始直播',
-                        style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  ),
-                if (room.isLive)
-                  const Icon(Icons.arrow_forward_ios, color: Colors.white38, size: 16),
+                const Icon(Icons.arrow_forward_ios, color: Colors.white38, size: 16),
               ],
             ),
           ),
@@ -626,29 +594,22 @@ final class _LivePageState extends ConsumerState<LivePage> {
 }
 
 final class _LiveRoomFullCard extends StatelessWidget {
-  const _LiveRoomFullCard({
-    required this.room,
-    this.onTap,
-    this.onPreviewTap,
-  });
+  const _LiveRoomFullCard({required this.room, this.onTap});
 
   final LiveRoomInfo room;
   final VoidCallback? onTap;
-  final VoidCallback? onPreviewTap;
 
   @override
   Widget build(BuildContext context) {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // 封面图
         CachedNetworkImage(
           imageUrl: room.coverUrl,
           fit: BoxFit.cover,
           placeholder: (_, __) => Container(color: AppColors.card),
           errorWidget: (_, __, ___) => Container(color: AppColors.card),
         ),
-        // 渐变遮罩
         Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -658,11 +619,23 @@ final class _LiveRoomFullCard extends StatelessWidget {
             ),
           ),
         ),
-        // 状态标签
         Positioned(
           top: MediaQuery.of(context).padding.top + 50,
           left: 16,
-          child: _buildStatusBadge(),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: AppColors.error,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.play_arrow, color: Colors.white, size: 14),
+                Text('直播中', style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.w600)),
+              ],
+            ),
+          ),
         ),
         // 底部信息
         Positioned(
@@ -670,153 +643,37 @@ final class _LiveRoomFullCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                room.title,
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white),
-                maxLines: 2,
-              ),
+              Text(room.title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white), maxLines: 2),
               const SizedBox(height: 8),
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 14,
-                    backgroundColor: AppColors.card,
-                    child: Text(
-                      room.authorName.isNotEmpty ? room.authorName[0] : '?',
-                      style: const TextStyle(fontSize: 10, color: Colors.white),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(room.authorName, style: const TextStyle(fontSize: 14, color: Colors.white)),
-                  const SizedBox(width: 16),
-                  if (room.isLive) ...[
-                    const Icon(Icons.person, color: Colors.white70, size: 14),
-                    Text(' ${room.onlineCountText}', style: const TextStyle(fontSize: 12, color: Colors.white70)),
-                  ],
-                ],
-              ),
+              Row(children: [
+                CircleAvatar(
+                  radius: 14, backgroundColor: AppColors.card,
+                  child: Text(room.authorName.isNotEmpty ? room.authorName[0] : '?', style: const TextStyle(fontSize: 10, color: Colors.white)),
+                ),
+                const SizedBox(width: 8),
+                Text(room.authorName, style: const TextStyle(fontSize: 14, color: Colors.white)),
+                const SizedBox(width: 16),
+                const Icon(Icons.person, color: Colors.white70, size: 14),
+                Text(' ${room.onlineCountText}', style: const TextStyle(fontSize: 12, color: Colors.white70)),
+              ]),
             ],
           ),
         ),
-        // 底部按钮
         Positioned(
           left: 16, right: 16, bottom: 50,
-          child: _buildActionButton(context),
+          child: SizedBox(
+            height: 48,
+            child: ElevatedButton(
+              onPressed: onTap,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.error, foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: const Text('进入直播间', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white)),
+            ),
+          ),
         ),
       ],
     );
-  }
-
-  Widget _buildStatusBadge() {
-    if (room.isLive) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(
-          color: AppColors.error,
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.play_arrow, color: Colors.white, size: 14),
-            Text('直播中', style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.w600)),
-          ],
-        ),
-      );
-    } else if (room.isPreview) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(
-          color: AppColors.primary,
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.schedule, color: Colors.white, size: 14),
-            Text('预告', style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.w600)),
-          ],
-        ),
-      );
-    } else {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(
-          color: AppColors.textHint,
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.play_disabled, color: Colors.white, size: 14),
-            Text('已结束', style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.w600)),
-          ],
-        ),
-      );
-    }
-  }
-
-  Widget _buildActionButton(BuildContext context) {
-    if (room.isLive) {
-      return SizedBox(
-        height: 48,
-        child: ElevatedButton(
-          onPressed: onTap,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.error,
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          ),
-          child: const Text('进入直播间', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white)),
-        ),
-      );
-    } else if (room.isPreview) {
-      return Row(
-        children: [
-          Expanded(
-            child: SizedBox(
-              height: 48,
-              child: OutlinedButton(
-                onPressed: onPreviewTap,  // ✅ 回调给外部处理
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.primary,
-                  side: const BorderSide(color: AppColors.primary),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-                child: const Text('预约直播', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: SizedBox(
-              height: 48,
-              child: ElevatedButton(
-                onPressed: onTap,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary.withValues(alpha: 0.3),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-                child: const Text('查看预告', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white)),
-              ),
-            ),
-          ),
-        ],
-      );
-    } else {
-      return SizedBox(
-        height: 48,
-        child: ElevatedButton(
-          onPressed: onTap,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.textHint.withValues(alpha: 0.5),
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          ),
-          child: const Text('查看回放', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white)),
-        ),
-      );
-    }
   }
 }

@@ -16,8 +16,8 @@ import '../../provider/follow_provider.dart';
 import '../../provider/live_provider.dart';
 import '../../provider/pip_provider.dart';
 import '../../provider/user_provider.dart';
-import '../../widgets/coupon_countdown.dart';
 import '../../utils/toast.dart';
+import '../../widgets/coupon_countdown.dart';
 import '../../widgets/danmaku_overlay.dart';
 import '../../widgets/floating_product_card.dart';
 import '../../widgets/product_detail_sheet.dart';
@@ -83,8 +83,6 @@ final class _LiveRoomPageState extends ConsumerState<LiveRoomPage> {
       );
     }
 
-    // When the room list is empty (e.g. returning from PIP), use the live
-    // provider's room as a single-item list.
     final displayRooms = rooms.isNotEmpty
         ? rooms
         : (liveState.room != null ? [liveState.room!] : <LiveRoomInfo>[]);
@@ -112,9 +110,7 @@ final class _LiveRoomPageState extends ConsumerState<LiveRoomPage> {
         onPageChanged: (index) {
           if (index >= 0 && index < displayRooms.length) {
             setState(() => _currentIndex = index);
-            ref
-                .read(liveProvider.notifier)
-                .switchRoom(displayRooms[index].id);
+            ref.read(liveProvider.notifier).switchRoom(displayRooms[index].id);
           }
         },
         itemBuilder: (context, index) {
@@ -182,17 +178,26 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
   bool _videoReady = false;
   bool _videoError = false;
 
+  bool get _canEnterPip {
+    final room = ref.read(liveProvider).room;
+    return _videoController != null && _videoReady && room != null && room.isLive;
+  }
+
+  void _maybeEnterPip() {
+    if (!_canEnterPip) return;
+    final room = ref.read(liveProvider).room!;
+    ref.read(pipProvider.notifier).enterPip(_videoController!, room);
+  }
+
   @override
   void initState() {
     super.initState();
-    // If returning from PIP, reuse the already-initialized controller.
     final pipState = ref.read(pipProvider);
     if (!pipState.isActive && pipState.videoController != null) {
       _videoController = pipState.videoController;
       _videoReady = true;
       _videoError = false;
       _videoController!.play();
-      // Take ownership — release the PIP reference without disposing.
       ref.read(pipProvider.notifier).releaseController();
       return;
     }
@@ -203,7 +208,6 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
   void dispose() {
     _chatController.dispose();
     _chatFocusNode.dispose();
-
     final pipActive = ref.read(pipProvider).isActive;
     if (!pipActive) {
       _videoController?.pause();
@@ -212,16 +216,12 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
     super.dispose();
   }
 
-  /// Initialize (or re-initialize) the video player.
-  /// Safe to call multiple times — returns early if already initializing.
   void _initVideo(String url) {
     if (url.isEmpty) {
       if (mounted) setState(() => _videoError = true);
       return;
     }
-    // If we already have a working controller, don't re-init.
     if (_videoController != null && _videoReady) return;
-    // Dispose any failed/previous controller first.
     if (_videoController != null) {
       _videoController!.dispose();
       _videoController = null;
@@ -321,7 +321,6 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
 
     if (room == null) return;
 
-    // 检查余额是否足够（前端预检）
     if (userState.coinBalance < gift.price) {
       _showGiftInsufficientBalanceDialog(gift.price);
       return;
@@ -337,16 +336,13 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
         roomId: room.id,
       );
 
-      // 更新本地余额
       final newBalance = (result['new_balance'] as num).toDouble();
       ref.read(userProvider.notifier).updateCoinBalance(newBalance);
 
-      // 发送礼物弹幕
       ref.read(liveProvider.notifier).sendGift('我', gift.icon, gift.name);
 
       showToast('送出 ${gift.icon} ${gift.name}', type: ToastType.success);
     } catch (e) {
-      // 余额不足的错误（服务端返回 422）
       if (e.toString().contains('422') || e.toString().contains('余额不足')) {
         _showGiftInsufficientBalanceDialog(gift.price);
       } else {
@@ -422,9 +418,7 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
               Navigator.of(ctx).pop();
               AppRouter.router.pushNamed(
                 'coinRecharge',
-                queryParameters: <String, String>{
-                  'from': 'gift',
-                },
+                queryParameters: <String, String>{'from': 'gift'},
               );
             },
             style: ElevatedButton.styleFrom(
@@ -443,7 +437,6 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
 
   void _showProductDetail(BuildContext context, ProductModel product) {
     final favState = ref.read(favoriteProvider);
-    final room = ref.read(liveProvider).room;
     showProductDetailSheet(
       context: context,
       product: product,
@@ -455,11 +448,8 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
         );
       },
       onBuyNow: (spec, quantity, couponId) {
-        // Dismiss the product detail bottom sheet first.
         Navigator.of(context).pop();
-        // Enter PIP mode before navigating away so the live stream keeps playing.
         _maybeEnterPip();
-        // Use the global router — context from inside a bottom sheet is stale after pop.
         AppRouter.router.pushNamed('orderConfirm', queryParameters: <String, String>{
           'from': 'buy_now',
           'total': (product.price * quantity).toString(),
@@ -502,17 +492,6 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
     );
   }
 
-  bool get _canEnterPip {
-    final room = ref.read(liveProvider).room;
-    return _videoController != null && _videoReady && room != null && room.isLive;
-  }
-
-  void _maybeEnterPip() {
-    if (!_canEnterPip) return;
-    final room = ref.read(liveProvider).room!;
-    ref.read(pipProvider.notifier).enterPip(_videoController!, room);
-  }
-
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(liveProvider);
@@ -531,10 +510,8 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
               Text(state.errorMessage!, style: AppTextStyles.titleMedium),
               const SizedBox(height: AppDimens.paddingLg),
               ElevatedButton(
-                onPressed: () =>
-                    ref.read(liveProvider.notifier).enterRoom(widget.room.id),
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary),
+                onPressed: () => ref.read(liveProvider.notifier).enterRoom(widget.room.id),
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
                 child: const Text('重新加载'),
               ),
             ],
@@ -551,11 +528,40 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
     }
 
     final room = state.room!;
-    final isFollowing = followState.followingIds.contains(room.authorId);
 
-    final isLive = room.isLive;
-    final isPreview = room.isPreview;
-    final isEnded = room.isEnded;
+    if (!room.isLive) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () => context.pop(),
+          ),
+        ),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.tv_off, size: 64, color: Colors.white54),
+              const SizedBox(height: 16),
+              const Text('直播已结束', style: TextStyle(color: Colors.white54, fontSize: 18)),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: () => context.pop(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('返回'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final isFollowing = followState.followingIds.contains(room.authorId);
 
     return PopScope(
       canPop: false,
@@ -569,20 +575,71 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
         body: Stack(
           fit: StackFit.expand,
           children: [
-            if (isLive)
-            // 直播中 - 保持原有视频播放逻辑
-              _buildLiveBackground(state, room)
-            else if (isPreview)
-            // 预告 - 模拟画面
-              _buildPreviewBackground(room)
-            else if (isEnded)
-              // 已结束 - 模拟画面
-                _buildEndedBackground(room)
-              else
-              // 默认显示封面
-                _buildCoverBackground(room),
+            // 背景：视频播放器
+            if (_videoController != null && _videoReady)
+              ValueListenableBuilder<VideoPlayerValue>(
+                valueListenable: _videoController!,
+                builder: (_, value, __) {
+                  if (!value.isInitialized || value.size.isEmpty) {
+                    return CachedNetworkImage(
+                      imageUrl: room.coverUrl,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) => Container(color: AppColors.surface),
+                      errorWidget: (_, __, ___) => Container(color: AppColors.surface),
+                    );
+                  }
+                  return FittedBox(
+                    fit: BoxFit.cover,
+                    child: SizedBox(
+                      width: value.size.width,
+                      height: value.size.height,
+                      child: VideoPlayer(_videoController!),
+                    ),
+                  );
+                },
+              )
+            else if (_videoError)
+              Stack(
+                fit: StackFit.expand,
+                children: [
+                  CachedNetworkImage(
+                    imageUrl: room.coverUrl,
+                    fit: BoxFit.cover,
+                    placeholder: (_, __) => Container(color: AppColors.surface),
+                    errorWidget: (_, __, ___) => Container(color: AppColors.surface),
+                  ),
+                  Container(color: Colors.black54),
+                  Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.play_circle_outline, size: 56, color: Colors.white54),
+                        const SizedBox(height: AppDimens.paddingSm),
+                        const Text('视频加载失败', style: TextStyle(fontSize: 14, color: Colors.white70)),
+                        const SizedBox(height: AppDimens.paddingLg),
+                        ElevatedButton.icon(
+                          onPressed: () => _initVideo(widget.room.videoUrl),
+                          icon: const Icon(Icons.refresh, size: 18),
+                          label: const Text('重新加载'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              )
+            else
+              CachedNetworkImage(
+                imageUrl: room.coverUrl,
+                fit: BoxFit.cover,
+                placeholder: (_, __) => Container(color: AppColors.surface),
+                errorWidget: (_, __, ___) => Container(color: AppColors.surface),
+              ),
 
-            // Top gradient (保持不变)
+            // Top gradient
             Positioned(
               top: 0, left: 0, right: 0, height: 120,
               child: Container(
@@ -596,7 +653,7 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
               ),
             ),
 
-            // Bottom gradient (保持不变)
+            // Bottom gradient
             Positioned(
               bottom: 0, left: 0, right: 0, height: 64 + bottomInset,
               child: Container(
@@ -610,8 +667,8 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
               ),
             ),
 
-            // Danmaku overlay (直播中显示)
-            if (isLive) const DanmakuOverlay(),
+            // Danmaku overlay
+            const DanmakuOverlay(),
 
             // Top bar
             Positioned(
@@ -663,10 +720,12 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
                           GestureDetector(
                             onTap: _onFollowTap,
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: AppDimens.paddingSm, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: AppDimens.paddingSm, vertical: 2),
                               decoration: BoxDecoration(
                                 color: isFollowing ? Colors.black.withOpacity(0.1) : null,
-                                border: Border.all(color: isFollowing ? AppColors.textHint : AppColors.divider),
+                                border: Border.all(
+                                    color: isFollowing ? AppColors.textHint : AppColors.divider),
                                 borderRadius: BorderRadius.circular(AppDimens.radiusSm),
                               ),
                               child: Text(
@@ -683,13 +742,30 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
                       ),
                     ),
                     const SizedBox(width: AppDimens.paddingSm),
-                    // 状态标签
-                    _buildStatusBadge(room),
+                    // Heat value
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: AppDimens.paddingSm, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withAlpha(160),
+                        borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.local_fire_department, color: Colors.white, size: 14),
+                          const SizedBox(width: 2),
+                          Text(state.heatCountText,
+                              style: const TextStyle(fontSize: 11, color: Colors.white)),
+                        ],
+                      ),
+                    ),
                     const SizedBox(width: AppDimens.paddingSm),
                     GestureDetector(
                       onTap: _showAudienceList,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: AppDimens.paddingSm, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: AppDimens.paddingSm, vertical: 2),
                         decoration: BoxDecoration(
                           color: Colors.black.withAlpha(100),
                           borderRadius: BorderRadius.circular(AppDimens.radiusMd),
@@ -699,7 +775,8 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
                           children: [
                             const Icon(Icons.person, color: Colors.white, size: 14),
                             const SizedBox(width: 4),
-                            Text(state.onlineCountText, style: const TextStyle(fontSize: 12, color: Colors.white)),
+                            Text(state.onlineCountText,
+                                style: const TextStyle(fontSize: 12, color: Colors.white)),
                           ],
                         ),
                       ),
@@ -709,73 +786,66 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
               ),
             ),
 
-            // 预告/已结束 - 中间内容
-            if (isPreview)
-              _buildPreviewCenterContent(room)
-            else if (isEnded)
-              _buildEndedCenterContent(room),
-
-            // Connection status (直播中)
-            if (isLive && !state.isConnected)
+            // Connection status
+            if (!state.isConnected)
               Positioned(
                 top: MediaQuery.of(context).padding.top + 60,
                 left: 0, right: 0,
                 child: Center(
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: AppDimens.paddingMd, vertical: AppDimens.paddingXs),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: AppDimens.paddingMd, vertical: AppDimens.paddingXs),
                     decoration: BoxDecoration(
                       color: AppColors.warning.withAlpha(200),
                       borderRadius: BorderRadius.circular(AppDimens.radiusMd),
                     ),
-                    child: const Text('连接中...', style: TextStyle(fontSize: 12, color: Colors.white)),
+                    child: const Text('连接中...',
+                        style: TextStyle(fontSize: 12, color: Colors.white)),
                   ),
                 ),
               ),
 
-            // Comments + Product card (直播中)
-            if (isLive)
-              Builder(builder: (ctx) {
-                final hasProduct = state.currentProduct != null || state.products.isNotEmpty;
-                final screenW = MediaQuery.of(context).size.width;
-                final cardW = hasProduct ? screenW / 3 : 0.0;
-                const bottomRowH = 48.0;
-                return Stack(
-                  children: [
+            // Comments + Product card
+            Builder(builder: (ctx) {
+              final hasProduct = state.currentProduct != null || state.products.isNotEmpty;
+              final screenW = MediaQuery.of(context).size.width;
+              final cardW = hasProduct ? screenW / 3 : 0.0;
+              const bottomRowH = 48.0;
+              return Stack(
+                children: [
+                  Positioned(
+                    left: AppDimens.paddingMd,
+                    right: hasProduct
+                        ? cardW + AppDimens.paddingSm
+                        : AppDimens.paddingLg + 56,
+                    bottom: bottomRowH + AppDimens.paddingSm + bottomInset,
+                    height: 180,
+                    child: _CommentList(messages: state.messages),
+                  ),
+                  if (hasProduct)
                     Positioned(
-                      left: AppDimens.paddingMd,
-                      right: hasProduct ? cardW + AppDimens.paddingSm : AppDimens.paddingLg + 56,
+                      right: AppDimens.paddingMd,
                       bottom: bottomRowH + AppDimens.paddingSm + bottomInset,
+                      width: cardW - AppDimens.paddingSm,
                       height: 180,
-                      child: _CommentList(messages: state.messages),
-                    ),
-                    if (hasProduct)
-                      Positioned(
-                        right: AppDimens.paddingMd,
-                        bottom: bottomRowH + AppDimens.paddingSm + bottomInset,
-                        width: cardW - AppDimens.paddingSm,
-                        height: 180,
-                        child: FloatingProductCard(
-                          product: state.currentProduct ?? state.products.first,
-                          onTap: () => _showProductDetail(ctx, state.currentProduct ?? state.products.first),
-                          top: 0, left: 0, right: 0, bottom: 0,
-                          disableAutoFade: true,
-                          verticalLayout: true,
-                        ),
+                      child: FloatingProductCard(
+                        product: state.currentProduct ?? state.products.first,
+                        onTap: () => _showProductDetail(
+                            ctx, state.currentProduct ?? state.products.first),
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        disableAutoFade: true,
+                        verticalLayout: true,
                       ),
-                  ],
-                );
-              }),
+                    ),
+                ],
+              );
+            }),
 
-            // 商品列表（预告/已结束也显示）
-            if (!isLive && state.products.isNotEmpty)
-              Positioned(
-                bottom: 80 + bottomInset,
-                left: 0, right: 0,
-                child: _buildProductList(state.products),
-              ),
-
-            // Coupon banners (直播中)
-            if (isLive && state.coupons.isNotEmpty)
+            // Coupon banners
+            if (state.coupons.isNotEmpty)
               Positioned(
                 left: AppDimens.paddingLg,
                 right: AppDimens.paddingLg,
@@ -788,348 +858,89 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
                 ),
               ),
 
-            // Bottom row (直播中)
-            if (isLive)
-              Positioned(
-                bottom: bottomInset,
-                left: 0, right: 0,
-                child: Container(
-                  height: 48,
-                  margin: const EdgeInsets.symmetric(horizontal: AppDimens.paddingSm),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        flex: 1,
-                        child: _showChatInput
-                            ? TextField(
-                          controller: _chatController,
-                          focusNode: _chatFocusNode,
-                          style: const TextStyle(fontSize: 13, color: Colors.white),
-                          decoration: InputDecoration(
-                            hintText: '说点什么...',
-                            hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 13),
-                            filled: true,
-                            fillColor: Colors.white.withAlpha(25),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(24),
-                              borderSide: BorderSide.none,
-                            ),
-                            suffixIcon: IconButton(
-                              icon: const Icon(Icons.send, color: AppColors.primary, size: 18),
-                              onPressed: _sendMessage,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                            ),
+            // Bottom row
+            Positioned(
+              bottom: bottomInset,
+              left: 0,
+              right: 0,
+              child: Container(
+                height: 48,
+                margin: const EdgeInsets.symmetric(horizontal: AppDimens.paddingSm),
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 1,
+                      child: _showChatInput
+                          ? TextField(
+                        controller: _chatController,
+                        focusNode: _chatFocusNode,
+                        style: const TextStyle(fontSize: 13, color: Colors.white),
+                        decoration: InputDecoration(
+                          hintText: '说点什么...',
+                          hintStyle: const TextStyle(
+                              color: AppColors.textHint, fontSize: 13),
+                          filled: true,
+                          fillColor: Colors.white.withAlpha(25),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(24),
+                            borderSide: BorderSide.none,
                           ),
-                          onSubmitted: (_) => _sendMessage(),
-                        )
-                            : GestureDetector(
-                          onTap: _toggleChatInput,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withAlpha(25),
-                              borderRadius: BorderRadius.circular(24),
-                            ),
-                            child: const Text('说点什么...', style: TextStyle(fontSize: 13, color: AppColors.textHint)),
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.send,
+                                color: AppColors.primary, size: 18),
+                            onPressed: _sendMessage,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                                minWidth: 36, minHeight: 36),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: AppDimens.paddingXs),
-                      _BottomActionBtn(
-                        icon: Icons.shopping_cart_outlined,
-                        onTap: () {
-                          _maybeEnterPip();
-                          AppRouter.router.go('/cart');
-                        },
-                      ),
-                      _BottomActionBtn(
-                        icon: state.isLiked ? Icons.favorite : Icons.favorite_border,
-                        iconColor: state.isLiked ? AppColors.primary : Colors.white70,
-                        label: state.likeCount > 0 ? state.likeCount.toString() : null,
-                        onTap: () => ref.read(liveProvider.notifier).toggleLike(),
-                      ),
-                      _BottomActionBtn(icon: Icons.card_giftcard, onTap: _showGiftPanel),
-                      _BottomActionBtn(icon: Icons.ios_share, onTap: _onShare),
-                    ],
-                  ),
-                ),
-              ),
-
-            if (!isLive)
-              Positioned(
-                bottom: 40 + bottomInset,
-                left: 0, right: 0,
-                child: Center(
-                  child: SizedBox(
-                    width: 200, height: 48,
-                    child: ElevatedButton(
-                      onPressed: isPreview ? _onReserveLive : () => context.pop(),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: isPreview ? AppColors.primary : AppColors.textHint,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                      ),
-                      child: Text(
-                        isPreview ? '预约直播' : '返回',
-                        style: const TextStyle(fontSize: 16, color: Colors.white),
+                        onSubmitted: (_) => _sendMessage(),
+                      )
+                          : GestureDetector(
+                        onTap: _toggleChatInput,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withAlpha(25),
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                          child: const Text('说点什么...',
+                              style: TextStyle(
+                                  fontSize: 13, color: AppColors.textHint)),
+                        ),
                       ),
                     ),
-                  ),
+                    const SizedBox(width: AppDimens.paddingXs),
+                    _BottomActionBtn(
+                      icon: Icons.shopping_cart_outlined,
+                      onTap: () {
+                        _maybeEnterPip();
+                        AppRouter.router.go('/cart');
+                      },
+                    ),
+                    _BottomActionBtn(
+                      icon: state.isLiked ? Icons.favorite : Icons.favorite_border,
+                      iconColor: state.isLiked ? AppColors.primary : Colors.white70,
+                      label: state.likeCount > 0 ? state.likeCount.toString() : null,
+                      onTap: () => ref.read(liveProvider.notifier).toggleLike(),
+                    ),
+                    _BottomActionBtn(
+                      icon: Icons.card_giftcard,
+                      onTap: _showGiftPanel,
+                    ),
+                    _BottomActionBtn(
+                      icon: Icons.ios_share,
+                      onTap: _onShare,
+                    ),
+                  ],
                 ),
               ),
+            ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildLiveBackground(LiveState state, LiveRoomInfo room) {
-    if (_videoController != null && _videoReady) {
-      return ValueListenableBuilder<VideoPlayerValue>(
-        valueListenable: _videoController!,
-        builder: (_, value, __) {
-          if (!value.isInitialized || value.size.isEmpty) {
-            return CachedNetworkImage(
-              imageUrl: room.coverUrl, fit: BoxFit.cover,
-              placeholder: (_, __) => Container(color: AppColors.surface),
-              errorWidget: (_, __, ___) => Container(color: AppColors.surface),
-            );
-          }
-          return FittedBox(
-            fit: BoxFit.cover,
-            child: SizedBox(
-              width: value.size.width, height: value.size.height,
-              child: VideoPlayer(_videoController!),
-            ),
-          );
-        },
-      );
-    } else if (_videoError) {
-      return Stack(
-        fit: StackFit.expand,
-        children: [
-          CachedNetworkImage(
-            imageUrl: room.coverUrl, fit: BoxFit.cover,
-            placeholder: (_, __) => Container(color: AppColors.surface),
-            errorWidget: (_, __, ___) => Container(color: AppColors.surface),
-          ),
-          Container(color: Colors.black54),
-          Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.play_circle_outline, size: 56, color: Colors.white54),
-                const SizedBox(height: AppDimens.paddingSm),
-                const Text('视频加载失败', style: TextStyle(fontSize: 14, color: Colors.white70)),
-                const SizedBox(height: AppDimens.paddingLg),
-                ElevatedButton.icon(
-                  onPressed: () => _initVideo(widget.room.videoUrl),
-                  icon: const Icon(Icons.refresh, size: 18),
-                  label: const Text('重新加载'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      );
-    }
-    return _buildCoverBackground(room);
-  }
-
-  /// 封面背景
-  Widget _buildCoverBackground(LiveRoomInfo room) {
-    return CachedNetworkImage(
-      imageUrl: room.coverUrl, fit: BoxFit.cover,
-      placeholder: (_, __) => Container(color: AppColors.surface),
-      errorWidget: (_, __, ___) => Container(color: AppColors.surface),
-    );
-  }
-
-  /// 预告背景 - 封面 + 遮罩
-  Widget _buildPreviewBackground(LiveRoomInfo room) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        CachedNetworkImage(
-          imageUrl: room.coverUrl, fit: BoxFit.cover,
-          placeholder: (_, __) => Container(color: AppColors.surface),
-          errorWidget: (_, __, ___) => Container(color: AppColors.surface),
-        ),
-        Container(color: Colors.black.withAlpha(80)),
-      ],
-    );
-  }
-
-  /// 已结束背景 - 封面 + 深色遮罩
-  Widget _buildEndedBackground(LiveRoomInfo room) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        CachedNetworkImage(
-          imageUrl: room.coverUrl, fit: BoxFit.cover,
-          placeholder: (_, __) => Container(color: AppColors.surface),
-          errorWidget: (_, __, ___) => Container(color: AppColors.surface),
-        ),
-        Container(color: Colors.black.withAlpha(160)),
-      ],
-    );
-  }
-
-  /// 状态标签
-  Widget _buildStatusBadge(LiveRoomInfo room) {
-    if (room.isLive) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: AppDimens.paddingSm, vertical: 2),
-        decoration: BoxDecoration(
-          color: Colors.orange.withAlpha(160),
-          borderRadius: BorderRadius.circular(AppDimens.radiusMd),
-        ),
-        child: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.local_fire_department, color: Colors.white, size: 14),
-            SizedBox(width: 2),
-            // 热度值在外部显示
-          ],
-        ),
-      );
-    } else if (room.isPreview) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(
-          color: AppColors.primary,
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.schedule, color: Colors.white, size: 14),
-            SizedBox(width: 4),
-            Text('预告', style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.w600)),
-          ],
-        ),
-      );
-    } else {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(
-          color: AppColors.textHint,
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: const Text('已结束', style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.w600)),
-      );
-    }
-  }
-
-  /// 预告中间内容
-  Widget _buildPreviewCenterContent(LiveRoomInfo room) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 3),
-            ),
-            child: const Icon(Icons.notifications_active, color: Colors.white, size: 48),
-          ),
-          const SizedBox(height: 24),
-          const Text(
-            '直播即将开始',
-            style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 12),
-          Text(room.title, style: const TextStyle(color: Colors.white70, fontSize: 16)),
-          const SizedBox(height: 8),
-          Text(
-            '${room.onlineCountText} 人已预约',
-            style: const TextStyle(color: Colors.white54, fontSize: 14),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 已结束中间内容
-  Widget _buildEndedCenterContent(LiveRoomInfo room) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.play_circle_outline, color: Colors.white54, size: 64),
-          const SizedBox(height: 16),
-          const Text('直播已结束', style: TextStyle(color: Colors.white54, fontSize: 18)),
-          const SizedBox(height: 8),
-          Text(room.title, style: const TextStyle(color: Colors.white38, fontSize: 14)),
-        ],
-      ),
-    );
-  }
-
-  /// 预约方法
-  Future<void> _onReserveLive() async {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('已预约，开播时会通知你'),
-          backgroundColor: AppColors.success,
-        ),
-      );
-    }
-  }
-
-  /// 商品列表（预告/已结束时显示）
-  Widget _buildProductList(List<ProductModel> products) {
-    return Container(
-      height: 80,
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: products.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (context, index) {
-          final product = products[index];
-          return GestureDetector(
-            onTap: () => _showProductDetail(context, product),
-            child: Container(
-              width: 140,
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.white.withAlpha(20),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: CachedNetworkImage(
-                      imageUrl: product.coverUrl,
-                      width: 44, height: 44, fit: BoxFit.cover,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(product.name, style: const TextStyle(color: Colors.white, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
-                        Text('¥${product.price.toStringAsFixed(0)}', style: const TextStyle(color: AppColors.error, fontSize: 13, fontWeight: FontWeight.w600)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
       ),
     );
   }
@@ -1203,13 +1014,15 @@ final class _AuthorInfoSheet extends StatelessWidget {
             child: Container(
               width: 36, height: 4,
               margin: const EdgeInsets.only(bottom: AppDimens.paddingLg),
-              decoration: BoxDecoration(color: AppColors.textHint, borderRadius: BorderRadius.circular(2)),
+              decoration: BoxDecoration(
+                  color: AppColors.textHint, borderRadius: BorderRadius.circular(2)),
             ),
           ),
           CircleAvatar(
             radius: 36,
             backgroundColor: AppColors.card,
-            backgroundImage: authorAvatar.isNotEmpty ? CachedNetworkImageProvider(authorAvatar) : null,
+            backgroundImage:
+            authorAvatar.isNotEmpty ? CachedNetworkImageProvider(authorAvatar) : null,
             child: authorAvatar.isEmpty
                 ? Text(authorName.isNotEmpty ? authorName[0].toUpperCase() : '?',
                 style: const TextStyle(fontSize: 28, color: Colors.white))
@@ -1248,10 +1061,8 @@ final class _CommentList extends StatelessWidget {
   Widget build(BuildContext context) {
     if (messages.isEmpty) return const SizedBox.shrink();
 
-    // Show only the last 10 messages in the comment list
-    final displayMessages = messages.length > 10
-        ? messages.sublist(messages.length - 10)
-        : messages;
+    final displayMessages =
+    messages.length > 10 ? messages.sublist(messages.length - 10) : messages;
 
     return ListView.builder(
       padding: EdgeInsets.zero,
@@ -1272,7 +1083,9 @@ final class _CommentList extends StatelessWidget {
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
                       color: AppColors.accent,
-                      shadows: [Shadow(color: Colors.black38, blurRadius: 1, offset: Offset(1, 1))],
+                      shadows: [
+                        Shadow(color: Colors.black38, blurRadius: 1, offset: Offset(1, 1))
+                      ],
                     ),
                   ),
                 ],
@@ -1282,7 +1095,9 @@ final class _CommentList extends StatelessWidget {
                     fontSize: 11,
                     color: isSystem ? AppColors.warning : Colors.white,
                     fontWeight: isSystem ? FontWeight.w600 : FontWeight.w400,
-                    shadows: const [Shadow(color: Colors.black38, blurRadius: 1, offset: Offset(1, 1))],
+                    shadows: const [
+                      Shadow(color: Colors.black38, blurRadius: 1, offset: Offset(1, 1))
+                    ],
                   ),
                 ),
               ],

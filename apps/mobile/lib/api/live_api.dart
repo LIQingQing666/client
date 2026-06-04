@@ -13,6 +13,7 @@ final class LiveApi {
     final list = data['list'] as List<dynamic>;
     return list
         .map((e) => LiveRoomInfo.fromJson(e as Map<String, dynamic>))
+        .where((room) => room.isLive)
         .toList();
   }
 
