@@ -1,5 +1,3 @@
-// lib/pages/live/live_broadcast_page.dart
-
 import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +9,7 @@ import '../../core/app_constants.dart';
 import '../../models/live_model.dart';
 import '../../models/product_model.dart';
 import '../../provider/service_providers.dart';
+import '../../provider/live_provider.dart';
 
 final class LiveBroadcastPage extends ConsumerStatefulWidget {
   const LiveBroadcastPage({super.key, required this.room});
@@ -31,9 +30,7 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
 
   int _viewerCount = 0;
   int _likeCount = 0;
-  final List<LiveMessage> _messages = [];
 
-  // 视频播放器相关
   VideoPlayerController? _videoController;
   bool _isVideoReady = false;
   bool _hasVideoError = false;
@@ -47,8 +44,21 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
     _likeCount = _room.likeCount;
     _startSimulation();
     _loadProducts();
-    _initVideoPlayer();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initVideoPlayer();
+      ref.read(liveProvider.notifier).enterRoom(_room.id);
+    });
   }
+
+  List<LiveMessage> get _messages => ref.watch(liveProvider).messages;
+
+  int get _realtimeOnlineCount => ref.watch(liveProvider).onlineCount;
+
+  int get _realtimeLikeCount => ref.watch(liveProvider).likeCount;
+
+  String get _heatCountText => ref.watch(liveProvider).heatCountText;
+
+  bool get _isConnected => ref.watch(liveProvider).isConnected;
 
   // 初始化视频播放器
   Future<void> _initVideoPlayer() async {
@@ -185,13 +195,7 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
       final api = LiveApi(client: ref.read(dioClientProvider));
       await api.switchProduct(roomId: _room.id, productId: product.id);
       setState(() => _currentProduct = product);
-      _messages.insert(0, LiveMessage(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        userName: '系统',
-        content: '主播正在讲解：${product.name}',
-        type: 'system',
-        productId: product.id,
-      ));
+      ref.read(liveProvider.notifier).sendMessage('主播正在讲解：${product.name}');
     } catch (e) {
       debugPrint('切换商品失败: $e');
     }
@@ -214,6 +218,7 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
       try {
         final api = LiveApi(client: ref.read(dioClientProvider));
         await api.endLive(_room.id);
+        ref.read(liveProvider.notifier).leaveRoom();
         Navigator.pop(context);
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('结束失败: $e')));
@@ -225,17 +230,39 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
   void dispose() {
     _viewerTimer?.cancel();
     _likeTimer?.cancel();
+    ref.read(liveProvider.notifier).leaveRoom();
+    _videoController?.pause();
     _videoController?.dispose();
+    _videoController = null;
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final state = ref.watch(liveProvider);
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         children: [
           _buildVideoPlayer(),
+
+          if (_isConnected)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 40,
+              right: 12,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppColors.success.withValues(alpha: 0.8),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text(
+                  '已连接',
+                  style: TextStyle(color: Colors.white, fontSize: 10),
+                ),
+              ),
+            ),
 
           if (_currentProduct != null)
             Positioned(
@@ -245,7 +272,6 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
               child: _buildProductCard(_currentProduct!),
             ),
 
-          // 右侧商品列表
           Positioned(
             top: MediaQuery.of(context).padding.top + 50,
             right: 8,
@@ -254,13 +280,12 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
             child: _buildProductList(),
           ),
 
-          // 聊天消息
           Positioned(
             left: 8,
             bottom: 180,
-            width: 200,
-            height: 200,
-            child: _buildChatList(),
+            width: 250,
+            height: 220,
+            child: _CommentList(messages: state.messages),
           ),
 
           Positioned(
@@ -544,10 +569,15 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
 
   Widget _buildChatList() {
     if (_messages.isEmpty) {
-      return const Center(
-        child: Text(
-          '暂无消息',
-          style: TextStyle(color: Colors.white38, fontSize: 12),
+      return Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Center(
+          child: Text(
+            '暂无消息',
+            style: TextStyle(color: Colors.white38, fontSize: 12),
+          ),
         ),
       );
     }
@@ -558,18 +588,31 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
       itemBuilder: (context, index) {
         final msg = _messages[index];
         final isSystem = msg.type == 'system';
+        final isProduct = msg.type == 'product';
+        final isGift = msg.type == 'gift';
+
+        Color bgColor;
+        if (isSystem) {
+          bgColor = Colors.orange.withValues(alpha: 0.3);
+        } else if (isProduct) {
+          bgColor = AppColors.primary.withValues(alpha: 0.3);
+        } else if (isGift) {
+          bgColor = Colors.pink.withValues(alpha: 0.3);
+        } else {
+          bgColor = Colors.black54;
+        }
 
         return Container(
           margin: const EdgeInsets.only(bottom: 4),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: isSystem ? Colors.orange.withValues(alpha: 0.3) : Colors.black54,
+            color: bgColor,
             borderRadius: BorderRadius.circular(4),
           ),
           child: RichText(
             text: TextSpan(
               children: [
-                if (!isSystem)
+                if (!isSystem && !isGift)
                   TextSpan(
                     text: '${msg.userName}: ',
                     style: const TextStyle(
@@ -581,7 +624,7 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
                 TextSpan(
                   text: msg.content,
                   style: TextStyle(
-                    color: isSystem ? Colors.orange : Colors.white,
+                    color: (isSystem || isGift) ? Colors.orange : Colors.white,
                     fontSize: 11,
                   ),
                 ),
@@ -595,6 +638,10 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
 
   // 底部栏
   Widget _buildBottomBar() {
+    final state = ref.watch(liveProvider);
+    final displayViewerCount = _isConnected ? state.onlineCount : _viewerCount;
+    final displayLikeCount = _isConnected ? state.likeCount : _likeCount;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       decoration: BoxDecoration(
@@ -614,13 +661,13 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
                 _buildStatItem(
                   icon: Icons.visibility,
                   label: '观众',
-                  count: _formatCount(_viewerCount),
+                  count: _formatCount(displayViewerCount),
                 ),
                 const SizedBox(width: 32),
                 _buildStatItem(
                   icon: Icons.favorite,
                   label: '点赞',
-                  count: _formatCount(_likeCount),
+                  count: _formatCount(displayLikeCount),
                   color: Colors.red,
                 ),
               ],
@@ -707,5 +754,70 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
       return '${(count / 10000).toStringAsFixed(1)}万';
     }
     return count.toString();
+  }
+}
+
+final class _CommentList extends StatelessWidget {
+  const _CommentList({required this.messages});
+
+  final List<LiveMessage> messages;
+
+  @override
+  Widget build(BuildContext context) {
+    if (messages.isEmpty) {
+      return const Center(
+        child: Text(
+          '暂无消息',
+          style: TextStyle(color: Colors.white38, fontSize: 12),
+        ),
+      );
+    }
+
+    final displayMessages = messages.length > 20
+        ? messages.sublist(messages.length - 20)
+        : messages;
+
+    return ListView.builder(
+      reverse: true,
+      padding: EdgeInsets.zero,
+      itemCount: displayMessages.length,
+      itemBuilder: (context, index) {
+        final msg = displayMessages[index];
+        final isSystem = msg.isSystem || msg.type == 'gift';
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: isSystem
+                ? Colors.orange.withValues(alpha: 0.3)
+                : Colors.black54,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: RichText(
+            text: TextSpan(
+              children: [
+                if (!isSystem)
+                  TextSpan(
+                    text: '${msg.userName}: ',
+                    style: const TextStyle(
+                      color: Colors.yellow,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                TextSpan(
+                  text: msg.content,
+                  style: TextStyle(
+                    color: isSystem ? Colors.orange : Colors.white,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 }
