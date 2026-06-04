@@ -13,7 +13,7 @@ final class LiveApi {
     final list = data['list'] as List<dynamic>;
     return list
         .map((e) => LiveRoomInfo.fromJson(e as Map<String, dynamic>))
-        .where((room) => room.isLive)
+        // .where((room) => room.isLive)
         .toList();
   }
 
@@ -88,6 +88,28 @@ final class LiveApi {
     await client.post('/live/rooms/$roomId/product', data: {
       'product_id': productId,
     });
+  }
+
+  Future<String> generateAiLiveScript({
+    required String roomTitle,
+    required String productName,
+    required String productDescription,
+    required String productCategory,
+    List<String>? productTags,
+  }) async {
+    final response = await client.post<Map<String, dynamic>>(
+      '/live/ai-live-script',
+      data: {
+        'room_title': roomTitle,
+        'product_name': productName,
+        'product_description': productDescription,
+        'product_category': productCategory,
+        if (productTags != null && productTags.isNotEmpty) 'product_tags': productTags,
+      },
+    );
+
+    final data = response.data!['data'] as Map<String, dynamic>;
+    return data['script'] as String;
   }
 }
 

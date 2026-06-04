@@ -62,7 +62,7 @@ final class _LivePageState extends ConsumerState<LivePage> {
       final rooms = await api.getRooms();
       if (!mounted) return;
       setState(() {
-        _rooms = rooms.where((r) => r.isLive).toList();
+        _rooms = rooms;
         _isLoading = false;
       });
     } on Exception catch (e) {
@@ -510,8 +510,6 @@ final class _LivePageState extends ConsumerState<LivePage> {
 
   /// 我的直播间卡片
   Widget _buildMyRoomCard(LiveRoomInfo room) {
-    if (!room.isLive) return const SizedBox.shrink();
-
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -523,7 +521,11 @@ final class _LivePageState extends ConsumerState<LivePage> {
         color: Colors.transparent,
         child: InkWell(
           onTap: () {
-            _enterBroadcastPage(room);
+            if (room.isLive) {
+              _enterBroadcastPage(room);
+            } else if (room.status == 'preview') {
+              _startLive(room);
+            }
           },
           borderRadius: BorderRadius.circular(12),
           child: Padding(
@@ -552,17 +554,31 @@ final class _LivePageState extends ConsumerState<LivePage> {
                         maxLines: 2, overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppColors.error.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(4),
+                      // 根据状态显示不同标签
+                      if (room.isLive)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.error.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            '直播中',
+                            style: TextStyle(color: AppColors.error, fontSize: 11, fontWeight: FontWeight.w600),
+                          ),
+                        )
+                      else if (room.status == 'preview')
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            '待开播',
+                            style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w600),
+                          ),
                         ),
-                        child: const Text(
-                          '直播中',
-                          style: TextStyle(color: AppColors.error, fontSize: 11, fontWeight: FontWeight.w600),
-                        ),
-                      ),
                       const SizedBox(height: 4),
                       Text(
                         '${room.productIds.length}件商品 · ${room.onlineCountText}观看',
@@ -571,7 +587,12 @@ final class _LivePageState extends ConsumerState<LivePage> {
                     ],
                   ),
                 ),
-                const Icon(Icons.arrow_forward_ios, color: Colors.white38, size: 16),
+                // 不同状态显示不同操作图标
+                Icon(
+                  room.isLive ? Icons.play_circle_outline : Icons.play_arrow,
+                  color: room.isLive ? AppColors.error : AppColors.primary,
+                  size: 28,
+                ),
               ],
             ),
           ),
@@ -625,14 +646,26 @@ final class _LiveRoomFullCard extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: AppColors.error,
+              color: room.isLive ? AppColors.error : AppColors.primary,
               borderRadius: BorderRadius.circular(4),
             ),
-            child: const Row(
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.play_arrow, color: Colors.white, size: 14),
-                Text('直播中', style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.w600)),
+                Icon(
+                  room.isLive ? Icons.play_arrow : Icons.schedule,
+                  color: Colors.white,
+                  size: 14,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  room.isLive ? '直播中' : '预告',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
             ),
           ),

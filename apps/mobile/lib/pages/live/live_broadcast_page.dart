@@ -36,6 +36,9 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
   bool _hasVideoError = false;
   String? _errorMessage;
 
+  String _aiLiveScript = '';
+  bool _isGeneratingScript = false;
+
   @override
   void initState() {
     super.initState();
@@ -136,10 +139,8 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
         setState(() {
           _products = detail.products;
 
-          // 👇 通过 detail.room 访问房间信息
           final roomInfo = detail.room;
 
-          // 设置当前讲解商品
           if (detail.products.isNotEmpty) {
             final currentId = roomInfo.currentProductId;
 
@@ -154,10 +155,16 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
             } else {
               _currentProduct = detail.products.first;
             }
+
+            // 生成初始 AI 文案
+            if (_currentProduct != null) {
+              _generateAiLiveScript(_currentProduct!);
+            }
           }
         });
       }
     } catch (e, stackTrace) {
+      debugPrint('加载商品失败: $e');
     }
   }
 
@@ -196,8 +203,45 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
       await api.switchProduct(roomId: _room.id, productId: product.id);
       setState(() => _currentProduct = product);
       ref.read(liveProvider.notifier).sendMessage('主播正在讲解：${product.name}');
+
+      // 生成 AI 直播文案
+      _generateAiLiveScript(product);
     } catch (e) {
       debugPrint('切换商品失败: $e');
+    }
+  }
+
+  Future<void> _generateAiLiveScript(ProductModel product) async {
+    setState(() {
+      _isGeneratingScript = true;
+      _aiLiveScript = '正在生成讲解文案...';
+    });
+
+    try {
+      final client = ref.read(dioClientProvider);
+      final api = LiveApi(client: client);
+
+      final script = await api.generateAiLiveScript(
+        roomTitle: _room.title,
+        productName: product.name,
+        productDescription: product.description ?? '',
+        productCategory: product.category,
+        productTags: product.tags?.cast<String>(),
+      );
+
+      if (mounted) {
+        setState(() {
+          _aiLiveScript = script;
+          _isGeneratingScript = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _aiLiveScript = '${product.name}，品质之选，限时优惠中！';
+          _isGeneratingScript = false;
+        });
+      }
     }
   }
 
@@ -218,10 +262,18 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
       try {
         final api = LiveApi(client: ref.read(dioClientProvider));
         await api.endLive(_room.id);
+
         ref.read(liveProvider.notifier).leaveRoom();
-        Navigator.pop(context);
+
+        if (mounted) {
+          Navigator.pop(context);
+        }
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('结束失败: $e')));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('结束失败: $e'))
+          );
+        }
       }
     }
   }
@@ -230,10 +282,14 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
   void dispose() {
     _viewerTimer?.cancel();
     _likeTimer?.cancel();
-    ref.read(liveProvider.notifier).leaveRoom();
     _videoController?.pause();
     _videoController?.dispose();
     _videoController = null;
+    try {
+      ref.read(liveProvider.notifier).leaveRoom();
+    } catch (_) {
+      // widget 已销毁，忽略
+    }
     super.dispose();
   }
 
@@ -241,60 +297,66 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
   Widget build(BuildContext context) {
     final state = ref.watch(liveProvider);
 
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          _buildVideoPlayer(),
+    return WillPopScope(
+      onWillPop: () async {
+        await _endLive();
+        return false;
+      },
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: Stack(
+          children: [
+            _buildVideoPlayer(),
 
-          if (_isConnected)
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 40,
-              right: 12,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppColors.success.withValues(alpha: 0.8),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: const Text(
-                  '已连接',
-                  style: TextStyle(color: Colors.white, fontSize: 10),
+            if (_isConnected)
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 40,
+                right: 12,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.success.withValues(alpha: 0.8),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    '已连接',
+                    style: TextStyle(color: Colors.white, fontSize: 10),
+                  ),
                 ),
               ),
-            ),
 
-          if (_currentProduct != null)
+            if (_currentProduct != null)
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 50,
+                left: 12,
+                right: 120,
+                child: _buildProductCard(_currentProduct!),
+              ),
+
             Positioned(
               top: MediaQuery.of(context).padding.top + 50,
-              left: 12,
-              right: 120,
-              child: _buildProductCard(_currentProduct!),
+              right: 8,
+              bottom: 200,
+              width: 100,
+              child: _buildProductList(),
             ),
 
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 50,
-            right: 8,
-            bottom: 200,
-            width: 100,
-            child: _buildProductList(),
-          ),
+            Positioned(
+              left: 8,
+              bottom: 180,
+              width: 250,
+              height: 220,
+              child: _CommentList(messages: state.messages),
+            ),
 
-          Positioned(
-            left: 8,
-            bottom: 180,
-            width: 250,
-            height: 220,
-            child: _CommentList(messages: state.messages),
-          ),
-
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: _buildBottomBar(),
-          ),
-        ],
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: _buildBottomBar(),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -643,45 +705,69 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
     final displayLikeCount = _isConnected ? state.likeCount : _likeCount;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Colors.transparent, Colors.black87],
+          colors: [Colors.transparent, Colors.black87, Colors.black],
         ),
       ),
       child: SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // 统计数据和AI文案行
             Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildStatItem(
-                  icon: Icons.visibility,
-                  label: '观众',
-                  count: _formatCount(displayViewerCount),
+                // 左侧：统计数据
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildStatItem(
+                      icon: Icons.visibility,
+                      label: '观众',
+                      count: _formatCount(displayViewerCount),
+                    ),
+                    const SizedBox(height: 6),
+                    _buildStatItem(
+                      icon: Icons.favorite,
+                      label: '点赞',
+                      count: _formatCount(displayLikeCount),
+                      color: Colors.red,
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 32),
-                _buildStatItem(
-                  icon: Icons.favorite,
-                  label: '点赞',
-                  count: _formatCount(displayLikeCount),
-                  color: Colors.red,
+
+                const SizedBox(width: 12),
+
+                // 右侧：AI 文案（用 Expanded 撑满剩余空间 + ConstrainedBox 限高）
+                Expanded(
+                  child: SizedBox(
+                    height: 100,
+                    child: _AiScriptCard(
+                      script: _aiLiveScript,
+                      isGenerating: _isGeneratingScript,
+                    ),
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+
+            const SizedBox(height: 12),
+
+            // 结束按钮
             Center(
               child: GestureDetector(
                 onTap: _endLive,
                 child: Container(
                   width: 80,
-                  height: 50,
+                  height: 44,
                   decoration: BoxDecoration(
                     color: AppColors.error,
-                    borderRadius: BorderRadius.circular(25),
+                    borderRadius: BorderRadius.circular(22),
                     boxShadow: [
                       BoxShadow(
                         color: AppColors.error.withValues(alpha: 0.3),
@@ -695,7 +781,7 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
                       '结束',
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 16,
+                        fontSize: 15,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -715,29 +801,24 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
     required String count,
     Color? color,
   }) {
-    return Column(
+    return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              color: color ?? Colors.white,
-              size: 18,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              count,
-              style: TextStyle(
-                color: color ?? Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
+        Icon(
+          icon,
+          color: color ?? Colors.white,
+          size: 16,
         ),
-        const SizedBox(height: 2),
+        const SizedBox(width: 6),
+        Text(
+          count,
+          style: TextStyle(
+            color: color ?? Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(width: 6),
         Text(
           label,
           style: TextStyle(
@@ -818,6 +899,117 @@ final class _CommentList extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+// ========== AI 文案卡片（独立 Widget，避免上下文约束问题） ==========
+final class _AiScriptCard extends StatelessWidget {
+  const _AiScriptCard({
+    required this.script,
+    required this.isGenerating,
+  });
+
+  final String script;
+  final bool isGenerating;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.15),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 22,
+                height: 22,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                  ),
+                  borderRadius: BorderRadius.circular(5),
+                ),
+                child: const Icon(
+                  Icons.auto_awesome,
+                  color: Colors.white,
+                  size: 13,
+                ),
+              ),
+              const SizedBox(width: 6),
+              const Flexible(
+                child: Text(
+                  'AI 讲解文案',
+                  style: TextStyle(
+                    color: Color(0xFF8B5CF6),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              if (isGenerating) ...[
+                const SizedBox(width: 6),
+                const SizedBox(
+                  width: 10,
+                  height: 10,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 1.5,
+                    color: Color(0xFF8B5CF6),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 8),
+          Flexible(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Text(
+                script.isEmpty ? '选择商品后自动生成讲解文案' : script,
+                style: TextStyle(
+                  color: Colors.white.withValues(
+                    alpha: script.isEmpty ? 0.4 : 0.9,
+                  ),
+                  fontSize: 12.5,
+                  height: 1.5,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+final class _AiIcon extends StatelessWidget {
+  const _AiIcon();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 22,
+      height: 22,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+        ),
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: const Icon(
+        Icons.auto_awesome,
+        color: Colors.white,
+        size: 13,
+      ),
     );
   }
 }
