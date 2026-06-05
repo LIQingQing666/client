@@ -542,8 +542,8 @@ final class _AuthorSheet extends ConsumerWidget {
             radius: 36,
             backgroundColor: AppColors.card,
             backgroundImage:
-                authorAvatar.isNotEmpty ? CachedNetworkImageProvider(authorAvatar) : null,
-            child: authorAvatar.isEmpty
+                isNetworkImageUrl(authorAvatar) ? CachedNetworkImageProvider(authorAvatar) : null,
+            child: !isNetworkImageUrl(authorAvatar)
                 ? Text(authorName.isNotEmpty ? authorName[0].toUpperCase() : '?',
                     style: const TextStyle(fontSize: 28, color: Colors.white))
                 : null,

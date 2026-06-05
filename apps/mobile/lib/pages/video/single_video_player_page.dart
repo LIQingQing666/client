@@ -372,10 +372,10 @@ final class _Info extends ConsumerWidget {
           onTap: () => _onAuthorTap(context),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             CircleAvatar(radius: 18, backgroundColor: AppColors.card,
-              backgroundImage: video.authorAvatar.isNotEmpty
+              backgroundImage: isNetworkImageUrl(video.authorAvatar)
                   ? CachedNetworkImageProvider(video.authorAvatar)
                   : null,
-              child: video.authorAvatar.isEmpty
+              child: !isNetworkImageUrl(video.authorAvatar)
                   ? Text(video.authorName.isNotEmpty ? video.authorName[0] : '?',
                       style: AppTextStyles.bodySmall)
                   : null,
@@ -523,10 +523,10 @@ final class _AuthorSheet extends ConsumerWidget {
             ),
             CircleAvatar(
               radius: 36, backgroundColor: AppColors.card,
-              backgroundImage: video.authorAvatar.isNotEmpty
+              backgroundImage: isNetworkImageUrl(video.authorAvatar)
                   ? CachedNetworkImageProvider(video.authorAvatar)
                   : null,
-              child: video.authorAvatar.isEmpty
+              child: !isNetworkImageUrl(video.authorAvatar)
                   ? Text(video.authorName.isNotEmpty ? video.authorName[0].toUpperCase() : '?',
                       style: const TextStyle(fontSize: 28, color: Colors.white))
                   : null,

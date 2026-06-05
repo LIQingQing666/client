@@ -782,10 +782,10 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
                           child: CircleAvatar(
                             radius: 16,
                             backgroundColor: AppColors.card,
-                            backgroundImage: room.authorAvatar.isNotEmpty
+                            backgroundImage: isNetworkImageUrl(room.authorAvatar)
                                 ? CachedNetworkImageProvider(room.authorAvatar)
                                 : null,
-                            child: room.authorAvatar.isEmpty
+                            child: !isNetworkImageUrl(room.authorAvatar)
                                 ? Text(room.authorName.isNotEmpty ? room.authorName[0] : '?',
                                     style: const TextStyle(fontSize: 12, color: Colors.white))
                                 : null,
@@ -1122,8 +1122,8 @@ final class _AuthorInfoSheet extends ConsumerWidget {
           CircleAvatar(
             radius: 36,
             backgroundColor: AppColors.card,
-            backgroundImage: authorAvatar.isNotEmpty ? CachedNetworkImageProvider(authorAvatar) : null,
-            child: authorAvatar.isEmpty
+            backgroundImage: isNetworkImageUrl(authorAvatar) ? CachedNetworkImageProvider(authorAvatar) : null,
+            child: !isNetworkImageUrl(authorAvatar)
                 ? Text(authorName.isNotEmpty ? authorName[0].toUpperCase() : '?',
                     style: const TextStyle(fontSize: 28, color: Colors.white))
                 : null,

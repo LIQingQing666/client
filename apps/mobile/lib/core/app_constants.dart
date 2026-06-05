@@ -29,6 +29,16 @@ abstract final class AppConstants {
   static const Duration cacheExpiry = Duration(hours: 24);
 }
 
+/// Returns true if [url] is a network URL (http/https) that can be passed
+/// to CachedNetworkImage / NetworkImage.  Local file:// paths and empty
+/// strings will return false so the caller can show a placeholder instead.
+bool isNetworkImageUrl(String? url) {
+  if (url == null || url.isEmpty) return false;
+  final uri = Uri.tryParse(url);
+  if (uri == null) return false;
+  return uri.hasScheme && (uri.scheme == 'http' || uri.scheme == 'https') && uri.host.isNotEmpty;
+}
+
 abstract final class AppColors {
   static const Color primary = Color(0xFFE8453C);
   static const Color secondary = Color(0xFFFF6B35);

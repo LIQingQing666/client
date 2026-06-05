@@ -100,6 +100,9 @@ final class LiveNotifier extends StateNotifier<LiveState> {
   StreamSubscription<Map<String, dynamic>>? _eventSub;
   bool _active = false;
   static const int _maxMessages = 200;
+  // Track recently-sent message fingerprints to prevent the optimistic
+  // local insert from being duplicated when the WebSocket echoes it back.
+  final Set<String> _pendingMsgFingerprints = {};
 
   Future<void> enterRoom(String roomId) async {
     // Mark the room as active — events received before this flag is
@@ -232,6 +235,11 @@ final class LiveNotifier extends StateNotifier<LiveState> {
   }
 
   void _addMessage(LiveMessage message) {
+    // Deduplicate: if this message matches a locally-sent optimistic
+    // insert (same type + user + content), skip it — the optimistic
+    // copy is already in the list.
+    final fingerprint = '${message.type}|${message.userName}|${message.content}';
+    if (_pendingMsgFingerprints.remove(fingerprint)) return;
     final messages = [...state.messages, message];
     if (messages.length > _maxMessages) {
       messages.removeRange(0, messages.length - _maxMessages);
@@ -240,12 +248,15 @@ final class LiveNotifier extends StateNotifier<LiveState> {
   }
 
   void sendMessage(String content) {
+    final fingerprint = 'user|我|$content';
+    _pendingMsgFingerprints.add(fingerprint);
     wsService.emit('send_message', <String, String>{
       'room': state.room?.id ?? '',
       'user_id': 'u1',
       'content': content,
     });
-    // Optimistically add own message
+    // Optimistically add own message — the fingerprint prevents the
+    // WebSocket echo from adding a duplicate when it arrives.
     _addMessage(
       LiveMessage(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -255,10 +266,20 @@ final class LiveNotifier extends StateNotifier<LiveState> {
         timestamp: DateTime.now().toIso8601String(),
       ),
     );
+    // Clean up the fingerprint after a short window (the echo should
+    // arrive within 1-2 seconds over a local WebSocket).
+    Future.delayed(const Duration(seconds: 5), () {
+      _pendingMsgFingerprints.remove(fingerprint);
+    });
   }
 
   /// Adds a local gift notification as a system message (scrolls in comment area).
+  /// The server echoes gifts back via the `danmaku` event with a different
+  /// user-name / content format — fingerprint the server-side format so the
+  /// echo is deduplicated in _addMessage.
   void sendGift(String userName, String giftIcon, String giftName) {
+    final serverFingerprint = 'system|赠送礼物|$giftName';
+    _pendingMsgFingerprints.add(serverFingerprint);
     _addMessage(
       LiveMessage(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -268,6 +289,9 @@ final class LiveNotifier extends StateNotifier<LiveState> {
         timestamp: DateTime.now().toIso8601String(),
       ),
     );
+    Future.delayed(const Duration(seconds: 5), () {
+      _pendingMsgFingerprints.remove(serverFingerprint);
+    });
   }
 
   Future<void> switchRoom(String newRoomId) async {

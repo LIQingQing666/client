@@ -240,10 +240,10 @@ final class _FavoriteVideoTile extends StatelessWidget {
                       children: [
                         CircleAvatar(
                           radius: 10, backgroundColor: AppColors.divider,
-                          backgroundImage: _authorAvatar != null && _authorAvatar!.isNotEmpty
+                          backgroundImage: isNetworkImageUrl(_authorAvatar)
                               ? CachedNetworkImageProvider(_authorAvatar!)
                               : null,
-                          child: _authorAvatar == null || _authorAvatar!.isEmpty
+                          child: !isNetworkImageUrl(_authorAvatar)
                               ? Text(
                                   item.subtitle.isNotEmpty ? item.subtitle[0] : '?',
                                   style: const TextStyle(fontSize: 9, color: Colors.white),
