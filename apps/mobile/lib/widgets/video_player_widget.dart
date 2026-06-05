@@ -138,8 +138,9 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
         controller.addListener(_waitForInit);
       }
       _initializing = false;
-    }
-    on Exception {
+    } catch (e) {
+      // catch (not on Exception) — catches TypeError etc. too
+      debugPrint('[VideoWidget] init error: $e');
       if (mounted) {
         setState(() {
           _isCoverVisible = true;
@@ -192,12 +193,21 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
         _initPlayer();
         return;
       }
-      _controller!.play();
-      _applyMuteState();
+      try {
+        if (!_controller!.value.isPlaying) {
+          _controller!.play();
+        }
+        _applyMuteState();
+      } catch (_) {
+        // Controller may be in a bad state after fast scrolling —
+        // re-initialize it.
+        _releasePlayer(dispose: true);
+        _initPlayer();
+      }
     } else {
-      _controller?.pause();
-      // Only release from pool without disposing — the controller may
-      // be reused when the user swipes back, avoiding a full re-init.
+      try {
+        _controller?.pause();
+      } catch (_) { /* ignore — controller may already be disposed */ }
       _releasePlayer(dispose: false);
       if (!_isCoverVisible && mounted) {
         setState(() {
@@ -242,14 +252,18 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
           // Video layer — only render platform view when active to prevent
           // it from drawing on top of other IndexedStack children.
           if (_controller != null && _isInitialized && widget.isActive)
-            FittedBox(
-              fit: BoxFit.cover,
-              child: SizedBox(
-                width: _controller!.value.size.width,
-                height: _controller!.value.size.height,
-                child: VideoPlayer(_controller!),
-              ),
-            )
+            Builder(builder: (_) {
+              final size = _controller!.value.size;
+              if (size.width == 0 || size.height == 0) return _buildCover();
+              return FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: size.width,
+                  height: size.height,
+                  child: VideoPlayer(_controller!),
+                ),
+              );
+            })
           else
             _buildCover(),
 
@@ -602,10 +616,10 @@ final class _VideoProgressBarState extends State<_VideoProgressBar> {
   @override
   Widget build(BuildContext context) {
     final value = widget.controller.value;
+    if (!value.isInitialized) return const SizedBox.shrink();
     final durationMs = value.duration.inMilliseconds;
-    final progress = durationMs > 0
-        ? (value.position.inMilliseconds / durationMs).clamp(0.0, 1.0)
-        : 0.0;
+    if (durationMs <= 0) return const SizedBox.shrink();
+    final progress = (value.position.inMilliseconds / durationMs).clamp(0.0, 1.0);
 
     // Use drag value while dragging, otherwise use actual progress
     final displayProgress = _dragValue > 0 ? _dragValue : progress;
