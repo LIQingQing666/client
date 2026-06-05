@@ -62,7 +62,7 @@ final class LiveApi {
         'cover_url': coverUrl,
         'product_ids': productIds,
         'tags': tags ?? [],
-        'video_url': 'https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4',
+        'video_url': 'http://192.168.50.174:3000/uploads/videos/butterfly.mp4',
       },
     );
     return LiveRoomInfo.fromJson(
