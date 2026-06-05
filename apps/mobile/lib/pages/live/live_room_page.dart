@@ -658,30 +658,10 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
                 },
               ),
             ),
-            // Transparent tap layer for play/pause — sits above the
-            // video so taps are received, but vertical drags pass
-            // through to the outer PageView.
-            GestureDetector(
-              onTap: () {
-                if (_videoController == null || !_videoReady) return;
-                if (_videoController!.value.isPlaying) {
-                  _videoController!.pause();
-                } else {
-                  _videoController!.play();
-                }
-                setState(() {});
-              },
-              behavior: HitTestBehavior.translucent,
-              child: const SizedBox.expand(),
-            ),
-            // Play/pause icon overlay
-            if (!_videoController!.value.isPlaying)
-              const Center(
-                child: IgnorePointer(
-                  child: Icon(Icons.play_circle_filled,
-                      size: 64, color: Colors.white70),
-                ),
-              ),
+            // No play/pause tap layer for live streaming — the stream
+            // should play continuously and not be user-pausable.
+            // The video is wrapped in IgnorePointer so vertical
+            // drags pass through to the outer PageView.
           ],
 
           // Video-fallback layer (only when no active video).

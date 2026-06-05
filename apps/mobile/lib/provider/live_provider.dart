@@ -108,6 +108,7 @@ final class LiveNotifier extends StateNotifier<LiveState> {
 
     try {
       final detail = await api.getRoomDetail(roomId);
+      if (!mounted) return;
       ProductModel? initialProduct;
       if (detail.room.currentProductId != null && detail.products.isNotEmpty) {
         try {
@@ -130,6 +131,7 @@ final class LiveNotifier extends StateNotifier<LiveState> {
       );
     }
     on Exception catch (e) {
+      if (!mounted) return;
       state = state.copyWith(
         isLoading: false,
         errorMessage: e.toString(),
@@ -140,17 +142,24 @@ final class LiveNotifier extends StateNotifier<LiveState> {
     // Connect WebSocket
     try {
       await wsService.connect(roomId);
+      if (!mounted) return;
       wsService.joinRoom(roomId);
       _eventSub = wsService.eventStream.listen(_handleEvent);
       state = state.copyWith(isConnected: true);
     } catch (e) {
       debugPrint('WebSocket 连接失败: $e');
       // WebSocket 失败不影响页面显示
+      if (!mounted) return;
       state = state.copyWith(isConnected: false);
     }
   }
 
   void _handleEvent(Map<String, dynamic> event) {
+    // Guard against events delivered after disposal — the stream subscription
+    // is cancelled in dispose(), but events already queued in the microtask
+    // queue will still fire.  Setting state on a disposed notifier triggers
+    // listener notifications on defunct widgets, crashing the framework.
+    if (!mounted) return;
     try {
       final eventName = event['event'] as String? ?? '';
 
@@ -273,6 +282,13 @@ final class LiveNotifier extends StateNotifier<LiveState> {
   }
 
   void leaveRoom() {
+    // Cancel the WebSocket event subscription so that events arriving
+    // after the widget has been disposed don't trigger state updates on
+    // listeners that no longer exist.  switchRoom() cancels _eventSub
+    // explicitly before calling wsService.leaveRoom() directly, so the
+    // double-cancel here is harmless.
+    _eventSub?.cancel();
+    _eventSub = null;
     if (state.room != null) {
       wsService.leaveRoom(state.room!.id);
     }

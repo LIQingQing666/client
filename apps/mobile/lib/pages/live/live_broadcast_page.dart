@@ -421,16 +421,8 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
       );
     }
 
-    return GestureDetector(
-      onTap: () {
-        if (_videoController!.value.isPlaying) {
-          _videoController!.pause();
-        } else {
-          _videoController!.play();
-        }
-        setState(() {});
-      },
-      child: Stack(
+    // Live broadcast — should play continuously, no pause tap.
+    return Stack(
         fit: StackFit.expand,
         children: [
           // 视频播放器
@@ -440,27 +432,6 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
               child: VideoPlayer(_videoController!),
             ),
           ),
-
-          // 播放/暂停按钮覆盖层
-          if (!_videoController!.value.isPlaying)
-            Container(
-              color: Colors.black26,
-              child: Center(
-                child: Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.white.withValues(alpha: 0.8),
-                  ),
-                  child: const Icon(
-                    Icons.play_arrow,
-                    color: Colors.black87,
-                    size: 36,
-                  ),
-                ),
-              ),
-            ),
 
           // 直播标签
           Positioned(
