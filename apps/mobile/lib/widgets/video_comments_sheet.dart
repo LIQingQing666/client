@@ -1,7 +1,10 @@
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../api/dio_client.dart';
 import '../core/app_constants.dart';
+import '../provider/auth_provider.dart';
+import '../provider/service_providers.dart';
 import '../utils/toast.dart';
 
 /// Shows the video comments half-screen bottom sheet.
@@ -17,16 +20,16 @@ Future<void> showVideoCommentsSheet({
   );
 }
 
-final class _VideoCommentsSheet extends StatefulWidget {
+final class _VideoCommentsSheet extends ConsumerStatefulWidget {
   const _VideoCommentsSheet({required this.videoId});
 
   final String videoId;
 
   @override
-  State<_VideoCommentsSheet> createState() => _VideoCommentsSheetState();
+  ConsumerState<_VideoCommentsSheet> createState() => _VideoCommentsSheetState();
 }
 
-final class _VideoCommentsSheetState extends State<_VideoCommentsSheet> {
+final class _VideoCommentsSheetState extends ConsumerState<_VideoCommentsSheet> {
   final _commentController = TextEditingController();
   final _scrollController = ScrollController();
   final List<Map<String, dynamic>> _comments = [];
@@ -36,6 +39,8 @@ final class _VideoCommentsSheetState extends State<_VideoCommentsSheet> {
   int _page = 1;
   String? _error;
   static const int _pageSize = 10;
+
+  DioClient get _client => ref.read(dioClientProvider);
 
   @override
   void initState() {
@@ -67,16 +72,15 @@ final class _VideoCommentsSheetState extends State<_VideoCommentsSheet> {
     });
 
     try {
-      final dio = Dio();
-      final response = await dio.get<Map<String, dynamic>>(
-        '${AppConstants.baseUrl}/comments',
+      final response = await _client.get<Map<String, dynamic>>(
+        '/comments',
         queryParameters: {
           'video_id': widget.videoId,
           'page': 1,
           'page_size': _pageSize,
         },
       );
-      final data = (response.data?['data'] as Map<String, dynamic>?) ?? {};
+      final data = (response.data!['data'] as Map<String, dynamic>?) ?? {};
       final list = (data['list'] as List<dynamic>?)
           ?.cast<Map<String, dynamic>>() ?? [];
       final hasMore = (data['has_more'] as bool?) ?? false;
@@ -90,7 +94,8 @@ final class _VideoCommentsSheetState extends State<_VideoCommentsSheet> {
           _isLoading = false;
         });
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[Comments] load failed: $e');
       if (mounted) {
         setState(() {
           _error = '加载失败';
@@ -107,16 +112,15 @@ final class _VideoCommentsSheetState extends State<_VideoCommentsSheet> {
 
     try {
       final nextPage = _page + 1;
-      final dio = Dio();
-      final response = await dio.get<Map<String, dynamic>>(
-        '${AppConstants.baseUrl}/comments',
+      final response = await _client.get<Map<String, dynamic>>(
+        '/comments',
         queryParameters: {
           'video_id': widget.videoId,
           'page': nextPage,
           'page_size': _pageSize,
         },
       );
-      final data = (response.data?['data'] as Map<String, dynamic>?) ?? {};
+      final data = (response.data!['data'] as Map<String, dynamic>?) ?? {};
       final list = (data['list'] as List<dynamic>?)
           ?.cast<Map<String, dynamic>>() ?? [];
       final hasMore = (data['has_more'] as bool?) ?? false;
@@ -129,7 +133,8 @@ final class _VideoCommentsSheetState extends State<_VideoCommentsSheet> {
           _isLoadingMore = false;
         });
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[Comments] loadMore failed: $e');
       if (mounted) {
         setState(() => _isLoadingMore = false);
         showRetryToast('加载更多失败', onRetry: _loadMore);
@@ -140,6 +145,12 @@ final class _VideoCommentsSheetState extends State<_VideoCommentsSheet> {
   Future<void> _postComment() async {
     final content = _commentController.text.trim();
     if (content.isEmpty) return;
+
+    final userId = ref.read(authProvider).userId;
+    if (userId == null) {
+      showToast('请先登录', type: ToastType.warning);
+      return;
+    }
 
     final optimisticId = DateTime.now().millisecondsSinceEpoch.toString();
     final optimistic = <String, dynamic>{
@@ -155,18 +166,25 @@ final class _VideoCommentsSheetState extends State<_VideoCommentsSheet> {
     _commentController.clear();
 
     try {
-      final dio = Dio();
-      await dio.post<Map<String, dynamic>>(
-        '${AppConstants.baseUrl}/comments',
+      final response = await _client.post<Map<String, dynamic>>(
+        '/comments',
         data: {
-          'user_id': 'u1',
+          'user_id': userId,
           'video_id': widget.videoId,
           'content': content,
         },
       );
-      // Replace optimistic entry with server response (falls back to optimistic).
-      showToast('评论发布成功');
-    } catch (_) {
+      // Check server response code — avoid false-failure when the HTTP
+      // call succeeds but the server returns a business-level error.
+      final code = (response.data?['code'] as num?)?.toInt() ?? -1;
+      if (code == 0) {
+        showToast('评论发布成功');
+      } else {
+        final msg = response.data?['message'] as String? ?? '发布失败';
+        throw Exception(msg);
+      }
+    } catch (e) {
+      debugPrint('[Comments] post error: $e');
       // Rollback: remove the optimistic comment.
       if (mounted) {
         setState(() {

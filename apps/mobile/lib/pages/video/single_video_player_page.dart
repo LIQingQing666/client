@@ -10,10 +10,12 @@ import 'package:video_player/video_player.dart';
 import '../../core/app_constants.dart';
 import '../../models/product_model.dart';
 import '../../models/video_model.dart';
+import '../../provider/auth_provider.dart';
 import '../../provider/cart_provider.dart';
 import '../../provider/favorite_provider.dart';
 import '../../provider/feed_provider.dart';
 import '../../provider/follow_provider.dart';
+import '../../utils/toast.dart';
 import '../../widgets/floating_product_card.dart';
 import '../../widgets/product_detail_sheet.dart';
 
@@ -299,6 +301,13 @@ final class _SingleVideoPlayerPageState
             ),
           ),
 
+          // Progress bar
+          if (_videoReady && _controller != null)
+            Positioned(
+              left: 0, right: 0, bottom: 0,
+              child: _VideoProgressBar(controller: _controller!),
+            ),
+
           // Back button
           Positioned(
             top: MediaQuery.of(context).padding.top + AppDimens.paddingSm,
@@ -345,15 +354,36 @@ final class _SingleVideoPlayerPageState
 final class _Info extends ConsumerWidget {
   const _Info({required this.video});
   final VideoModel video;
+
+  void _onAuthorTap(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _AuthorSheet(video: video),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isF = ref.watch(followProvider).followingIds.contains(video.authorId);
     return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
       Row(children: [
-        CircleAvatar(radius: 18, backgroundColor: AppColors.card,
-          child: Text(video.authorName.isNotEmpty ? video.authorName[0] : '?', style: AppTextStyles.bodySmall)),
-        const SizedBox(width: AppDimens.paddingSm),
-        Text(video.authorName, style: AppTextStyles.bodyLarge),
+        GestureDetector(
+          onTap: () => _onAuthorTap(context),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            CircleAvatar(radius: 18, backgroundColor: AppColors.card,
+              backgroundImage: video.authorAvatar.isNotEmpty
+                  ? CachedNetworkImageProvider(video.authorAvatar)
+                  : null,
+              child: video.authorAvatar.isEmpty
+                  ? Text(video.authorName.isNotEmpty ? video.authorName[0] : '?',
+                      style: AppTextStyles.bodySmall)
+                  : null,
+            ),
+            const SizedBox(width: AppDimens.paddingSm),
+            Text(video.authorName, style: AppTextStyles.bodyLarge),
+          ]),
+        ),
         const SizedBox(width: AppDimens.paddingSm),
         GestureDetector(
           onTap: () async {
@@ -378,21 +408,68 @@ final class _Info extends ConsumerWidget {
   }
 }
 
-final class _Actions extends ConsumerWidget {
+final class _Actions extends ConsumerStatefulWidget {
   const _Actions({required this.video});
   final VideoModel video;
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final fav = ref.watch(favoriteProvider).isFavorited(video.id);
+  ConsumerState<_Actions> createState() => _ActionsState();
+}
+
+final class _ActionsState extends ConsumerState<_Actions> {
+  late bool _liked;
+  late int _likeCount;
+
+  @override
+  void initState() {
+    super.initState();
+    _liked = widget.video.isLiked;
+    _likeCount = widget.video.likeCount;
+  }
+
+  String get _likeText {
+    if (_likeCount >= 10000) return '${(_likeCount / 10000).toStringAsFixed(1)}万';
+    return _likeCount.toString();
+  }
+
+  Future<void> _toggleLike() async {
+    final userId = ref.read(authProvider).userId;
+    if (userId == null) {
+      showToast('请先登录', type: ToastType.warning);
+      return;
+    }
+    final wasLiked = _liked;
+    // Optimistic update
+    setState(() {
+      _liked = !wasLiked;
+      _likeCount += _liked ? 1 : -1;
+    });
+    try {
+      await ref.read(videoApiProvider).toggleLike(widget.video.id, userId);
+    } on Exception {
+      // Revert on failure
+      if (mounted) {
+        setState(() {
+          _liked = wasLiked;
+          _likeCount += wasLiked ? 1 : -1;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fav = ref.watch(favoriteProvider).isFavorited(widget.video.id);
     return Column(mainAxisSize: MainAxisSize.min, children: [
-      _Btn(icon: video.isLiked ? Icons.favorite : Icons.favorite_border,
-        iconColor: video.isLiked ? AppColors.primary : null,
-        label: video.likeCountText, onTap: () => ref.read(videoApiProvider).toggleLike(video.id, 'u1')),
+      _Btn(icon: _liked ? Icons.favorite : Icons.favorite_border,
+        iconColor: _liked ? AppColors.primary : null,
+        label: _likeText, onTap: _toggleLike),
       const SizedBox(height: AppDimens.paddingLg),
       _Btn(icon: fav ? Icons.star : Icons.star_border, iconColor: fav ? AppColors.accent : null,
         label: fav ? '已收藏' : '收藏', onTap: () {
         ref.read(favoriteProvider.notifier).toggleVideoFavorite(
-          id: video.id, title: video.title, coverUrl: video.coverUrl, authorName: video.authorName,
+          id: widget.video.id, title: widget.video.title,
+          coverUrl: widget.video.coverUrl, authorName: widget.video.authorName,
+          authorId: widget.video.authorId, authorAvatar: widget.video.authorAvatar,
         );
       }),
     ]);
@@ -415,5 +492,155 @@ final class _Btn extends StatelessWidget {
         Text(label, style: AppTextStyles.bodySmall),
       ]),
     );
+  }
+}
+
+// ── Author info bottom sheet ──
+final class _AuthorSheet extends ConsumerWidget {
+  const _AuthorSheet({required this.video});
+  final VideoModel video;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isF = ref.watch(followProvider).followingIds.contains(video.authorId);
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppDimens.radiusXl)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppDimens.paddingLg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle
+            Center(
+              child: Container(
+                width: 36, height: 4,
+                margin: const EdgeInsets.only(bottom: AppDimens.paddingLg),
+                decoration: BoxDecoration(color: AppColors.textHint, borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            CircleAvatar(
+              radius: 36, backgroundColor: AppColors.card,
+              backgroundImage: video.authorAvatar.isNotEmpty
+                  ? CachedNetworkImageProvider(video.authorAvatar)
+                  : null,
+              child: video.authorAvatar.isEmpty
+                  ? Text(video.authorName.isNotEmpty ? video.authorName[0].toUpperCase() : '?',
+                      style: const TextStyle(fontSize: 28, color: Colors.white))
+                  : null,
+            ),
+            const SizedBox(height: AppDimens.paddingMd),
+            Text(video.authorName, style: AppTextStyles.titleLarge),
+            const SizedBox(height: AppDimens.paddingXs),
+            Text('ID: ${video.authorId}', style: AppTextStyles.bodySmall),
+            const SizedBox(height: AppDimens.paddingLg),
+            SizedBox(
+              width: 120,
+              child: ElevatedButton(
+                onPressed: () async {
+                  try {
+                    await ref.read(followProvider.notifier).toggleFollow(video.authorId);
+                  } on Exception {}
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isF ? AppColors.card : AppColors.primary,
+                  foregroundColor: isF ? AppColors.textSecondary : Colors.white,
+                ),
+                child: Text(isF ? '已关注' : '关注'),
+              ),
+            ),
+            const SizedBox(height: AppDimens.paddingLg),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Draggable progress bar ──
+final class _VideoProgressBar extends StatefulWidget {
+  const _VideoProgressBar({required this.controller});
+  final VideoPlayerController controller;
+
+  @override
+  State<_VideoProgressBar> createState() => _VideoProgressBarState();
+}
+
+final class _VideoProgressBarState extends State<_VideoProgressBar> {
+  double _dragValue = -1;
+  double _dragDurationMs = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<VideoPlayerValue>(
+      valueListenable: widget.controller,
+      builder: (context, value, child) {
+        if (!value.isInitialized) return const SizedBox.shrink();
+        final durationMs = value.duration.inMilliseconds;
+        if (durationMs <= 0) return const SizedBox.shrink();
+        final progress = (value.position.inMilliseconds / durationMs).clamp(0.0, 1.0);
+        final displayProgress = _dragValue >= 0 ? _dragValue : progress;
+        final displayDurationMs = _dragValue >= 0 && _dragDurationMs > 0
+            ? _dragDurationMs
+            : durationMs.toDouble();
+
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 2,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                activeTrackColor: AppColors.primary,
+                inactiveTrackColor: Colors.white.withAlpha(30),
+                thumbColor: AppColors.primary,
+                overlayColor: AppColors.primary.withAlpha(50),
+              ),
+              child: Slider(
+                value: displayProgress,
+                min: 0.0, max: 1.0,
+                onChanged: (v) => setState(() {
+                  _dragValue = v;
+                  _dragDurationMs = durationMs.toDouble();
+                }),
+                onChangeEnd: (v) {
+                  final seekTo = Duration(milliseconds: (v * durationMs).toInt());
+                  widget.controller.seekTo(seekTo);
+                  setState(() {
+                    _dragValue = -1;
+                    _dragDurationMs = 0;
+                  });
+                },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppDimens.paddingLg, vertical: AppDimens.paddingXs),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    _formatDuration(Duration(milliseconds: _dragValue >= 0
+                        ? (_dragValue * displayDurationMs).toInt()
+                        : value.position.inMilliseconds)),
+                    style: AppTextStyles.bodySmall,
+                  ),
+                  Text(_formatDuration(Duration(milliseconds: displayDurationMs.toInt())),
+                      style: AppTextStyles.bodySmall),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  String _formatDuration(Duration duration) {
+    final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
   }
 }

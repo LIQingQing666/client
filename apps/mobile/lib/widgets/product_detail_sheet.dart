@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/app_constants.dart';
 import '../models/coupon_model.dart';
 import '../models/product_model.dart';
+import '../provider/favorite_provider.dart';
 import '../utils/responsive_helper.dart';
 import 'coupon_picker_sheet.dart';
 
@@ -510,7 +511,10 @@ final class _ProductDetailSheetState extends ConsumerState<ProductDetailSheet> {
                   )
               : null,
           onFavorite: widget.onFavorite,
-          isFavorited: widget.isFavorited,
+          // Watch favoriteProvider reactively so the star icon updates
+          // immediately when the user toggles it — widget.isFavorited is a
+          // one-time snapshot read when the sheet opened.
+          isFavorited: ref.watch(favoriteProvider).isFavorited(widget.product.id),
           price: _couponPrice,
           bottomInset: bottomInset,
           stock: product.stock,
