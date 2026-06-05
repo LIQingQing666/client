@@ -98,9 +98,14 @@ final class LiveNotifier extends StateNotifier<LiveState> {
   final LiveApi api;
   final WebSocketService wsService;
   StreamSubscription<Map<String, dynamic>>? _eventSub;
+  bool _active = false;
   static const int _maxMessages = 200;
 
   Future<void> enterRoom(String roomId) async {
+    // Mark the room as active — events received before this flag is
+    // cleared in leaveRoom() are safe to process.  Set synchronously
+    // so _handleEvent can rely on it even before the first await.
+    _active = true;
     // Cancel any previous subscription before re-entering.
     _eventSub?.cancel();
     _eventSub = null;
@@ -155,11 +160,12 @@ final class LiveNotifier extends StateNotifier<LiveState> {
   }
 
   void _handleEvent(Map<String, dynamic> event) {
-    // Guard against events delivered after disposal — the stream subscription
-    // is cancelled in dispose(), but events already queued in the microtask
-    // queue will still fire.  Setting state on a disposed notifier triggers
-    // listener notifications on defunct widgets, crashing the framework.
-    if (!mounted) return;
+    // _active is cleared synchronously in leaveRoom() BEFORE _eventSub is
+    // cancelled.  This guards against events already queued in the microtask
+    // queue — cancel() prevents new events but can't stop scheduled ones.
+    // Without this guard, those events would set state on a disposed notifier
+    // and crash the framework via listener notifications on defunct widgets.
+    if (!_active) return;
     try {
       final eventName = event['event'] as String? ?? '';
 
@@ -282,6 +288,12 @@ final class LiveNotifier extends StateNotifier<LiveState> {
   }
 
   void leaveRoom() {
+    // Set _active = false SYNCHRONOUSLY first so that any WebSocket
+    // events already queued in the microtask queue are silently dropped
+    // by _handleEvent instead of triggering state updates on disposed
+    // widgets.  _eventSub?.cancel() prevents future events but cannot
+    // cancel already-scheduled microtasks.
+    _active = false;
     // Cancel the WebSocket event subscription so that events arriving
     // after the widget has been disposed don't trigger state updates on
     // listeners that no longer exist.  switchRoom() cancels _eventSub
@@ -296,6 +308,7 @@ final class LiveNotifier extends StateNotifier<LiveState> {
 
   @override
   void dispose() {
+    _active = false;
     _eventSub?.cancel();
     leaveRoom();
     super.dispose();

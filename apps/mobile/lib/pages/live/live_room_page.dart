@@ -230,6 +230,7 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
   /// Safe to call multiple times — returns early if already initializing.
   void _initVideo(String url) {
     if (url.isEmpty) {
+      debugPrint('[LiveRoom] video URL is empty — room data may not have loaded yet');
       if (mounted) setState(() => _videoError = true);
       return;
     }
@@ -241,12 +242,20 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
       _videoController = null;
     }
 
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      debugPrint('[LiveRoom] invalid video URL: $url');
+      if (mounted) setState(() => _videoError = true);
+      return;
+    }
+
     setState(() {
       _videoReady = false;
       _videoError = false;
     });
 
-    final controller = VideoPlayerController.networkUrl(Uri.parse(url));
+    debugPrint('[LiveRoom] initializing video: $url');
+    final controller = VideoPlayerController.networkUrl(uri);
     _videoController = controller;
     controller.initialize().then((_) {
       if (!mounted || _videoController != controller) return;

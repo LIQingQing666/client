@@ -23,10 +23,13 @@ final class PlayerPool {
 
     // Deduplicate by URL: if the same URL is already loaded, reuse the
     // controller and alias the entry instead of duplicating it.
+    // Seek to the beginning so consecutive videos with the same file don't
+    // appear to continue from the previous video's playback position.
     for (final entry in _players.entries) {
       if (entry.value.url == url) {
         entry.value.refCount++;
         _players[videoId] = entry.value; // alias — same refCount, same controller
+        entry.value.controller.seekTo(Duration.zero);
         return entry.value.controller;
       }
     }
