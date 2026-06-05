@@ -100,7 +100,7 @@ function seed() {
       title: '2024新款TWS降噪耳机深度体验',
       description: '这款耳机降噪效果超乎想象，续航长达30小时，佩戴舒适，是通勤和办公的最佳选择。',
       cover_url: 'https://picsum.photos/seed/v1/400/600',
-      video_url: 'https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4',
+      video_url: 'http://192.168.50.174:3000/uploads/videos/butterfly.mp4',
       author_id: 'u2',
       author_name: '小明数码',
       author_avatar: '',
@@ -115,7 +115,7 @@ function seed() {
       title: '显瘦百搭！春季新款连衣裙开箱',
       description: '这件连衣裙面料柔软亲肤，版型超正，小个子也能驾驭，三色可选性价比很高！',
       cover_url: 'https://picsum.photos/seed/v2/400/600',
-      video_url: 'https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4',
+      video_url: 'http://192.168.50.174:3000/uploads/videos/video2.mp4',
       author_id: 'u3',
       author_name: '小红穿搭',
       author_avatar: '',
@@ -130,7 +130,7 @@ function seed() {
       title: '懒人必备！智能扫地机器人实测',
       description: '激光导航精准建图，5000Pa大吸力，自动集尘，真正解放双手的清洁神器。',
       cover_url: 'https://picsum.photos/seed/v3/400/600',
-      video_url: 'https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4',
+      video_url: 'http://192.168.50.174:3000/uploads/videos/video3.mp4',
       author_id: 'u2',
       author_name: '小明数码',
       author_avatar: '',
@@ -145,7 +145,7 @@ function seed() {
       title: '学生党平价护肤好物推荐',
       description: '百元以内的宝藏护肤品，成分安全有效，适合学生党和护肤新手，性价比天花板！',
       cover_url: 'https://picsum.photos/seed/v4/400/600',
-      video_url: 'https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4',
+      video_url: 'http://192.168.50.174:3000/uploads/videos/butterfly.mp4',
       author_id: 'u3',
       author_name: '小红穿搭',
       author_avatar: '',
@@ -160,7 +160,7 @@ function seed() {
       title: '户外露营装备开箱｜新手入门套装',
       description: '帐篷、睡袋、炉具一整套不到500元，新手露营完全够了，周末出去走走吧！',
       cover_url: 'https://picsum.photos/seed/v5/400/600',
-      video_url: 'https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4',
+      video_url: 'http://192.168.50.174:3000/uploads/videos/video2.mp4',
       author_id: 'u4',
       author_name: '阿杰户外',
       author_avatar: '',
@@ -175,7 +175,7 @@ function seed() {
       title: '打工人必备！人体工学椅深度评测',
       description: '久坐不累的秘诀，腰靠可调节，网面透气，千元价位最能打的人体工学椅。',
       cover_url: 'https://picsum.photos/seed/v6/400/600',
-      video_url: 'https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4',
+      video_url: 'http://192.168.50.174:3000/uploads/videos/video3.mp4',
       author_id: 'u5',
       author_name: '数码控小王',
       author_avatar: '',
@@ -190,7 +190,7 @@ function seed() {
       title: '减脂餐这样做好吃又掉秤',
       description: '一周不重样的减脂餐食谱，低卡高蛋白，做法简单，吃饱也能瘦！',
       cover_url: 'https://picsum.photos/seed/v7/400/600',
-      video_url: 'https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4',
+      video_url: 'http://192.168.50.174:3000/uploads/videos/butterfly.mp4',
       author_id: 'u4',
       author_name: '阿杰户外',
       author_avatar: '',
@@ -205,7 +205,7 @@ function seed() {
       title: '苹果安卓都能用的磁吸充电宝',
       description: '10000mAh大容量，支持MagSafe磁吸，20W快充，出门再也不用带线。',
       cover_url: 'https://picsum.photos/seed/v8/400/600',
-      video_url: 'https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4',
+      video_url: 'http://192.168.50.174:3000/uploads/videos/video2.mp4',
       author_id: 'u2',
       author_name: '小明数码',
       author_avatar: '',
@@ -220,7 +220,7 @@ function seed() {
       title: '宠物体检必做项目清单｜养宠新手必看',
       description: '新猫新狗到家第一件事就是体检，这些项目一定要做，能省下好多医药费。',
       cover_url: 'https://picsum.photos/seed/v9/400/600',
-      video_url: 'https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4',
+      video_url: 'http://192.168.50.174:3000/uploads/videos/video3.mp4',
       author_id: 'u5',
       author_name: '数码控小王',
       author_avatar: '',
@@ -235,7 +235,7 @@ function seed() {
       title: '年末大扫除！这些清洁神器太好用了',
       description: '玻璃刮、除霉剂、静电拖把……这些都是我家无限回购的清洁好物，省时省力。',
       cover_url: 'https://picsum.photos/seed/v10/400/600',
-      video_url: 'https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4',
+      video_url: 'http://192.168.50.174:3000/uploads/videos/butterfly.mp4',
       author_id: 'u3',
       author_name: '小红穿搭',
       author_avatar: '',
@@ -763,7 +763,7 @@ function seed() {
     status: 'preview' | 'live' | 'ended';
     tags: string[];
     products: string[];
-    video_url: 'https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4',
+    video_url: string;
   }> = [
     {
       author_id: 'u2',
@@ -773,6 +773,7 @@ function seed() {
       status: 'live',
       tags: ['数码', '秒杀'],
       products: productsByAuthor.u2.slice(0, 4),
+      video_url: 'http://192.168.50.174:3000/uploads/videos/video2.mp4',
     },
     {
       author_id: 'u2',
@@ -782,6 +783,7 @@ function seed() {
       status: 'preview',
       tags: ['数码', '预告'],
       products: productsByAuthor.u2.slice(0, 3),
+      video_url: 'http://192.168.50.174:3000/uploads/videos/video3.mp4',
     },
     {
       author_id: 'u3',
@@ -791,6 +793,7 @@ function seed() {
       status: 'live',
       tags: ['穿搭', '春季', '五折'],
       products: productsByAuthor.u3.slice(0, 4),
+      video_url: 'http://192.168.50.174:3000/uploads/videos/butterfly.mp4',
     },
     {
       author_id: 'u4',
@@ -800,6 +803,7 @@ function seed() {
       status: 'preview',
       tags: ['户外', '露营'],
       products: productsByAuthor.u4.slice(0, 3),
+      video_url: 'http://192.168.50.174:3000/uploads/videos/video2.mp4',
     },
     {
       author_id: 'u5',
@@ -809,6 +813,7 @@ function seed() {
       status: 'ended',
       tags: ['数码', '办公'],
       products: productsByAuthor.u5.slice(0, 2),
+      video_url: 'http://192.168.50.174:3000/uploads/videos/video3.mp4',
     },
   ];
 
@@ -830,7 +835,7 @@ function seed() {
       id: uuid(),
       title: r.title,
       cover_url: r.cover_url,
-      video_url: 'https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4',
+      video_url: r.video_url,
       author_id: r.author_id,
       author_name: r.author_name,
       author_avatar: '',
