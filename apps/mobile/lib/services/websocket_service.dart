@@ -31,13 +31,17 @@ final class WebSocketService {
     _stateController.add(newState);
   }
 
+  Completer<void>? _connectCompleter;
   Future<void> connect(String namespace) async {
     if (_state == WebSocketState.connected ||
         _state == WebSocketState.connecting) {
+      await _connectCompleter?.future;
       return;
     }
 
     _setState(WebSocketState.connecting);
+
+    _connectCompleter = Completer<void>();
 
     final token = _storage.token;
     _socket = io.io(
@@ -46,8 +50,8 @@ final class WebSocketService {
           .setTransports(['websocket'])
           .enableForceNew()
           .setAuth(<String, String>{
-            if (token != null) 'token': token,
-          })
+        if (token != null) 'token': token,
+      })
           .setPath('/socket.io')
           .build(),
     );
@@ -57,6 +61,10 @@ final class WebSocketService {
         _reconnectAttempts = 0;
         _setState(WebSocketState.connected);
         _socket!.emit('join', {'namespace': namespace});
+
+        if (!_connectCompleter!.isCompleted) {
+          _connectCompleter!.complete();
+        }
       })
       ..onDisconnect((_) {
         _setState(WebSocketState.disconnected);
@@ -64,6 +72,11 @@ final class WebSocketService {
       })
       ..onConnectError((err) {
         _setState(WebSocketState.disconnected);
+
+        if (!_connectCompleter!.isCompleted) {
+          _connectCompleter!.completeError(err);
+        }
+
         _scheduleReconnect(namespace);
       })
       ..onError((err) {
@@ -72,6 +85,19 @@ final class WebSocketService {
       ..onAny(_processEvent);
 
     _socket!.connect();
+
+    try {
+      await _connectCompleter!.future.timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          debugPrint('[WS] ⚠️ 连接超时');
+          throw TimeoutException('WebSocket 连接超时');
+        },
+      );
+    } catch (e) {
+      debugPrint('[WS] 连接失败: $e');
+      rethrow;
+    }
   }
 
   void _processEvent(String eventName, dynamic data) {

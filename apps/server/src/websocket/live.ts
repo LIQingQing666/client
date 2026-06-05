@@ -45,10 +45,27 @@ export function createWebSocketServer(httpServer: HttpServer): SocketIOServer {
       state.onlineCount += 1;
 
       // Send current room state to the new joiner
-      socket.emit('room_state', {
+      const roomStatePayload: Record<string, unknown> = {
         online_count: state.onlineCount,
         current_product_id: state.currentProductId,
-      });
+      };
+
+      // If there's a current explaining product, send full product data
+      if (state.currentProductId) {
+        const currentProduct = db.prepare(
+          'SELECT * FROM products WHERE id = ?'
+        ).get(state.currentProductId) as Record<string, unknown> | undefined;
+        if (currentProduct) {
+          roomStatePayload.current_product = {
+            ...currentProduct,
+            tags: JSON.parse(currentProduct.tags as string),
+            images: JSON.parse(currentProduct.images as string),
+            specs: JSON.parse(currentProduct.specs as string),
+          };
+        }
+      }
+
+      socket.emit('room_state', roomStatePayload);
 
       // Broadcast updated online count
       io.to(room).emit('online_count', { count: state.onlineCount });
@@ -128,14 +145,24 @@ export function createWebSocketServer(httpServer: HttpServer): SocketIOServer {
     socket.on('set_explaining_product', (data: { room: string; product_id: string }) => {
       const db = getDb();
       const product = db.prepare(
-        'SELECT id, name, cover_url, price, original_price, sales, ai_sales_point FROM products WHERE id = ?'
+        'SELECT * FROM products WHERE id = ?'
       ).get(data.product_id) as Record<string, unknown> | undefined;
 
-      if (product && roomState.has(data.room)) {
+      if (product) {
+        if (!roomState.has(data.room)) {
+          roomState.set(data.room, { onlineCount: 0, currentProductId: '' });
+        }
         roomState.get(data.room)!.currentProductId = data.product_id;
 
+        const serializedProduct = {
+          ...product,
+          tags: JSON.parse(product.tags as string),
+          images: JSON.parse(product.images as string),
+          specs: JSON.parse(product.specs as string),
+        };
+
         io.to(data.room).emit('explaining_product', {
-          product,
+          product: serializedProduct,
           timestamp: new Date().toISOString(),
         });
       }

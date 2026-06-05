@@ -176,27 +176,24 @@ final class _FloatingProductCardState extends State<FloatingProductCard>
   // ---- vertical layout (live room) ----
 
   Widget _buildVertical(BuildContext context, ProductModel product) {
-    final isSmall = ResponsiveHelper.isSmallScreen(context);
-    final priceFont = isSmall ? 13.0 : 15.0;
-    final bodyFont = isSmall ? 10.0 : 11.0;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Product image — fills the top portion
+        // Product image
         Expanded(
           flex: 3,
           child: ClipRRect(
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(AppDimens.radiusMd)),
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(AppDimens.radiusMd),
+            ),
             child: CachedNetworkImage(
               imageUrl: product.coverUrl,
               fit: BoxFit.cover,
               placeholder: (_, __) => Container(color: AppColors.card),
               errorWidget: (_, __, ___) => Container(
-                  color: AppColors.card,
-                  child: const Icon(Icons.image,
-                      color: AppColors.textHint, size: 28)),
+                color: AppColors.card,
+                child: const Icon(Icons.image, color: AppColors.textHint, size: 16),
+              ),
             ),
           ),
         ),
@@ -204,34 +201,29 @@ final class _FloatingProductCardState extends State<FloatingProductCard>
         Expanded(
           flex: 2,
           child: Padding(
-            padding: EdgeInsets.all(isSmall ? AppDimens.paddingXs : AppDimens.paddingSm),
+            padding: const EdgeInsets.all(4),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Title
-                Text(product.name,
-                    style: TextStyle(
-                        fontSize: bodyFont,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis),
-                const Spacer(),
-                // Price
-                Text('¥${product.price.toStringAsFixed(0)}',
-                    style: TextStyle(
-                        fontSize: priceFont,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.primary)),
-                const SizedBox(height: 1),
-                // Stock
                 Text(
-                    product.stock > 0 ? '库存 ${product.stock}' : '已售罄',
-                    style: TextStyle(
-                        fontSize: bodyFont - 2,
-                        color: product.stock > 0
-                            ? AppColors.textHint
-                            : AppColors.error)),
+                  product.name,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const Spacer(),
+                Text(
+                  '¥${product.price.toStringAsFixed(0)}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primary,
+                  ),
+                ),
               ],
             ),
           ),
