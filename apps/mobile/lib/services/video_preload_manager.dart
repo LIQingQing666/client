@@ -38,7 +38,7 @@ final class VideoPreloadManager {
     this.maxConcurrent = 1,
     this.wifiOnly = AppConstants.preloadWifiOnly,
     this.timeout = AppConstants.preloadTimeout,
-    this.startupDelay = const Duration(milliseconds: 800),
+    this.startupDelay = AppConstants.preloadStartupDelay,
   }) {
     _subscription = connectivity.onConnectivityChanged.listen(_onNetworkChanged);
   }

@@ -3,10 +3,12 @@ import 'dart:async';
 import 'package:video_player/video_player.dart';
 
 final class PlayerPool {
-  PlayerPool({this.poolSize = 4});
+  PlayerPool({this.poolSize = 3});
 
   final int poolSize;
   final Map<String, _PooledPlayer> _players = {};
+  // Track which videoIds are currently initializing to avoid duplicate inits.
+  final Set<String> _initializing = {};
 
   VideoPlayerController? getController(String videoId) {
     return _players[videoId]?.controller;
@@ -29,20 +31,38 @@ final class PlayerPool {
       }
     }
 
-    _evictIfNeeded();
+    // Guard against concurrent initializations of the same videoId.
+    if (_initializing.contains(videoId)) {
+      // Wait briefly for the in-flight init to complete, then retry.
+      await Future.delayed(const Duration(milliseconds: 200));
+      if (_players.containsKey(videoId)) {
+        _players[videoId]!.refCount++;
+        return _players[videoId]!.controller;
+      }
+    }
+    _initializing.add(videoId);
 
-    final controller = VideoPlayerController.networkUrl(Uri.parse(url));
-    await controller.initialize();
-    await controller.setLooping(true);
-    await controller.setVolume(1.0);
+    try {
+      _evictIfNeeded();
 
-    _players[videoId] = _PooledPlayer(
-      controller: controller,
-      refCount: 1,
-      url: url,
-    );
+      final controller = VideoPlayerController.networkUrl(Uri.parse(url));
+      await controller.initialize().timeout(
+        const Duration(seconds: 15),
+        onTimeout: () => throw TimeoutException('Video init timeout'),
+      );
+      await controller.setLooping(true);
+      await controller.setVolume(1.0);
 
-    return controller;
+      _players[videoId] = _PooledPlayer(
+        controller: controller,
+        refCount: 1,
+        url: url,
+      );
+
+      return controller;
+    } finally {
+      _initializing.remove(videoId);
+    }
   }
 
   Future<void> preload(String videoId, String url) async {
