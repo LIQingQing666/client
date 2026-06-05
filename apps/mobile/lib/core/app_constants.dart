@@ -13,9 +13,10 @@ abstract final class AppConstants {
   static const Duration receiveTimeout = Duration(seconds: 10);
 
   // 视频预加载
-  static const int preloadVideoCount = 2;
+  static const int preloadVideoCount = 1;             // 仅预加载下一个视频，减少 ExoPlayer 并发数
   static const bool preloadWifiOnly = true;
-  static const Duration preloadTimeout = Duration(seconds: 30);
+  static const Duration preloadTimeout = Duration(seconds: 20);
+  static const Duration preloadStartupDelay = Duration(milliseconds: 1500); // 当前视频优先缓冲
 
   // 视频相关
   static const Duration videoFadeInDuration = Duration(milliseconds: 300);

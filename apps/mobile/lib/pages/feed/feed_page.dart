@@ -314,6 +314,15 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
     final isTabActive = tabIndex == 0;
     final currentTab = feedState.tab;
 
+    // When follows change while on the follow tab, reload the list so
+    // newly followed authors' videos appear immediately.
+    ref.listen<FollowState>(followProvider, (prev, next) {
+      if (currentTab == FeedTab.follow &&
+          prev?.followingIds.length != next.followingIds.length) {
+        Future.microtask(() => notifier.loadVideos());
+      }
+    });
+
     if (feedState.isLoading && feedState.videos.isEmpty) {
       return Scaffold(
         body: Center(
