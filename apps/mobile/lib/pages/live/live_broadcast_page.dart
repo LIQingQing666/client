@@ -466,7 +466,6 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
             ),
           ),
         ],
-      ),
     );
   }
 

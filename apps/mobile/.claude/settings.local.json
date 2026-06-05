@@ -32,7 +32,8 @@
       "WebFetch(domain:fcna96qnla02.feishu.cn)",
       "Bash(curl *)",
       "Bash(pip install *)",
-      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(v['video_url']\\) for v in d['data']['list'][:3]]\")"
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(v['video_url']\\) for v in d['data']['list'][:3]]\")",
+      "Bash(flutter analyze *)"
     ]
   }
 }

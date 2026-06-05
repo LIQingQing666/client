@@ -45,11 +45,13 @@ function seed() {
   const db = getDb();
   initDb();
 
-  // Clean existing data
+  // Clean existing data — disable FK checks during bulk delete so we
+  // can wipe tables regardless of reference order. Re-enabled after.
+  db.pragma('foreign_keys = OFF');
   db.exec('DELETE FROM customer_service_messages');
   db.exec('DELETE FROM refund_records');
   db.exec('DELETE FROM recharge_records');
-  // 直播相关（必须在 products / users 之前清理，因为有 FK）
+  // 直播相关
   db.exec('DELETE FROM live_view_history');
   db.exec('DELETE FROM gift_records');
   db.exec('DELETE FROM live_interactions');
@@ -66,6 +68,7 @@ function seed() {
   db.exec('DELETE FROM videos');
   db.exec('DELETE FROM coupons');
   db.exec('DELETE FROM users');
+  db.pragma('foreign_keys = ON');
 
   // ---- Users ----
   const defaultHash = hashPassword('123456');
@@ -86,7 +89,7 @@ function seed() {
   }
 
   const insertUser = db.prepare(
-    'INSERT INTO users (id, nickname, avatar, phone, password, role, coin_balance) VALUES (@id, @nickname, @avatar, @phone, @password, @role, @coin_balance)'
+    'INSERT OR REPLACE INTO users (id, nickname, avatar, phone, password, role, coin_balance) VALUES (@id, @nickname, @avatar, @phone, @password, @role, @coin_balance)'
   );
   for (const u of users) {
     insertUser.run({ ...u, coin_balance: 0 });
@@ -249,7 +252,7 @@ function seed() {
   ];
 
   const insertVideo = db.prepare(
-    `INSERT INTO videos (id, title, description, cover_url, video_url, author_id, author_name, author_avatar, duration, tags, like_count, comment_count, share_count, play_count)
+    `INSERT OR REPLACE INTO videos (id, title, description, cover_url, video_url, author_id, author_name, author_avatar, duration, tags, like_count, comment_count, share_count, play_count)
      VALUES (@id, @title, @description, @cover_url, @video_url, @author_id, @author_name, @author_avatar, @duration, @tags, @like_count, @comment_count, @share_count, @play_count)`
   );
   for (const v of videos) {
@@ -584,7 +587,7 @@ function seed() {
   ];
 
   const insertProduct = db.prepare(
-    `INSERT INTO products (id, name, description, cover_url, images, price, original_price, stock, sales, category, tags, specs, video_id, ai_sales_point, highlight_time)
+    `INSERT OR REPLACE INTO products (id, name, description, cover_url, images, price, original_price, stock, sales, category, tags, specs, video_id, ai_sales_point, highlight_time)
      VALUES (@id, @name, @description, @cover_url, @images, @price, @original_price, @stock, @sales, @category, @tags, @specs, @video_id, @ai_sales_point, @highlight_time)`
   );
   for (const p of products) {
@@ -593,7 +596,7 @@ function seed() {
 
   // ---- Coupons ----
   const insertCoupon = db.prepare(
-    `INSERT INTO coupons (id, title, amount, min_order, total_count, used_count, start_time, end_time)
+    `INSERT OR REPLACE INTO coupons (id, title, amount, min_order, total_count, used_count, start_time, end_time)
      VALUES (@id, @title, @amount, @min_order, @total_count, @used_count, @start_time, @end_time)`
   );
   insertCoupon.run({
@@ -619,7 +622,7 @@ function seed() {
 
   // ---- Cart Items (for user u1) ----
   const insertCartItem = db.prepare(
-    `INSERT INTO cart_items (id, user_id, product_id, spec, quantity, selected)
+    `INSERT OR REPLACE INTO cart_items (id, user_id, product_id, spec, quantity, selected)
      VALUES (@id, @user_id, @product_id, @spec, @quantity, @selected)`
   );
   const allProductIds = db
@@ -654,7 +657,7 @@ function seed() {
 
   // ---- Orders (for user u1) ----
   const insertOrder = db.prepare(
-    `INSERT INTO orders (id, user_id, total_amount, discount_amount, pay_amount, status, address, items)
+    `INSERT OR REPLACE INTO orders (id, user_id, total_amount, discount_amount, pay_amount, status, address, items)
      VALUES (@id, @user_id, @total_amount, @discount_amount, @pay_amount, @status, @address, @items)`
   );
   const first3Products = db
@@ -721,7 +724,7 @@ function seed() {
 
   // ---- Comments ----
   const insertComment = db.prepare(
-    `INSERT INTO comments (id, user_id, user_name, user_avatar, video_id, product_id, content, like_count)
+    `INSERT OR REPLACE INTO comments (id, user_id, user_name, user_avatar, video_id, product_id, content, like_count)
      VALUES (@id, @user_id, @user_name, @user_avatar, @video_id, @product_id, @content, @like_count)`
   );
   const sampleComments = [
@@ -818,7 +821,7 @@ function seed() {
   ];
 
   const insertLiveRoom = db.prepare(`
-    INSERT INTO live_rooms (
+    INSERT OR REPLACE INTO live_rooms (
       id, title, cover_url, video_url,
       author_id, author_name, author_avatar,
       status, product_ids, current_product_id, tags,
