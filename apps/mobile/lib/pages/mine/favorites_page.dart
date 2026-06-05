@@ -145,8 +145,13 @@ final class _FavoritesPageState extends ConsumerState<FavoritesPage>
                 });
               },
               onSeekToTime: product.videoId.isNotEmpty
-                  ? (seekTime) {
-                      Navigator.of(context).pop(); // close detail sheet
+                  ? (seekTime) async {
+                      // Close the bottom sheet and wait for its exit
+                      // animation to complete before pushing the new route.
+                      Navigator.of(context).pop();
+                      // Small delay ensures the sheet is fully dismissed.
+                      await Future.delayed(const Duration(milliseconds: 200));
+                      if (!context.mounted) return;
                       context.pushNamed('singleVideo',
                           pathParameters: {'videoId': product.videoId},
                           queryParameters: seekTime > 0

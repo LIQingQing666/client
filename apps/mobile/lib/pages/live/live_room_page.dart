@@ -567,7 +567,6 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
         authorAvatar: room.authorAvatar,
         authorId: room.authorId,
         onFollow: _onFollowTap,
-        isFollowing: ref.read(followProvider).followingIds.contains(room.authorId),
       ),
     );
   }
@@ -630,33 +629,63 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
         body: Stack(
         fit: StackFit.expand,
         children: [
-          // Background: video player / cover image / error
-          if (_videoController != null && _videoReady)
-            ValueListenableBuilder<VideoPlayerValue>(
-              valueListenable: _videoController!,
-              builder: (_, value, __) {
-                if (!value.isInitialized || value.size.isEmpty) {
-                  return CachedNetworkImage(
-                    imageUrl: room.coverUrl,
+          // Background: video player / cover image / error.
+          // Wrapped in IgnorePointer so the Android SurfaceView doesn't
+          // consume vertical drag events — the outer PageView needs them.
+          if (_videoController != null && _videoReady) ...[
+            IgnorePointer(
+              child: ValueListenableBuilder<VideoPlayerValue>(
+                valueListenable: _videoController!,
+                builder: (_, value, __) {
+                  if (!value.isInitialized || value.size.isEmpty) {
+                    return CachedNetworkImage(
+                      imageUrl: room.coverUrl,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) =>
+                          Container(color: AppColors.surface),
+                      errorWidget: (_, __, ___) =>
+                          Container(color: AppColors.surface),
+                    );
+                  }
+                  return FittedBox(
                     fit: BoxFit.cover,
-                    placeholder: (_, __) =>
-                        Container(color: AppColors.surface),
-                    errorWidget: (_, __, ___) =>
-                        Container(color: AppColors.surface),
+                    child: SizedBox(
+                      width: value.size.width,
+                      height: value.size.height,
+                      child: VideoPlayer(_videoController!),
+                    ),
                   );
+                },
+              ),
+            ),
+            // Transparent tap layer for play/pause — sits above the
+            // video so taps are received, but vertical drags pass
+            // through to the outer PageView.
+            GestureDetector(
+              onTap: () {
+                if (_videoController == null || !_videoReady) return;
+                if (_videoController!.value.isPlaying) {
+                  _videoController!.pause();
+                } else {
+                  _videoController!.play();
                 }
-                return FittedBox(
-                  fit: BoxFit.cover,
-                  child: SizedBox(
-                    width: value.size.width,
-                    height: value.size.height,
-                    child: VideoPlayer(_videoController!),
-                  ),
-                );
+                setState(() {});
               },
-            )
-          else if (_videoError)
-            // Video failed — show cover with retry overlay.
+              behavior: HitTestBehavior.translucent,
+              child: const SizedBox.expand(),
+            ),
+            // Play/pause icon overlay
+            if (!_videoController!.value.isPlaying)
+              const Center(
+                child: IgnorePointer(
+                  child: Icon(Icons.play_circle_filled,
+                      size: 64, color: Colors.white70),
+                ),
+              ),
+          ],
+
+          // Video-fallback layer (only when no active video).
+          if (!_videoReady && _videoError)
             Stack(
               fit: StackFit.expand,
               children: [
@@ -694,8 +723,9 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
                   ),
                 ),
               ],
-            )
-          else
+            ),
+
+          if (!_videoReady && !_videoError)
             CachedNetworkImage(
               imageUrl: room.coverUrl,
               fit: BoxFit.cover,
@@ -1065,23 +1095,25 @@ final class _BottomActionBtn extends StatelessWidget {
   }
 }
 
-final class _AuthorInfoSheet extends StatelessWidget {
+final class _AuthorInfoSheet extends ConsumerWidget {
   const _AuthorInfoSheet({
     required this.authorName,
     required this.authorAvatar,
     required this.authorId,
     this.onFollow,
-    this.isFollowing = false,
   });
 
   final String authorName;
   final String authorAvatar;
   final String authorId;
   final VoidCallback? onFollow;
-  final bool isFollowing;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Read follow state directly from provider so the sheet reacts
+    // to state changes immediately (fixes "点击关注后不变" bug).
+    final isFollowing =
+        ref.watch(followProvider).followingIds.contains(authorId);
     return Container(
       padding: const EdgeInsets.all(AppDimens.paddingLg),
       decoration: const BoxDecoration(
