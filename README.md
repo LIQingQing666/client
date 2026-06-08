@@ -41,10 +41,10 @@ client/
 ├── apps/
 │   ├── mobile/                    # Flutter 移动端（iOS + Android）
 │   │   ├── lib/
-│   │   │   ├── api/               # Dio 封装 (11 文件)
-│   │   │   ├── core/              # 路由/常量/主题 (3 文件)
-│   │   │   ├── models/            # 数据模型 (8 文件)
-│   │   │   ├── pages/             # 页面 (39 文件, ~10,800 行)
+│   │   │   ├── api/               # Dio 封装
+│   │   │   ├── core/              # 路由/常量/主题
+│   │   │   ├── models/            # 数据模型
+│   │   │   ├── pages/             # 页面
 │   │   │   │   ├── feed/          #   短视频 Feed
 │   │   │   │   ├── live/          #   直播列表 + 直播间 + 主播端
 │   │   │   │   ├── video/         #   独立视频播放页
@@ -52,21 +52,21 @@ client/
 │   │   │   │   ├── cart/          #   购物车
 │   │   │   │   ├── order/         #   订单列表/确认/详情/支付/客服
 │   │   │   │   ├── mine/          #   个人中心/收藏/关注/设置
-│   │   │   │   ├── admin/         #   商家后台看板 (11 页)
+│   │   │   │   ├── admin/         #   商家后台看板
 │   │   │   │   ├── search/        #   搜索
 │   │   │   │   ├── message/       #   消息
 │   │   │   │   └── recharge/      #   抖币充值
-│   │   │   ├── provider/          # Riverpod 状态管理 (13 文件, ~2,200 行)
-│   │   │   ├── services/          # 播放器池/WebSocket/预加载/本地存储 (4 文件)
-│   │   │   ├── utils/             # Toast / 响应式工具 (2 文件)
-│   │   │   └── widgets/           # 公共组件 (13 文件, ~4,500 行)
+│   │   │   ├── provider/          # Riverpod 状态管理
+│   │   │   ├── services/          # 播放器池/WebSocket/预加载/本地存储
+│   │   │   ├── utils/             # Toast / 响应式工具
+│   │   │   └── widgets/           # 公共组件
 │   │   └── pubspec.yaml
 │   ├── server/                    # Node.js + Fastify 后端
 │   │   └── src/
-│   │       ├── db/                # schema.ts (322 行) + seed.ts (874 行)
+│   │       ├── db/                # schema.ts+ seed.ts
 │   │       ├── middleware/        # JWT 鉴权
-│   │       ├── routes/            # 11 个路由模块 (~3,550 行)
-│   │       ├── websocket/         # Socket.IO 实时通信 (258 行)
+│   │       ├── routes/            # 11 个路由模块
+│   │       ├── websocket/         # Socket.IO 实时通信
 │   │       ├── services/          # AI 客服 (LangChain)、向量检索
 │   │       └── index.ts           # 入口
 │   └── restful_api/               # Dart Frog 备选后端（内存 + JSON 持久化）
@@ -81,23 +81,23 @@ client/
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                      Flutter Mobile                          │
-│  ┌──────────┐ ┌───────────┐ ┌─────────────────────────────┐ │
-│  │ go_router│ │ Riverpod  │ │ video_player + PlayerPool    │ │
-│  │(5 Tab    │ │(13 State  │ │ (LRU 3, 引用计数, URL去重)   │ │
-│  │ Shell)   │ │ Notifier) │ │ socket_io_client             │ │
-│  └──────────┘ └───────────┘ └─────────────────────────────┘ │
+│  ┌──────────┐ ┌───────────┐ ┌─────────────────────────────┐  │
+│  │ go_router│ │ Riverpod  │ │ video_player + PlayerPool   │  │
+│  │(5 Tab    │ │(13 State  │ │ (LRU 3, 引用计数, URL去重)  │  │
+│  │ Shell)   │ │ Notifier) │ │ socket_io_client            │  │
+│  └──────────┘ └───────────┘ └─────────────────────────────┘  │
 │                      │ Dio (Auth + Retry + Log 拦截器)       │
-└──────────────────────┼──────────────────────────────────────┘
+└──────────────────────┼─────────────────────────────────────—─┘
                        │ HTTP REST + WebSocket
           ┌────────────┴────────────┐
           ▼                         ▼
 ┌──────────────────┐    ┌──────────────────────┐
 │  Node.js Server  │    │  Dart Frog Server    │
-│  (主后端)         │    │  (备选后端)            │
+│  (主后端)        │    │  (备选后端)          │
 │  Fastify 5       │    │  Dart Frog 1.1       │
-│  Socket.IO 4     │    │  内存 + JSON 持久化    │
+│  Socket.IO 4     │    │  内存 + JSON 持久化  │
 │  better-sqlite3  │    │  :8080               │
-│  JWT 鉴权         │    │                      │
+│  JWT 鉴权        │    │                      │
 │  :3000           │    │                      │
 └──────────────────┘    └──────────────────────┘
 ```
