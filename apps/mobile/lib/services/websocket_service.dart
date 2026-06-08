@@ -26,6 +26,16 @@ final class WebSocketService {
   WebSocketState _state = WebSocketState.disconnected;
   WebSocketState get state => _state;
 
+  Stream<Map<String, dynamic>> get liveControlStream =>
+      _eventController.stream.where((event) {
+        final eventName = event['event'] as String? ?? '';
+        return eventName == 'live_ended' ||
+            eventName == 'room_disabled' ||
+            eventName == 'live_status' ||
+            eventName == 'live_started' ||
+            eventName == 'force_leave';
+      });
+
   void _setState(WebSocketState newState) {
     _state = newState;
     _stateController.add(newState);
@@ -165,5 +175,23 @@ final class WebSocketService {
     await disconnect();
     await _stateController.close();
     await _eventController.close();
+  }
+
+  void endLive(String roomId, {Map<String, dynamic>? summary}) {
+    emit('end_live', {
+      'room': roomId,
+      'summary': summary ?? {},
+    });
+  }
+
+  void getLiveStatus(String roomId) {
+    emit('get_live_status', {'room': roomId});
+  }
+
+  void startLive(String roomId, {Map<String, dynamic>? liveInfo}) {
+    emit('start_live', {
+      'room': roomId,
+      'liveInfo': liveInfo ?? {},
+    });
   }
 }

@@ -50,6 +50,7 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initVideoPlayer();
       ref.read(liveProvider.notifier).enterRoom(_room.id);
+      ref.read(liveProvider.notifier).checkLiveStatus();
     });
   }
 
@@ -180,21 +181,8 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
     _likeTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       if (mounted) {
         setState(() => _likeCount += (1 + (DateTime.now().millisecond % 10)));
-        if (DateTime.now().millisecond % 3 == 0) _addSimulatedMessage();
       }
     });
-  }
-
-  void _addSimulatedMessage() {
-    final names = ['观众A', '粉丝B', '路人C', '买家D', '新粉E'];
-    final contents = ['这个多少钱？', '好看！', '已下单', '支持主播', '质量怎么样？', '有优惠吗？'];
-    _messages.insert(0, LiveMessage(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      userName: names[DateTime.now().millisecond % names.length],
-      content: contents[DateTime.now().millisecond % contents.length],
-      type: 'user',
-    ));
-    if (_messages.length > 50) _messages.removeRange(50, _messages.length);
   }
 
   Future<void> _switchProduct(ProductModel product) async {
@@ -252,19 +240,25 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
         title: const Text('结束直播'),
         content: const Text('确定要结束直播吗？'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('继续直播')),
-          TextButton(onPressed: () => Navigator.pop(context, true), style: TextButton.styleFrom(foregroundColor: AppColors.error), child: const Text('结束')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('继续直播')
+          ),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: TextButton.styleFrom(foregroundColor: AppColors.error),
+              child: const Text('结束')
+          ),
         ],
       ),
     );
 
     if (confirm == true && mounted) {
       try {
-        final api = LiveApi(client: ref.read(dioClientProvider));
-        await api.endLive(_room.id);
+        // 使用 LiveNotifier 的 endLive 方法
+        await ref.read(liveProvider.notifier).endLive();
 
-        ref.read(liveProvider.notifier).leaveRoom();
-
+        // 返回上一页
         if (mounted) {
           Navigator.pop(context);
         }

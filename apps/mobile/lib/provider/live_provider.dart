@@ -27,6 +27,9 @@ final class LiveState {
     this.isLoading = false,
     this.isConnected = false,
     this.errorMessage,
+    this.isLiveEnded = false,
+    this.liveEndedMessage,
+    this.canInteract = true,
   });
 
   final LiveRoomInfo? room;
@@ -41,6 +44,9 @@ final class LiveState {
   final bool isLoading;
   final bool isConnected;
   final String? errorMessage;
+  final bool isLiveEnded;
+  final String? liveEndedMessage;
+  final bool canInteract;
 
   String get onlineCountText {
     if (onlineCount >= 10000) {
@@ -69,6 +75,9 @@ final class LiveState {
     bool? isLoading,
     bool? isConnected,
     String? errorMessage,
+    bool? isLiveEnded,
+    String? liveEndedMessage,
+    bool? canInteract,
   }) {
     return LiveState(
       room: room ?? this.room,
@@ -83,6 +92,9 @@ final class LiveState {
       isLoading: isLoading ?? this.isLoading,
       isConnected: isConnected ?? this.isConnected,
       errorMessage: errorMessage,
+      isLiveEnded: isLiveEnded ?? this.isLiveEnded,
+      liveEndedMessage: liveEndedMessage ?? this.liveEndedMessage,
+      canInteract: canInteract ?? this.canInteract,
     );
   }
 }
@@ -228,9 +240,111 @@ final class LiveNotifier extends StateNotifier<LiveState> {
             }
           }
           state = state.copyWith(products: products);
+
+        case 'live_ended':
+          _handleLiveEnded(event);
+          break;
+
+        case 'room_disabled':
+          _handleRoomDisabled(event);
+          break;
+
+        case 'live_status':
+          _handleLiveStatus(event);
+          break;
       }
     } catch (e, stack) {
       debugPrint(stack.toString());
+    }
+  }
+
+  void _handleLiveEnded(Map<String, dynamic> event) {
+    final message = event['message'] as String? ?? '主播已结束直播';
+    final summary = event['summary'] as Map<String, dynamic>?;
+
+    // 构建直播结束消息
+    final endMessage = StringBuffer();
+    endMessage.writeln(message);
+
+    if (summary != null) {
+      if (summary['total_viewers'] != null) {
+        endMessage.writeln('观看人数: ${summary['total_viewers']}');
+      }
+      if (summary['total_likes'] != null) {
+        endMessage.writeln('点赞数: ${summary['total_likes']}');
+      }
+      if (summary['duration'] != null) {
+        endMessage.writeln('直播时长: ${summary['duration']}');
+      }
+    }
+
+    // 添加系统消息到聊天列表
+    _addMessage(
+      LiveMessage(
+        id: 'live_ended_${DateTime.now().millisecondsSinceEpoch}',
+        userName: '系统消息',
+        content: endMessage.toString(),
+        type: 'system',
+        timestamp: DateTime.now().toIso8601String(),
+      ),
+    );
+
+    // 更新状态：直播结束，禁用交互
+    state = state.copyWith(
+      isLiveEnded: true,
+      liveEndedMessage: message,
+      canInteract: false,
+    );
+
+    debugPrint('[LiveNotifier] 直播已结束: $message');
+  }
+
+  /// 处理房间禁用事件
+  void _handleRoomDisabled(Map<String, dynamic> event) {
+    final disabled = event['disabled'] as bool? ?? false;
+    final message = event['message'] as String?;
+    final features = (event['disabled_features'] as List<dynamic>?)
+        ?.map((e) => e.toString())
+        .toList() ?? [];
+
+    if (disabled) {
+      // 添加系统消息
+      _addMessage(
+        LiveMessage(
+          id: 'room_disabled_${DateTime.now().millisecondsSinceEpoch}',
+          userName: '系统消息',
+          content: message ?? '互动功能已关闭',
+          type: 'system',
+          timestamp: DateTime.now().toIso8601String(),
+        ),
+      );
+
+      // 禁用交互功能
+      state = state.copyWith(
+        canInteract: false,
+        liveEndedMessage: message ?? '互动功能已关闭',
+      );
+    } else {
+      // 恢复交互功能（如果直播恢复）
+      state = state.copyWith(
+        canInteract: true,
+        liveEndedMessage: null,
+      );
+    }
+
+    debugPrint('[LiveNotifier] 房间${disabled ? "禁用" : "恢复"}: ${features.join(", ")}');
+  }
+
+  /// 处理直播状态查询响应
+  void _handleLiveStatus(Map<String, dynamic> event) {
+    final isLive = event['is_live'] as bool? ?? true;
+
+    if (!isLive) {
+      state = state.copyWith(
+        isLiveEnded: true,
+        canInteract: false,
+        liveEndedMessage: '直播已结束',
+      );
     }
   }
 
@@ -248,6 +362,11 @@ final class LiveNotifier extends StateNotifier<LiveState> {
   }
 
   void sendMessage(String content) {
+    if (!state.canInteract || state.isLiveEnded) {
+      debugPrint('[LiveNotifier] 直播已结束，无法发送消息');
+      return;
+    }
+
     final fingerprint = 'user|我|$content';
     _pendingMsgFingerprints.add(fingerprint);
     wsService.emit('send_message', <String, String>{
@@ -278,6 +397,11 @@ final class LiveNotifier extends StateNotifier<LiveState> {
   /// user-name / content format — fingerprint the server-side format so the
   /// echo is deduplicated in _addMessage.
   void sendGift(String userName, String giftIcon, String giftName) {
+    if (!state.canInteract || state.isLiveEnded) {
+      debugPrint('[LiveNotifier] 直播已结束，无法发送礼物');
+      return;
+    }
+
     final serverFingerprint = 'system|赠送礼物|$giftName';
     _pendingMsgFingerprints.add(serverFingerprint);
     _addMessage(
@@ -292,6 +416,56 @@ final class LiveNotifier extends StateNotifier<LiveState> {
     Future.delayed(const Duration(seconds: 5), () {
       _pendingMsgFingerprints.remove(serverFingerprint);
     });
+  }
+
+  Future<void> endLive() async {
+    if (state.room == null) return;
+
+    try {
+      // 1. 构建直播总结
+      final summary = {
+        'total_viewers': state.onlineCount,
+        'total_likes': state.likeCount,
+        'heat_count': state.heatCount,
+        'product_count': state.products.length,
+      };
+
+      // 2. 通过 WebSocket 通知所有观众
+      wsService.endLive(state.room!.id, summary: summary);
+
+      // 3. 调用 API 结束直播
+      await api.endLive(state.room!.id);
+
+      // 4. 更新本地状态
+      state = state.copyWith(
+        isLiveEnded: true,
+        liveEndedMessage: '直播已结束',
+        canInteract: false,
+      );
+
+      debugPrint('[LiveNotifier] 主播结束直播成功');
+    } catch (e) {
+      debugPrint('[LiveNotifier] 结束直播失败: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> checkLiveStatus() async {
+    if (state.room == null) return;
+
+    try {
+      wsService.getLiveStatus(state.room!.id);
+    } catch (e) {
+      debugPrint('[LiveNotifier] 查询直播状态失败: $e');
+    }
+  }
+
+  void resetLiveEnded() {
+    state = state.copyWith(
+      isLiveEnded: false,
+      liveEndedMessage: null,
+      canInteract: true,
+    );
   }
 
   Future<void> switchRoom(String newRoomId) async {
