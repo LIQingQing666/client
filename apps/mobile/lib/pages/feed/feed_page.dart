@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -247,57 +248,10 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.all(AppDimens.paddingLg),
-        decoration: const BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(AppDimens.radiusXl)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Center(
-              child: Container(
-                width: 36, height: 4,
-                margin: const EdgeInsets.only(bottom: AppDimens.paddingLg),
-                decoration: BoxDecoration(color: AppColors.textHint, borderRadius: BorderRadius.circular(2)),
-              ),
-            ),
-            CircleAvatar(
-              radius: 36,
-              backgroundColor: AppColors.card,
-              child: Text(
-                video.authorName.isNotEmpty ? video.authorName[0].toUpperCase() : '?',
-                style: const TextStyle(fontSize: 28, color: Colors.white),
-              ),
-            ),
-            const SizedBox(height: AppDimens.paddingMd),
-            Text(video.authorName, style: AppTextStyles.titleLarge),
-            const SizedBox(height: AppDimens.paddingXs),
-            Text('ID: ${video.authorId}', style: AppTextStyles.bodySmall),
-            const SizedBox(height: AppDimens.paddingLg),
-            SizedBox(
-              width: 120,
-              child: ElevatedButton(
-                onPressed: () {
-                  _onFollowTap(video.authorId);
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: ref.read(followProvider).followingIds.contains(video.authorId)
-                      ? AppColors.card
-                      : AppColors.primary,
-                  foregroundColor: ref.read(followProvider).followingIds.contains(video.authorId)
-                      ? AppColors.textSecondary
-                      : Colors.white,
-                ),
-                child: Text(
-                  ref.read(followProvider).followingIds.contains(video.authorId) ? '已关注' : '关注',
-                ),
-              ),
-            ),
-            const SizedBox(height: AppDimens.paddingLg),
-          ],
-        ),
+      builder: (ctx) => _AuthorSheet(
+        authorName: video.authorName,
+        authorAvatar: video.authorAvatar,
+        authorId: video.authorId,
       ),
     );
   }
@@ -313,6 +267,15 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
     final favoriteState = ref.watch(favoriteProvider);
     final isTabActive = tabIndex == 0;
     final currentTab = feedState.tab;
+
+    // When follows change while on the follow tab, reload the list so
+    // newly followed authors' videos appear immediately.
+    ref.listen<FollowState>(followProvider, (prev, next) {
+      if (currentTab == FeedTab.follow &&
+          prev?.followingIds.length != next.followingIds.length) {
+        Future.microtask(() => notifier.loadVideos());
+      }
+    });
 
     if (feedState.isLoading && feedState.videos.isEmpty) {
       return Scaffold(
@@ -469,6 +432,8 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
                     title: video.title,
                     coverUrl: video.coverUrl,
                     authorName: video.authorName,
+                    authorId: video.authorId,
+                    authorAvatar: video.authorAvatar,
                   );
                 },
                 isFavorited: favoriteState.isFavorited(video.id),
@@ -534,6 +499,77 @@ final class _TabButton extends StatelessWidget {
           color: isActive ? AppColors.textPrimary : AppColors.textHint,
         ),
         child: Text(label),
+      ),
+    );
+  }
+}
+
+// ── Author info sheet (reactive follow button) ──
+final class _AuthorSheet extends ConsumerWidget {
+  const _AuthorSheet({
+    required this.authorName,
+    required this.authorAvatar,
+    required this.authorId,
+  });
+
+  final String authorName;
+  final String authorAvatar;
+  final String authorId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Watch reactively — button updates immediately after follow/unfollow.
+    final isF = ref.watch(followProvider).followingIds.contains(authorId);
+
+    return Container(
+      padding: const EdgeInsets.all(AppDimens.paddingLg),
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppDimens.radiusXl)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Center(
+            child: Container(
+              width: 36, height: 4,
+              margin: const EdgeInsets.only(bottom: AppDimens.paddingLg),
+              decoration: BoxDecoration(
+                  color: AppColors.textHint, borderRadius: BorderRadius.circular(2)),
+            ),
+          ),
+          CircleAvatar(
+            radius: 36,
+            backgroundColor: AppColors.card,
+            backgroundImage:
+                isNetworkImageUrl(authorAvatar) ? CachedNetworkImageProvider(authorAvatar) : null,
+            child: !isNetworkImageUrl(authorAvatar)
+                ? Text(authorName.isNotEmpty ? authorName[0].toUpperCase() : '?',
+                    style: const TextStyle(fontSize: 28, color: Colors.white))
+                : null,
+          ),
+          const SizedBox(height: AppDimens.paddingMd),
+          Text(authorName, style: AppTextStyles.titleLarge),
+          const SizedBox(height: AppDimens.paddingXs),
+          Text('ID: $authorId', style: AppTextStyles.bodySmall),
+          const SizedBox(height: AppDimens.paddingLg),
+          SizedBox(
+            width: 120,
+            child: ElevatedButton(
+              onPressed: () async {
+                try {
+                  await ref.read(followProvider.notifier).toggleFollow(authorId);
+                } on Exception {}
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isF ? AppColors.card : AppColors.primary,
+                foregroundColor: isF ? AppColors.textSecondary : Colors.white,
+              ),
+              child: Text(isF ? '已关注' : '关注'),
+            ),
+          ),
+          const SizedBox(height: AppDimens.paddingLg),
+        ],
       ),
     );
   }

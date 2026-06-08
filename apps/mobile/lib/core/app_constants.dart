@@ -13,9 +13,10 @@ abstract final class AppConstants {
   static const Duration receiveTimeout = Duration(seconds: 10);
 
   // 视频预加载
-  static const int preloadVideoCount = 2;
+  static const int preloadVideoCount = 0;             // 关闭预加载，本地视频加载极快无需预加载
   static const bool preloadWifiOnly = true;
-  static const Duration preloadTimeout = Duration(seconds: 30);
+  static const Duration preloadTimeout = Duration(seconds: 20);
+  static const Duration preloadStartupDelay = Duration(milliseconds: 1500); // 当前视频优先缓冲
 
   // 视频相关
   static const Duration videoFadeInDuration = Duration(milliseconds: 300);
@@ -26,6 +27,16 @@ abstract final class AppConstants {
   // 缓存
   static const int maxCacheSize = 200;
   static const Duration cacheExpiry = Duration(hours: 24);
+}
+
+/// Returns true if [url] is a network URL (http/https) that can be passed
+/// to CachedNetworkImage / NetworkImage.  Local file:// paths and empty
+/// strings will return false so the caller can show a placeholder instead.
+bool isNetworkImageUrl(String? url) {
+  if (url == null || url.isEmpty) return false;
+  final uri = Uri.tryParse(url);
+  if (uri == null) return false;
+  return uri.hasScheme && (uri.scheme == 'http' || uri.scheme == 'https') && uri.host.isNotEmpty;
 }
 
 abstract final class AppColors {

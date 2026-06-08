@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -61,17 +62,33 @@ final class _EditProfilePageState extends ConsumerState<EditProfilePage> {
       final userId = auth.userId ?? 'u1';
       final nickname = _nicknameController.text.trim();
 
-      // If avatar selected, use the local file path for display
-      String? avatarUrl = _avatarPath;
+      String? avatarUrl;
       if (_avatarPath != null) {
-        await client.post<Map<String, dynamic>>('/users/$userId/avatar', data: {'avatar_url': _avatarPath!});
+        // Upload image file via multipart to get a public URL — never
+        // send a local file:// path to the server or save it in the
+        // profile, because CachedNetworkImage cannot display file:// URIs.
+        final formData = FormData.fromMap({
+          'file': await MultipartFile.fromFile(_avatarPath!),
+        });
+        final uploadRes = await client.post<Map<String, dynamic>>(
+          '/upload/image',
+          data: formData,
+        );
+        final uploadData = uploadRes.data!['data'] as Map<String, dynamic>;
+        avatarUrl = uploadData['url'] as String;
+
+        // Persist the public URL to the profile.
+        await client.post<Map<String, dynamic>>(
+          '/users/$userId/avatar',
+          data: {'avatar_url': avatarUrl},
+        );
       }
 
       await client.put<Map<String, dynamic>>('/users/$userId', data: {
         'nickname': nickname,
       });
 
-      // Update local state so mine page reflects changes
+      // Update local state so mine page reflects changes.
       await ref.read(userProvider.notifier).updateProfile(
         nickname: nickname,
         avatar: avatarUrl,

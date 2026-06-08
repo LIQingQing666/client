@@ -230,6 +230,7 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
   /// Safe to call multiple times — returns early if already initializing.
   void _initVideo(String url) {
     if (url.isEmpty) {
+      debugPrint('[LiveRoom] video URL is empty — room data may not have loaded yet');
       if (mounted) setState(() => _videoError = true);
       return;
     }
@@ -241,12 +242,20 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
       _videoController = null;
     }
 
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      debugPrint('[LiveRoom] invalid video URL: $url');
+      if (mounted) setState(() => _videoError = true);
+      return;
+    }
+
     setState(() {
       _videoReady = false;
       _videoError = false;
     });
 
-    final controller = VideoPlayerController.networkUrl(Uri.parse(url));
+    debugPrint('[LiveRoom] initializing video: $url');
+    final controller = VideoPlayerController.networkUrl(uri);
     _videoController = controller;
     controller.initialize().then((_) {
       if (!mounted || _videoController != controller) return;
@@ -567,7 +576,6 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
         authorAvatar: room.authorAvatar,
         authorId: room.authorId,
         onFollow: _onFollowTap,
-        isFollowing: ref.read(followProvider).followingIds.contains(room.authorId),
       ),
     );
   }
@@ -630,33 +638,43 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
         body: Stack(
         fit: StackFit.expand,
         children: [
-          // Background: video player / cover image / error
-          if (_videoController != null && _videoReady)
-            ValueListenableBuilder<VideoPlayerValue>(
-              valueListenable: _videoController!,
-              builder: (_, value, __) {
-                if (!value.isInitialized || value.size.isEmpty) {
-                  return CachedNetworkImage(
-                    imageUrl: room.coverUrl,
+          // Background: video player / cover image / error.
+          // Wrapped in IgnorePointer so the Android SurfaceView doesn't
+          // consume vertical drag events — the outer PageView needs them.
+          if (_videoController != null && _videoReady) ...[
+            IgnorePointer(
+              child: ValueListenableBuilder<VideoPlayerValue>(
+                valueListenable: _videoController!,
+                builder: (_, value, __) {
+                  if (!value.isInitialized || value.size.isEmpty) {
+                    return CachedNetworkImage(
+                      imageUrl: room.coverUrl,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) =>
+                          Container(color: AppColors.surface),
+                      errorWidget: (_, __, ___) =>
+                          Container(color: AppColors.surface),
+                    );
+                  }
+                  return FittedBox(
                     fit: BoxFit.cover,
-                    placeholder: (_, __) =>
-                        Container(color: AppColors.surface),
-                    errorWidget: (_, __, ___) =>
-                        Container(color: AppColors.surface),
+                    child: SizedBox(
+                      width: value.size.width,
+                      height: value.size.height,
+                      child: VideoPlayer(_videoController!),
+                    ),
                   );
-                }
-                return FittedBox(
-                  fit: BoxFit.cover,
-                  child: SizedBox(
-                    width: value.size.width,
-                    height: value.size.height,
-                    child: VideoPlayer(_videoController!),
-                  ),
-                );
-              },
-            )
-          else if (_videoError)
-            // Video failed — show cover with retry overlay.
+                },
+              ),
+            ),
+            // No play/pause tap layer for live streaming — the stream
+            // should play continuously and not be user-pausable.
+            // The video is wrapped in IgnorePointer so vertical
+            // drags pass through to the outer PageView.
+          ],
+
+          // Video-fallback layer (only when no active video).
+          if (!_videoReady && _videoError)
             Stack(
               fit: StackFit.expand,
               children: [
@@ -694,8 +712,9 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
                   ),
                 ),
               ],
-            )
-          else
+            ),
+
+          if (!_videoReady && !_videoError)
             CachedNetworkImage(
               imageUrl: room.coverUrl,
               fit: BoxFit.cover,
@@ -763,10 +782,10 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
                           child: CircleAvatar(
                             radius: 16,
                             backgroundColor: AppColors.card,
-                            backgroundImage: room.authorAvatar.isNotEmpty
+                            backgroundImage: isNetworkImageUrl(room.authorAvatar)
                                 ? CachedNetworkImageProvider(room.authorAvatar)
                                 : null,
-                            child: room.authorAvatar.isEmpty
+                            child: !isNetworkImageUrl(room.authorAvatar)
                                 ? Text(room.authorName.isNotEmpty ? room.authorName[0] : '?',
                                     style: const TextStyle(fontSize: 12, color: Colors.white))
                                 : null,
@@ -1065,23 +1084,25 @@ final class _BottomActionBtn extends StatelessWidget {
   }
 }
 
-final class _AuthorInfoSheet extends StatelessWidget {
+final class _AuthorInfoSheet extends ConsumerWidget {
   const _AuthorInfoSheet({
     required this.authorName,
     required this.authorAvatar,
     required this.authorId,
     this.onFollow,
-    this.isFollowing = false,
   });
 
   final String authorName;
   final String authorAvatar;
   final String authorId;
   final VoidCallback? onFollow;
-  final bool isFollowing;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Read follow state directly from provider so the sheet reacts
+    // to state changes immediately (fixes "点击关注后不变" bug).
+    final isFollowing =
+        ref.watch(followProvider).followingIds.contains(authorId);
     return Container(
       padding: const EdgeInsets.all(AppDimens.paddingLg),
       decoration: const BoxDecoration(
@@ -1101,8 +1122,8 @@ final class _AuthorInfoSheet extends StatelessWidget {
           CircleAvatar(
             radius: 36,
             backgroundColor: AppColors.card,
-            backgroundImage: authorAvatar.isNotEmpty ? CachedNetworkImageProvider(authorAvatar) : null,
-            child: authorAvatar.isEmpty
+            backgroundImage: isNetworkImageUrl(authorAvatar) ? CachedNetworkImageProvider(authorAvatar) : null,
+            child: !isNetworkImageUrl(authorAvatar)
                 ? Text(authorName.isNotEmpty ? authorName[0].toUpperCase() : '?',
                     style: const TextStyle(fontSize: 28, color: Colors.white))
                 : null,

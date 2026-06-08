@@ -28,7 +28,12 @@
       "Bash(curl -s \"http://192.168.50.174:3000/api/videos/recommend\")",
       "Bash(curl -s \"http://192.168.50.174:3000/api/videos/f4ecdefe-c96a-4040-9a95-356db40e256f\")",
       "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d.get\\('code'\\), d.get\\('message',''\\)\\)\")",
-      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); v=d['data']['list'][0]; print\\(f'id={v[\\\\\"id\\\\\"][:16]}... url={v[\\\\\"video_url\\\\\"][:60]}'\\)\")"
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); v=d['data']['list'][0]; print\\(f'id={v[\\\\\"id\\\\\"][:16]}... url={v[\\\\\"video_url\\\\\"][:60]}'\\)\")",
+      "WebFetch(domain:fcna96qnla02.feishu.cn)",
+      "Bash(curl *)",
+      "Bash(pip install *)",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(v['video_url']\\) for v in d['data']['list'][:3]]\")",
+      "Bash(flutter analyze *)"
     ]
   }
 }

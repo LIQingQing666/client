@@ -93,6 +93,8 @@ final class FavoriteNotifier extends StateNotifier<FavoriteState> {
     required String title,
     required String coverUrl,
     required String authorName,
+    String authorId = '',
+    String authorAvatar = '',
   }) {
     final existing = state.items.indexWhere((i) => i.id == id && i.isVideo);
     if (existing >= 0) {
@@ -106,6 +108,10 @@ final class FavoriteNotifier extends StateNotifier<FavoriteState> {
         title: title,
         coverUrl: coverUrl,
         subtitle: authorName,
+        rawData: {
+          if (authorId.isNotEmpty) 'author_id': authorId,
+          if (authorAvatar.isNotEmpty) 'author_avatar': authorAvatar,
+        },
       );
       state = state.copyWith(items: [item, ...state.items]);
       showFavoriteToast('已收藏');

@@ -138,8 +138,9 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
         controller.addListener(_waitForInit);
       }
       _initializing = false;
-    }
-    on Exception {
+    } catch (e) {
+      // catch (not on Exception) — catches TypeError etc. too
+      debugPrint('[VideoWidget] init error: $e');
       if (mounted) {
         setState(() {
           _isCoverVisible = true;
@@ -192,12 +193,21 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
         _initPlayer();
         return;
       }
-      _controller!.play();
-      _applyMuteState();
+      try {
+        if (!_controller!.value.isPlaying) {
+          _controller!.play();
+        }
+        _applyMuteState();
+      } catch (_) {
+        // Controller may be in a bad state after fast scrolling —
+        // re-initialize it.
+        _releasePlayer(dispose: true);
+        _initPlayer();
+      }
     } else {
-      _controller?.pause();
-      // Only release from pool without disposing — the controller may
-      // be reused when the user swipes back, avoiding a full re-init.
+      try {
+        _controller?.pause();
+      } catch (_) { /* ignore — controller may already be disposed */ }
       _releasePlayer(dispose: false);
       if (!_isCoverVisible && mounted) {
         setState(() {
@@ -242,14 +252,18 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
           // Video layer — only render platform view when active to prevent
           // it from drawing on top of other IndexedStack children.
           if (_controller != null && _isInitialized && widget.isActive)
-            FittedBox(
-              fit: BoxFit.cover,
-              child: SizedBox(
-                width: _controller!.value.size.width,
-                height: _controller!.value.size.height,
-                child: VideoPlayer(_controller!),
-              ),
-            )
+            Builder(builder: (_) {
+              final size = _controller!.value.size;
+              if (size.width == 0 || size.height == 0) return _buildCover();
+              return FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: size.width,
+                  height: size.height,
+                  child: VideoPlayer(_controller!),
+                ),
+              );
+            })
           else
             _buildCover(),
 
@@ -598,67 +612,88 @@ final class _VideoProgressBar extends StatefulWidget {
 
 final class _VideoProgressBarState extends State<_VideoProgressBar> {
   double _dragValue = 0.0;
+  double _dragDurationMs = 0;
 
   @override
   Widget build(BuildContext context) {
-    final value = widget.controller.value;
-    final durationMs = value.duration.inMilliseconds;
-    final progress = durationMs > 0
-        ? (value.position.inMilliseconds / durationMs).clamp(0.0, 1.0)
-        : 0.0;
+    // Use ValueListenableBuilder — the canonical Flutter pattern for
+    // reacting to ValueNotifier (VideoPlayerController) changes.  Unlike
+    // manual addListener, this guarantees the slider rebuilds on every
+    // position update regardless of widget lifecycle quirks.
+    return ValueListenableBuilder<VideoPlayerValue>(
+      valueListenable: widget.controller,
+      builder: (context, value, child) {
+        if (!value.isInitialized) return const SizedBox.shrink();
+        final durationMs = value.duration.inMilliseconds;
+        if (durationMs <= 0) return const SizedBox.shrink();
+        final progress = (value.position.inMilliseconds / durationMs).clamp(0.0, 1.0);
 
-    // Use drag value while dragging, otherwise use actual progress
-    final displayProgress = _dragValue > 0 ? _dragValue : progress;
+        // Drag override — when the user is dragging, show drag position
+        // instead of actual playback position.
+        final displayProgress = _dragValue > 0 ? _dragValue : progress;
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SliderTheme(
-          data: SliderTheme.of(context).copyWith(
-            trackHeight: 2,
-            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-            overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-            activeTrackColor: AppColors.primary,
-            inactiveTrackColor: Colors.white.withAlpha(30),
-            thumbColor: AppColors.primary,
-            overlayColor: AppColors.primary.withAlpha(50),
-          ),
-          child: Slider(
-            value: displayProgress,
-            min: 0.0,
-            max: 1.0,
-            onChanged: (v) => setState(() => _dragValue = v),
-            onChangeEnd: (v) {
-              final seekTo = Duration(milliseconds: (v * durationMs).toInt());
-              widget.controller.seekTo(seekTo);
-              setState(() => _dragValue = 0.0);
-            },
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppDimens.paddingLg,
-            vertical: AppDimens.paddingXs,
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                _formatDuration(Duration(
-                  milliseconds: _dragValue > 0
-                      ? (_dragValue * durationMs).toInt()
-                      : value.position.inMilliseconds,
-                )),
-                style: AppTextStyles.bodySmall,
+        // Capture duration at drag-start so time labels are consistent.
+        final displayDurationMs = _dragValue > 0 && _dragDurationMs > 0
+            ? _dragDurationMs
+            : durationMs.toDouble();
+
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 2,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                activeTrackColor: AppColors.primary,
+                inactiveTrackColor: Colors.white.withAlpha(30),
+                thumbColor: AppColors.primary,
+                overlayColor: AppColors.primary.withAlpha(50),
               ),
-              Text(
-                _formatDuration(value.duration),
-                style: AppTextStyles.bodySmall,
+              child: Slider(
+                value: displayProgress,
+                min: 0.0,
+                max: 1.0,
+                onChanged: (v) => setState(() {
+                  _dragValue = v;
+                  _dragDurationMs = durationMs.toDouble();
+                }),
+                onChangeEnd: (v) {
+                  final seekTo = Duration(milliseconds: (v * durationMs).toInt());
+                  widget.controller.seekTo(seekTo);
+                  setState(() {
+                    _dragValue = 0.0;
+                    _dragDurationMs = 0;
+                  });
+                },
               ),
-            ],
-          ),
-        ),
-      ],
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppDimens.paddingLg,
+                vertical: AppDimens.paddingXs,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    _formatDuration(Duration(
+                      milliseconds: _dragValue > 0
+                          ? (_dragValue * displayDurationMs).toInt()
+                          : value.position.inMilliseconds,
+                    )),
+                    style: AppTextStyles.bodySmall,
+                  ),
+                  Text(
+                    _formatDuration(Duration(milliseconds: displayDurationMs.toInt())),
+                    style: AppTextStyles.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 

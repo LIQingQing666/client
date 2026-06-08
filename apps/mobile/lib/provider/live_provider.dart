@@ -98,9 +98,17 @@ final class LiveNotifier extends StateNotifier<LiveState> {
   final LiveApi api;
   final WebSocketService wsService;
   StreamSubscription<Map<String, dynamic>>? _eventSub;
+  bool _active = false;
   static const int _maxMessages = 200;
+  // Track recently-sent message fingerprints to prevent the optimistic
+  // local insert from being duplicated when the WebSocket echoes it back.
+  final Set<String> _pendingMsgFingerprints = {};
 
   Future<void> enterRoom(String roomId) async {
+    // Mark the room as active — events received before this flag is
+    // cleared in leaveRoom() are safe to process.  Set synchronously
+    // so _handleEvent can rely on it even before the first await.
+    _active = true;
     // Cancel any previous subscription before re-entering.
     _eventSub?.cancel();
     _eventSub = null;
@@ -108,6 +116,7 @@ final class LiveNotifier extends StateNotifier<LiveState> {
 
     try {
       final detail = await api.getRoomDetail(roomId);
+      if (!mounted) return;
       ProductModel? initialProduct;
       if (detail.room.currentProductId != null && detail.products.isNotEmpty) {
         try {
@@ -130,6 +139,7 @@ final class LiveNotifier extends StateNotifier<LiveState> {
       );
     }
     on Exception catch (e) {
+      if (!mounted) return;
       state = state.copyWith(
         isLoading: false,
         errorMessage: e.toString(),
@@ -140,17 +150,25 @@ final class LiveNotifier extends StateNotifier<LiveState> {
     // Connect WebSocket
     try {
       await wsService.connect(roomId);
+      if (!mounted) return;
       wsService.joinRoom(roomId);
       _eventSub = wsService.eventStream.listen(_handleEvent);
       state = state.copyWith(isConnected: true);
     } catch (e) {
       debugPrint('WebSocket 连接失败: $e');
       // WebSocket 失败不影响页面显示
+      if (!mounted) return;
       state = state.copyWith(isConnected: false);
     }
   }
 
   void _handleEvent(Map<String, dynamic> event) {
+    // _active is cleared synchronously in leaveRoom() BEFORE _eventSub is
+    // cancelled.  This guards against events already queued in the microtask
+    // queue — cancel() prevents new events but can't stop scheduled ones.
+    // Without this guard, those events would set state on a disposed notifier
+    // and crash the framework via listener notifications on defunct widgets.
+    if (!_active) return;
     try {
       final eventName = event['event'] as String? ?? '';
 
@@ -217,6 +235,11 @@ final class LiveNotifier extends StateNotifier<LiveState> {
   }
 
   void _addMessage(LiveMessage message) {
+    // Deduplicate: if this message matches a locally-sent optimistic
+    // insert (same type + user + content), skip it — the optimistic
+    // copy is already in the list.
+    final fingerprint = '${message.type}|${message.userName}|${message.content}';
+    if (_pendingMsgFingerprints.remove(fingerprint)) return;
     final messages = [...state.messages, message];
     if (messages.length > _maxMessages) {
       messages.removeRange(0, messages.length - _maxMessages);
@@ -225,12 +248,15 @@ final class LiveNotifier extends StateNotifier<LiveState> {
   }
 
   void sendMessage(String content) {
+    final fingerprint = 'user|我|$content';
+    _pendingMsgFingerprints.add(fingerprint);
     wsService.emit('send_message', <String, String>{
       'room': state.room?.id ?? '',
       'user_id': 'u1',
       'content': content,
     });
-    // Optimistically add own message
+    // Optimistically add own message — the fingerprint prevents the
+    // WebSocket echo from adding a duplicate when it arrives.
     _addMessage(
       LiveMessage(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -240,10 +266,20 @@ final class LiveNotifier extends StateNotifier<LiveState> {
         timestamp: DateTime.now().toIso8601String(),
       ),
     );
+    // Clean up the fingerprint after a short window (the echo should
+    // arrive within 1-2 seconds over a local WebSocket).
+    Future.delayed(const Duration(seconds: 5), () {
+      _pendingMsgFingerprints.remove(fingerprint);
+    });
   }
 
   /// Adds a local gift notification as a system message (scrolls in comment area).
+  /// The server echoes gifts back via the `danmaku` event with a different
+  /// user-name / content format — fingerprint the server-side format so the
+  /// echo is deduplicated in _addMessage.
   void sendGift(String userName, String giftIcon, String giftName) {
+    final serverFingerprint = 'system|赠送礼物|$giftName';
+    _pendingMsgFingerprints.add(serverFingerprint);
     _addMessage(
       LiveMessage(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -253,6 +289,9 @@ final class LiveNotifier extends StateNotifier<LiveState> {
         timestamp: DateTime.now().toIso8601String(),
       ),
     );
+    Future.delayed(const Duration(seconds: 5), () {
+      _pendingMsgFingerprints.remove(serverFingerprint);
+    });
   }
 
   Future<void> switchRoom(String newRoomId) async {
@@ -273,6 +312,19 @@ final class LiveNotifier extends StateNotifier<LiveState> {
   }
 
   void leaveRoom() {
+    // Set _active = false SYNCHRONOUSLY first so that any WebSocket
+    // events already queued in the microtask queue are silently dropped
+    // by _handleEvent instead of triggering state updates on disposed
+    // widgets.  _eventSub?.cancel() prevents future events but cannot
+    // cancel already-scheduled microtasks.
+    _active = false;
+    // Cancel the WebSocket event subscription so that events arriving
+    // after the widget has been disposed don't trigger state updates on
+    // listeners that no longer exist.  switchRoom() cancels _eventSub
+    // explicitly before calling wsService.leaveRoom() directly, so the
+    // double-cancel here is harmless.
+    _eventSub?.cancel();
+    _eventSub = null;
     if (state.room != null) {
       wsService.leaveRoom(state.room!.id);
     }
@@ -280,6 +332,7 @@ final class LiveNotifier extends StateNotifier<LiveState> {
 
   @override
   void dispose() {
+    _active = false;
     _eventSub?.cancel();
     leaveRoom();
     super.dispose();
