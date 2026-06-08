@@ -240,25 +240,25 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
         title: const Text('结束直播'),
         content: const Text('确定要结束直播吗？'),
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('继续直播')
-          ),
-          TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              style: TextButton.styleFrom(foregroundColor: AppColors.error),
-              child: const Text('结束')
-          ),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('继续直播')),
+          TextButton(onPressed: () => Navigator.pop(context, true), style: TextButton.styleFrom(foregroundColor: AppColors.error), child: const Text('结束')),
         ],
       ),
     );
 
     if (confirm == true && mounted) {
       try {
-        // 使用 LiveNotifier 的 endLive 方法
-        await ref.read(liveProvider.notifier).endLive();
+        // 1. 调用 API 结束直播
+        final api = LiveApi(client: ref.read(dioClientProvider));
+        await api.endLive(_room.id);
 
-        // 返回上一页
+        // 2. 通知服务器直播已结束（让观众知道）
+        ref.read(liveProvider.notifier).endLive();
+
+        // 3. 离开 WebSocket 房间
+        ref.read(liveProvider.notifier).leaveRoom();
+
+        // 4. 返回上一页
         if (mounted) {
           Navigator.pop(context);
         }
@@ -272,6 +272,10 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
     }
   }
 
+  Future<bool> _onWillPop() async {
+    return true;
+  }
+
   @override
   void dispose() {
     _viewerTimer?.cancel();
@@ -279,11 +283,6 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
     _videoController?.pause();
     _videoController?.dispose();
     _videoController = null;
-    try {
-      ref.read(liveProvider.notifier).leaveRoom();
-    } catch (_) {
-      // widget 已销毁，忽略
-    }
     super.dispose();
   }
 
@@ -291,10 +290,9 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
   Widget build(BuildContext context) {
     final state = ref.watch(liveProvider);
 
-    return WillPopScope(
-      onWillPop: () async {
-        await _endLive();
-        return false;
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, _) {
       },
       child: Scaffold(
         backgroundColor: Colors.black,

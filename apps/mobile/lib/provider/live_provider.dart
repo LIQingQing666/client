@@ -418,36 +418,20 @@ final class LiveNotifier extends StateNotifier<LiveState> {
     });
   }
 
-  Future<void> endLive() async {
+  void endLive() {
     if (state.room == null) return;
 
-    try {
-      // 1. 构建直播总结
-      final summary = {
-        'total_viewers': state.onlineCount,
-        'total_likes': state.likeCount,
-        'heat_count': state.heatCount,
-        'product_count': state.products.length,
-      };
+    // 发送结束直播事件到服务器
+    wsService.emit('end_live', {
+      'room': state.room!.id,
+      'timestamp': DateTime.now().toIso8601String(),
+    });
 
-      // 2. 通过 WebSocket 通知所有观众
-      wsService.endLive(state.room!.id, summary: summary);
-
-      // 3. 调用 API 结束直播
-      await api.endLive(state.room!.id);
-
-      // 4. 更新本地状态
-      state = state.copyWith(
-        isLiveEnded: true,
-        liveEndedMessage: '直播已结束',
-        canInteract: false,
-      );
-
-      debugPrint('[LiveNotifier] 主播结束直播成功');
-    } catch (e) {
-      debugPrint('[LiveNotifier] 结束直播失败: $e');
-      rethrow;
-    }
+    // 更新本地状态
+    state = state.copyWith(
+      isConnected: false,
+      errorMessage: '直播已结束',
+    );
   }
 
   Future<void> checkLiveStatus() async {
@@ -486,22 +470,12 @@ final class LiveNotifier extends StateNotifier<LiveState> {
   }
 
   void leaveRoom() {
-    // Set _active = false SYNCHRONOUSLY first so that any WebSocket
-    // events already queued in the microtask queue are silently dropped
-    // by _handleEvent instead of triggering state updates on disposed
-    // widgets.  _eventSub?.cancel() prevents future events but cannot
-    // cancel already-scheduled microtasks.
-    _active = false;
-    // Cancel the WebSocket event subscription so that events arriving
-    // after the widget has been disposed don't trigger state updates on
-    // listeners that no longer exist.  switchRoom() cancels _eventSub
-    // explicitly before calling wsService.leaveRoom() directly, so the
-    // double-cancel here is harmless.
-    _eventSub?.cancel();
-    _eventSub = null;
     if (state.room != null) {
       wsService.leaveRoom(state.room!.id);
     }
+    _eventSub?.cancel();
+    _eventSub = null;
+    state = const LiveState();
   }
 
   @override

@@ -19,7 +19,7 @@ import '../../provider/user_provider.dart';
 import '../../widgets/coupon_countdown.dart';
 import '../../utils/toast.dart';
 import '../../widgets/danmaku_overlay.dart';
-import '../../widgets/floating_product_card.dart';
+import '../../widgets/product_floating_card.dart';
 import '../../widgets/product_detail_sheet.dart';
 import 'audience_list.dart';
 import 'gift_panel.dart';
@@ -910,19 +910,15 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
                     bottom: bottomRowH + AppDimens.paddingSm + bottomInset,
                     width: cardW - AppDimens.paddingSm,
                     height: 180,
-                    child: FloatingProductCard(
-                      product: state.currentProduct ??
-                          state.products.first,
+                    child: ProductFloatingCard(
+                      product: state.currentProduct ?? state.products.first,
+                      layout: ProductCardLayout.vertical,
+                      autoFade: false,
+                      delay: Duration.zero,
                       onTap: () => _showProductDetail(
-                          ctx,
-                          state.currentProduct ??
-                              state.products.first),
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      disableAutoFade: true,
-                      verticalLayout: true,
+                        ctx,
+                        state.currentProduct ?? state.products.first,
+                      ),
                     ),
                   ),
               ],
