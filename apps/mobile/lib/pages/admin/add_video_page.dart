@@ -347,6 +347,13 @@ final class _AddVideoPageState extends ConsumerState<AddVideoPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // 关联商品
+              _buildSectionTitle('关联商品'),
+              const SizedBox(height: 16),
+              _buildProductSelector(),
+              const SizedBox(height: 24),
+
+              // 基本信息
               _buildSectionTitle(
                 '基本信息',
                 trailing: _buildAiGenerateButton(),
@@ -357,7 +364,7 @@ final class _AddVideoPageState extends ConsumerState<AddVideoPage> {
               _buildDescriptionField(),
               const SizedBox(height: 24),
 
-              // 作者信息（只读显示）
+              // 作者信息
               _buildSectionTitle('作者信息'),
               const SizedBox(height: 16),
               _buildAuthorInfoCard(),
@@ -378,11 +385,6 @@ final class _AddVideoPageState extends ConsumerState<AddVideoPage> {
               const SizedBox(height: 16),
               _buildTagsField(),
               const SizedBox(height: 24),
-
-              _buildSectionTitle('关联商品'),
-              const SizedBox(height: 16),
-              _buildProductSelector(),
-              const SizedBox(height: 32),
 
               _buildSubmitButton(),
               const SizedBox(height: 32),
