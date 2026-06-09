@@ -23,14 +23,61 @@ final class _CreateLivePageState extends ConsumerState<CreateLivePage> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _coverUrlController = TextEditingController();
-
+  final _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
   final ImagePicker _picker = ImagePicker();
-  bool _isUploading = false;
 
+  bool _isUploading = false;
   List<ProductModel> _products = [];
   final Set<String> _selectedProductIds = {};
   bool _isLoadingProducts = false;
   bool _isSubmitting = false;
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _coverUrlController.dispose();
+    super.dispose();
+  }
+
+  // 安全的消息显示方法
+  void _showMessage(String message, {Color? backgroundColor, Duration duration = const Duration(seconds: 3)}) {
+    _scaffoldMessengerKey.currentState?.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: backgroundColor ?? AppColors.error,
+        duration: duration,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
+  }
+
+  // 显示加载中
+  void _showLoading(String message) {
+    _scaffoldMessengerKey.currentState?.showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+            ),
+            const SizedBox(width: 12),
+            Text(message),
+          ],
+        ),
+        duration: const Duration(seconds: 10), // 长时间显示
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  // 隐藏所有 SnackBar
+  void _hideMessages() {
+    _scaffoldMessengerKey.currentState?.hideCurrentSnackBar();
+  }
 
   @override
   void initState() {
@@ -56,27 +103,33 @@ final class _CreateLivePageState extends ConsumerState<CreateLivePage> {
   }
 
   Future<void> _uploadCover() async {
-    final XFile? image = await _picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1920,
-      maxHeight: 1080,
-      imageQuality: 85,
-    );
-    if (image == null) return;
-
-    setState(() => _isUploading = true);
     try {
+      final XFile? image = await _picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1920,
+        maxHeight: 1080,
+        imageQuality: 85,
+      );
+
+      if (image == null) return;
+
+      if (!mounted) return;
+
+      setState(() => _isUploading = true);
+      _showLoading('正在上传封面...');
+
       final url = await ref.read(uploadApiProvider).uploadImage(image.path);
       if (mounted) {
+        _hideMessages();
         _coverUrlController.text = url;
         setState(() => _isUploading = false);
+        _showMessage('封面上传成功', backgroundColor: AppColors.success);
       }
     } catch (e) {
       if (mounted) {
+        _hideMessages();
         setState(() => _isUploading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('上传失败: $e'), backgroundColor: AppColors.error),
-        );
+        _showMessage('上传失败: $e');
       }
     }
   }
@@ -84,15 +137,11 @@ final class _CreateLivePageState extends ConsumerState<CreateLivePage> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (_coverUrlController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请上传直播封面')),
-      );
+      _showMessage('请上传直播封面');
       return;
     }
     if (_selectedProductIds.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请至少选择一件讲解商品')),
-      );
+      _showMessage('请至少选择一件讲解商品');
       return;
     }
 
@@ -100,23 +149,27 @@ final class _CreateLivePageState extends ConsumerState<CreateLivePage> {
 
     try {
       final api = LiveApi(client: ref.read(dioClientProvider));
-      await api.createRoom(
+      final result = await api.createRoom(
         title: _titleController.text.trim(),
         coverUrl: _coverUrlController.text.trim(),
         productIds: _selectedProductIds.toList(),
       );
 
+      if (!mounted) return;
+
+      _hideMessages();
+      _showMessage('直播间创建成功', backgroundColor: AppColors.success, duration: const Duration(seconds: 2));
+
+      // 延迟返回，让用户看到成功消息
+      await Future.delayed(const Duration(seconds: 1));
+
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('直播间创建成功'), backgroundColor: AppColors.success),
-        );
         Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('创建失败: $e'), backgroundColor: AppColors.error),
-        );
+        _hideMessages();
+        _showMessage('创建失败: $e');
       }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
@@ -125,37 +178,57 @@ final class _CreateLivePageState extends ConsumerState<CreateLivePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('创建直播'),
-        backgroundColor: AppColors.background,
-        actions: [
-          TextButton(
-            onPressed: _isSubmitting ? null : _submit,
-            child: const Text('创建', style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.primary)),
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildSectionTitle('直播信息'),
-              const SizedBox(height: 16),
-              _buildTitleField(),
-              const SizedBox(height: 16),
-              _buildCoverField(),
-              const SizedBox(height: 24),
-              _buildSectionTitle('讲解商品 (${_selectedProductIds.length}件)'),
-              const SizedBox(height: 16),
-              _buildProductGrid(),
-              const SizedBox(height: 32),
-              _buildSubmitButton(),
+    return PopScope(
+      canPop: !_isSubmitting,
+      onPopInvokedWithResult: (didPop, result) {
+        if (_isSubmitting) {
+          _showMessage('正在创建直播间，请稍候...');
+        }
+      },
+      child: ScaffoldMessenger(
+        key: _scaffoldMessengerKey,
+        child: Scaffold(
+          backgroundColor: AppColors.background,
+          appBar: AppBar(
+            title: const Text('创建直播'),
+            backgroundColor: AppColors.background,
+            leading: _isSubmitting
+                ? null // 提交时隐藏返回按钮
+                : const BackButton(),
+            actions: [
+              TextButton(
+                onPressed: _isSubmitting ? null : _submit,
+                child: _isSubmitting
+                    ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                )
+                    : const Text('创建', style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.primary)),
+              ),
             ],
+          ),
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildSectionTitle('直播信息'),
+                  const SizedBox(height: 16),
+                  _buildTitleField(),
+                  const SizedBox(height: 16),
+                  _buildCoverField(),
+                  const SizedBox(height: 24),
+                  _buildSectionTitle('讲解商品 (${_selectedProductIds.length}件)'),
+                  const SizedBox(height: 16),
+                  _buildProductGrid(),
+                  const SizedBox(height: 32),
+                  _buildSubmitButton(),
+                ],
+              ),
+            ),
           ),
         ),
       ),

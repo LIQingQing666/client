@@ -13,6 +13,7 @@ final class LiveApi {
     final list = data['list'] as List<dynamic>;
     return list
         .map((e) => LiveRoomInfo.fromJson(e as Map<String, dynamic>))
+        // .where((room) => room.isLive)
         .toList();
   }
 
@@ -61,6 +62,7 @@ final class LiveApi {
         'cover_url': coverUrl,
         'product_ids': productIds,
         'tags': tags ?? [],
+        'video_url': 'http://192.168.50.174:3000/uploads/videos/butterfly.mp4',
       },
     );
     return LiveRoomInfo.fromJson(
@@ -88,39 +90,27 @@ final class LiveApi {
     });
   }
 
-  /// 进入直播间
-  // Future<void> joinRoom(String roomId) async {
-  //   await client.post('/live/rooms/$roomId/join');
-  // }
+  Future<String> generateAiLiveScript({
+    required String roomTitle,
+    required String productName,
+    required String productDescription,
+    required String productCategory,
+    List<String>? productTags,
+  }) async {
+    final response = await client.post<Map<String, dynamic>>(
+      '/live/ai-live-script',
+      data: {
+        'room_title': roomTitle,
+        'product_name': productName,
+        'product_description': productDescription,
+        'product_category': productCategory,
+        if (productTags != null && productTags.isNotEmpty) 'product_tags': productTags,
+      },
+    );
 
-  /// 离开直播间
-  // Future<void> leaveRoom(String roomId) async {
-  //   await client.post('/live/rooms/$roomId/leave');
-  // }
-
-  /// 发送消息
-  // Future<void> sendMessage({
-  //   required String roomId,
-  //   required String content,
-  // }) async {
-  //   await client.post('/live/rooms/$roomId/messages', data: {
-  //     'content': content,
-  //     'type': 'user',
-  //   });
-  // }
-
-  /// 获取直播消息
-  // Future<List<LiveMessage>> getMessages(String roomId, {int limit = 50}) async {
-  //   final response = await client.get<Map<String, dynamic>>(
-  //     '/live/rooms/$roomId/messages',
-  //     queryParameters: {'limit': limit},
-  //   );
-  //   final data = response.data!['data'] as Map<String, dynamic>;
-  //   final list = data['list'] as List<dynamic>;
-  //   return list
-  //       .map((e) => LiveMessage.fromJson(e as Map<String, dynamic>))
-  //       .toList();
-  // }
+    final data = response.data!['data'] as Map<String, dynamic>;
+    return data['script'] as String;
+  }
 }
 
 final class LiveRoomDetail {

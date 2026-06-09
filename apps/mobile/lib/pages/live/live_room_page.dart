@@ -19,7 +19,7 @@ import '../../provider/user_provider.dart';
 import '../../widgets/coupon_countdown.dart';
 import '../../utils/toast.dart';
 import '../../widgets/danmaku_overlay.dart';
-import '../../widgets/floating_product_card.dart';
+import '../../widgets/product_floating_card.dart';
 import '../../widgets/product_detail_sheet.dart';
 import 'audience_list.dart';
 import 'gift_panel.dart';
@@ -41,6 +41,14 @@ final class _LiveRoomPageState extends ConsumerState<LiveRoomPage> {
   @override
   void initState() {
     super.initState();
+    // When returning from PIP we already have a video controller and room info
+    // — mark initialized immediately so the spinner is skipped and the
+    // PIP controller can be reused right away.
+    final pipState = ref.read(pipProvider);
+    final hasPip = pipState.videoController != null && pipState.roomInfo != null;
+    if (hasPip) {
+      _initialized = true;
+    }
     Future.microtask(() {
       final rooms = ref.read(roomListProvider);
       final index = rooms.indexWhere((r) => r.id == widget.roomId);
@@ -84,10 +92,16 @@ final class _LiveRoomPageState extends ConsumerState<LiveRoomPage> {
     }
 
     // When the room list is empty (e.g. returning from PIP), use the live
-    // provider's room as a single-item list.
+    // provider's room or the PIP room info as a single-item list so the
+    // video player can be created immediately without waiting for the API.
+    final pipState = ref.watch(pipProvider);
     final displayRooms = rooms.isNotEmpty
         ? rooms
-        : (liveState.room != null ? [liveState.room!] : <LiveRoomInfo>[]);
+        : (liveState.room != null
+            ? [liveState.room!]
+            : (pipState.videoController != null && pipState.roomInfo != null
+                ? [pipState.roomInfo!]
+                : <LiveRoomInfo>[]));
 
     if (displayRooms.isEmpty) {
       return const Scaffold(
@@ -216,6 +230,7 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
   /// Safe to call multiple times — returns early if already initializing.
   void _initVideo(String url) {
     if (url.isEmpty) {
+      debugPrint('[LiveRoom] video URL is empty — room data may not have loaded yet');
       if (mounted) setState(() => _videoError = true);
       return;
     }
@@ -227,12 +242,20 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
       _videoController = null;
     }
 
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      debugPrint('[LiveRoom] invalid video URL: $url');
+      if (mounted) setState(() => _videoError = true);
+      return;
+    }
+
     setState(() {
       _videoReady = false;
       _videoError = false;
     });
 
-    final controller = VideoPlayerController.networkUrl(Uri.parse(url));
+    debugPrint('[LiveRoom] initializing video: $url');
+    final controller = VideoPlayerController.networkUrl(uri);
     _videoController = controller;
     controller.initialize().then((_) {
       if (!mounted || _videoController != controller) return;
@@ -285,14 +308,64 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
 
   void _showAudienceList() {
     final state = ref.read(liveProvider);
+    final audiences = _generateAudiences(state.onlineCount);
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (_) => AudienceList(
-        audiences: const [],
+        audiences: audiences,
         onlineCount: state.onlineCount,
       ),
     );
+  }
+
+  /// Generate a realistic mock audience list based on the online count.
+  /// Shows up to ~30 users — a mix of known seed users and random viewers.
+  List<Audience> _generateAudiences(int onlineCount) {
+    // Known "seed" users that appear in most live rooms.
+    const known = [
+      ('u2', '小明数码'),
+      ('u3', '小红穿搭'),
+      ('u4', '阿杰户外'),
+      ('u5', '数码控小王'),
+    ];
+
+    // Random viewer name parts for natural-looking names.
+    const prefixes = ['观众', '粉丝', '用户', '网友', '买家', '路人'];
+    const suffixes = [
+      '小明', '小红', '阿杰', '小王', '阿花', '小美', '大壮', '老李',
+      '小陈', '阿强', '张三', '李四', '王五', '赵六', '七七', '八哥',
+      '小柒', '阿星', '大刘', '老周', '小吴', '阿林', '阿辉', '菜菜',
+      '球球', '豆豆', '米粒', '糖糖', '果果', '乐乐', '星星', '月亮',
+    ];
+
+    final list = <Audience>[];
+    final rand = DateTime.now().millisecondsSinceEpoch; // pseudo-random seed
+
+    // Always show the known users first (if they fit).
+    final knownCount = (onlineCount >= 5) ? known.length : (onlineCount > 0 ? 1 : 0);
+    for (int i = 0; i < knownCount; i++) {
+      list.add(Audience(
+        userId: known[i].$1,
+        name: known[i].$2,
+        avatar: '',
+      ));
+    }
+
+    // Fill up to min(onlineCount, 30) with random viewers.
+    final maxShow = (onlineCount.clamp(0, 30)) - list.length;
+    for (int i = 0; i < maxShow; i++) {
+      final prefix = prefixes[(rand + i * 7) % prefixes.length];
+      final suffix = suffixes[(rand + i * 13) % suffixes.length];
+      final num = (rand + i * 17 + 1000) % 10000; // 1000-10999
+      list.add(Audience(
+        userId: 'viewer_${num}_$i',
+        name: '$prefix$suffix$num',
+        avatar: '',
+      ));
+    }
+
+    return list;
   }
 
   void _showGiftPanel() {
@@ -441,9 +514,13 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
     );
   }
 
+  /// Returns the best available room for PIP entry — live state first,
+  /// falling back to the widget prop (e.g. when returning from PIP).
+  LiveRoomInfo get _currentRoom =>
+      ref.read(liveProvider).room ?? widget.room;
+
   void _showProductDetail(BuildContext context, ProductModel product) {
     final favState = ref.read(favoriteProvider);
-    final room = ref.read(liveProvider).room;
     showProductDetailSheet(
       context: context,
       product: product,
@@ -458,8 +535,8 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
         // Dismiss the product detail bottom sheet first.
         Navigator.of(context).pop();
         // Enter PIP mode before navigating away so the live stream keeps playing.
-        if (_videoController != null && _videoReady && room != null) {
-          ref.read(pipProvider.notifier).enterPip(_videoController!, room);
+        if (_videoController != null && _videoReady) {
+          ref.read(pipProvider.notifier).enterPip(_videoController!, _currentRoom);
         }
         // Use the global router — context from inside a bottom sheet is stale after pop.
         AppRouter.router.pushNamed('orderConfirm', queryParameters: <String, String>{
@@ -499,7 +576,6 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
         authorAvatar: room.authorAvatar,
         authorId: room.authorId,
         onFollow: _onFollowTap,
-        isFollowing: ref.read(followProvider).followingIds.contains(room.authorId),
       ),
     );
   }
@@ -510,7 +586,14 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
     final followState = ref.watch(followProvider);
     final bottomInset = MediaQuery.of(context).padding.bottom;
 
-    if (state.room == null && !state.isLoading && state.errorMessage != null) {
+    // When returning from PIP we may have video playing but state.room
+    // hasn't loaded yet — use widget.room as fallback so the UI renders
+    // immediately instead of showing a spinner or error.
+    final effectiveRoom = state.room ?? widget.room;
+    final hasVideo = _videoController != null && _videoReady;
+
+    // Only show full-screen error when we have no video at all.
+    if (!hasVideo && state.errorMessage != null && !state.isLoading) {
       return Scaffold(
         backgroundColor: AppColors.background,
         body: Center(
@@ -534,14 +617,9 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
       );
     }
 
-    if (state.room == null) {
-      return const Scaffold(
-        backgroundColor: AppColors.background,
-        body: Center(child: CircularProgressIndicator(color: AppColors.primary)),
-      );
-    }
-
-    final room = state.room!;
+    // effectiveRoom is always non-null (widget.room is required) so we
+    // always have enough data to render the UI — even before state loads.
+    final room = effectiveRoom;
     final isFollowing = followState.followingIds.contains(room.authorId);
 
     return PopScope(
@@ -549,8 +627,8 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         // Enter PIP mode if video is playing, then pop.
-        final currentRoom = state.room;
-        if (_videoController != null && _videoReady && currentRoom != null) {
+        final currentRoom = _currentRoom;
+        if (_videoController != null && _videoReady) {
           ref.read(pipProvider.notifier).enterPip(_videoController!, currentRoom);
         }
         context.pop();
@@ -560,33 +638,43 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
         body: Stack(
         fit: StackFit.expand,
         children: [
-          // Background: video player / cover image / error
-          if (_videoController != null && _videoReady)
-            ValueListenableBuilder<VideoPlayerValue>(
-              valueListenable: _videoController!,
-              builder: (_, value, __) {
-                if (!value.isInitialized || value.size.isEmpty) {
-                  return CachedNetworkImage(
-                    imageUrl: room.coverUrl,
+          // Background: video player / cover image / error.
+          // Wrapped in IgnorePointer so the Android SurfaceView doesn't
+          // consume vertical drag events — the outer PageView needs them.
+          if (_videoController != null && _videoReady) ...[
+            IgnorePointer(
+              child: ValueListenableBuilder<VideoPlayerValue>(
+                valueListenable: _videoController!,
+                builder: (_, value, __) {
+                  if (!value.isInitialized || value.size.isEmpty) {
+                    return CachedNetworkImage(
+                      imageUrl: room.coverUrl,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) =>
+                          Container(color: AppColors.surface),
+                      errorWidget: (_, __, ___) =>
+                          Container(color: AppColors.surface),
+                    );
+                  }
+                  return FittedBox(
                     fit: BoxFit.cover,
-                    placeholder: (_, __) =>
-                        Container(color: AppColors.surface),
-                    errorWidget: (_, __, ___) =>
-                        Container(color: AppColors.surface),
+                    child: SizedBox(
+                      width: value.size.width,
+                      height: value.size.height,
+                      child: VideoPlayer(_videoController!),
+                    ),
                   );
-                }
-                return FittedBox(
-                  fit: BoxFit.cover,
-                  child: SizedBox(
-                    width: value.size.width,
-                    height: value.size.height,
-                    child: VideoPlayer(_videoController!),
-                  ),
-                );
-              },
-            )
-          else if (_videoError)
-            // Video failed — show cover with retry overlay.
+                },
+              ),
+            ),
+            // No play/pause tap layer for live streaming — the stream
+            // should play continuously and not be user-pausable.
+            // The video is wrapped in IgnorePointer so vertical
+            // drags pass through to the outer PageView.
+          ],
+
+          // Video-fallback layer (only when no active video).
+          if (!_videoReady && _videoError)
             Stack(
               fit: StackFit.expand,
               children: [
@@ -624,8 +712,9 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
                   ),
                 ),
               ],
-            )
-          else
+            ),
+
+          if (!_videoReady && !_videoError)
             CachedNetworkImage(
               imageUrl: room.coverUrl,
               fit: BoxFit.cover,
@@ -675,9 +764,9 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
                   GestureDetector(
                     onTap: () {
                       // Enter PIP mode if video is playing, then pop back.
-                      final room = ref.read(liveProvider).room;
-                      if (_videoController != null && _videoReady && room != null) {
-                        ref.read(pipProvider.notifier).enterPip(_videoController!, room);
+                      if (_videoController != null && _videoReady) {
+                        ref.read(pipProvider.notifier).enterPip(
+                            _videoController!, _currentRoom);
                       }
                       context.pop();
                     },
@@ -693,10 +782,10 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
                           child: CircleAvatar(
                             radius: 16,
                             backgroundColor: AppColors.card,
-                            backgroundImage: room.authorAvatar.isNotEmpty
+                            backgroundImage: isNetworkImageUrl(room.authorAvatar)
                                 ? CachedNetworkImageProvider(room.authorAvatar)
                                 : null,
-                            child: room.authorAvatar.isEmpty
+                            child: !isNetworkImageUrl(room.authorAvatar)
                                 ? Text(room.authorName.isNotEmpty ? room.authorName[0] : '?',
                                     style: const TextStyle(fontSize: 12, color: Colors.white))
                                 : null,
@@ -821,19 +910,15 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
                     bottom: bottomRowH + AppDimens.paddingSm + bottomInset,
                     width: cardW - AppDimens.paddingSm,
                     height: 180,
-                    child: FloatingProductCard(
-                      product: state.currentProduct ??
-                          state.products.first,
+                    child: ProductFloatingCard(
+                      product: state.currentProduct ?? state.products.first,
+                      layout: ProductCardLayout.vertical,
+                      autoFade: false,
+                      delay: Duration.zero,
                       onTap: () => _showProductDetail(
-                          ctx,
-                          state.currentProduct ??
-                              state.products.first),
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      disableAutoFade: true,
-                      verticalLayout: true,
+                        ctx,
+                        state.currentProduct ?? state.products.first,
+                      ),
                     ),
                   ),
               ],
@@ -918,13 +1003,10 @@ final class _LiveRoomActiveContentState extends ConsumerState<_LiveRoomActiveCon
                     icon: Icons.shopping_cart_outlined,
                     onTap: () {
                       // Enter PIP before navigating to cart.
-                      final room = ref.read(liveProvider).room;
-                      if (_videoController != null &&
-                          _videoReady &&
-                          room != null) {
+                      if (_videoController != null && _videoReady) {
                         ref
                             .read(pipProvider.notifier)
-                            .enterPip(_videoController!, room);
+                            .enterPip(_videoController!, _currentRoom);
                       }
                       AppRouter.router.go('/cart');
                     },
@@ -998,23 +1080,25 @@ final class _BottomActionBtn extends StatelessWidget {
   }
 }
 
-final class _AuthorInfoSheet extends StatelessWidget {
+final class _AuthorInfoSheet extends ConsumerWidget {
   const _AuthorInfoSheet({
     required this.authorName,
     required this.authorAvatar,
     required this.authorId,
     this.onFollow,
-    this.isFollowing = false,
   });
 
   final String authorName;
   final String authorAvatar;
   final String authorId;
   final VoidCallback? onFollow;
-  final bool isFollowing;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Read follow state directly from provider so the sheet reacts
+    // to state changes immediately (fixes "点击关注后不变" bug).
+    final isFollowing =
+        ref.watch(followProvider).followingIds.contains(authorId);
     return Container(
       padding: const EdgeInsets.all(AppDimens.paddingLg),
       decoration: const BoxDecoration(
@@ -1034,8 +1118,8 @@ final class _AuthorInfoSheet extends StatelessWidget {
           CircleAvatar(
             radius: 36,
             backgroundColor: AppColors.card,
-            backgroundImage: authorAvatar.isNotEmpty ? CachedNetworkImageProvider(authorAvatar) : null,
-            child: authorAvatar.isEmpty
+            backgroundImage: isNetworkImageUrl(authorAvatar) ? CachedNetworkImageProvider(authorAvatar) : null,
+            child: !isNetworkImageUrl(authorAvatar)
                 ? Text(authorName.isNotEmpty ? authorName[0].toUpperCase() : '?',
                     style: const TextStyle(fontSize: 28, color: Colors.white))
                 : null,

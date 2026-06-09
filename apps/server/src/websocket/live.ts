@@ -28,6 +28,7 @@ export function createWebSocketServer(httpServer: HttpServer): SocketIOServer {
   const roomState = new Map<string, {
     onlineCount: number;
     currentProductId: string;
+      isLive: boolean;
   }>();
 
   io.on('connection', (socket) => {
@@ -39,16 +40,38 @@ export function createWebSocketServer(httpServer: HttpServer): SocketIOServer {
 
       // Track online count
       if (!roomState.has(room)) {
-        roomState.set(room, { onlineCount: 0, currentProductId: '' });
+        roomState.set(room, {
+          onlineCount: 0,
+          currentProductId: '',
+          isLive: true  // 默认直播中
+        });
       }
       const state = roomState.get(room)!;
       state.onlineCount += 1;
 
       // Send current room state to the new joiner
-      socket.emit('room_state', {
+      const roomStatePayload: Record<string, unknown> = {
         online_count: state.onlineCount,
         current_product_id: state.currentProductId,
-      });
+        is_live: state.isLive,
+      };
+
+      // If there's a current explaining product, send full product data
+      if (state.currentProductId) {
+        const currentProduct = db.prepare(
+          'SELECT * FROM products WHERE id = ?'
+        ).get(state.currentProductId) as Record<string, unknown> | undefined;
+        if (currentProduct) {
+          roomStatePayload.current_product = {
+            ...currentProduct,
+            tags: JSON.parse(currentProduct.tags as string),
+            images: JSON.parse(currentProduct.images as string),
+            specs: JSON.parse(currentProduct.specs as string),
+          };
+        }
+      }
+
+      socket.emit('room_state', roomStatePayload);
 
       // Broadcast updated online count
       io.to(room).emit('online_count', { count: state.onlineCount });
@@ -85,6 +108,15 @@ export function createWebSocketServer(httpServer: HttpServer): SocketIOServer {
 
     // Chat message / danmaku
     socket.on('send_message', (data: { room: string; user_id: string; content: string }) => {
+      const state = roomState.get(data.room);
+      if (state && !state.isLive) {
+          socket.emit('error', {
+            message: '直播已结束，无法发送消息',
+            code: 'LIVE_ENDED'
+          });
+          return;
+        }
+
       const db = getDb();
       const user = db.prepare('SELECT nickname, avatar FROM users WHERE id = ?').get(data.user_id) as
         | { nickname: string; avatar: string }
@@ -104,6 +136,15 @@ export function createWebSocketServer(httpServer: HttpServer): SocketIOServer {
 
     // Send gift
     socket.on('send_gift', (data: { room: string; giftId: string; giftName: string; price: number; user_id: string }) => {
+      const state = roomState.get(data.room);
+
+      if (state && !state.isLive) {
+        socket.emit('error', {
+          message: '直播已结束，无法发送礼物',
+          code: 'LIVE_ENDED'
+        });
+        return;
+      }
       const db = getDb();
       const user = db.prepare('SELECT nickname, avatar FROM users WHERE id = ?').get(data.user_id) as
         | { nickname: string; avatar: string }
@@ -128,14 +169,24 @@ export function createWebSocketServer(httpServer: HttpServer): SocketIOServer {
     socket.on('set_explaining_product', (data: { room: string; product_id: string }) => {
       const db = getDb();
       const product = db.prepare(
-        'SELECT id, name, cover_url, price, original_price, sales, ai_sales_point FROM products WHERE id = ?'
+        'SELECT * FROM products WHERE id = ?'
       ).get(data.product_id) as Record<string, unknown> | undefined;
 
-      if (product && roomState.has(data.room)) {
+      if (product) {
+        if (!roomState.has(data.room)) {
+          roomState.set(data.room, { onlineCount: 0, currentProductId: '' });
+        }
         roomState.get(data.room)!.currentProductId = data.product_id;
 
+        const serializedProduct = {
+          ...product,
+          tags: JSON.parse(product.tags as string),
+          images: JSON.parse(product.images as string),
+          specs: JSON.parse(product.specs as string),
+        };
+
         io.to(data.room).emit('explaining_product', {
-          product,
+          product: serializedProduct,
           timestamp: new Date().toISOString(),
         });
       }
@@ -213,6 +264,174 @@ export function createWebSocketServer(httpServer: HttpServer): SocketIOServer {
       }
 
       console.log('[WS] client disconnected:', socket.id);
+    });
+
+    socket.on('start_live', (data: { room: string; liveInfo?: Record<string, unknown> }) => {
+      const db = getDb();
+      const room = data.room;
+
+      try {
+        // 使用 started_at 字段（而不是 start_time）
+        db.prepare("UPDATE live_rooms SET status = 'live', started_at = ? WHERE id = ?")
+          .run(new Date().toISOString(), room);
+
+        console.log(`[WS] Live started in room: ${room}`);
+      } catch (error) {
+        console.error(`[WS] Error starting live in room ${room}:`, error);
+      }
+
+      // 初始化房间状态
+      if (!roomState.has(room)) {
+        roomState.set(room, { onlineCount: 0, currentProductId: '', isLive: true });
+      } else {
+        const state = roomState.get(room)!;
+        state.isLive = true;
+      }
+
+      // 通知房间内所有用户直播开始
+      io.to(room).emit('live_started', {
+        room_id: room,
+        started_at: new Date().toISOString(),
+        live_info: data.liveInfo || {},
+        message: '直播已开始',
+      });
+
+      // 恢复房间交互功能
+      io.to(room).emit('room_disabled', {
+        room_id: room,
+        disabled: false,
+        message: '直播已开始，互动功能已恢复',
+      });
+    });
+
+    // 主播结束直播 - 核心功能
+    socket.on('end_live', (data: { room: string; summary?: Record<string, unknown> }) => {
+      const db = getDb();
+      const room = data.room;
+
+      try {
+        const tableInfo = db.prepare("PRAGMA table_info('live_rooms')").all() as Array<{
+          name: string;
+        }>;
+        const columnNames = tableInfo.map(col => col.name);
+
+        // 构建更新语句
+        const updates: string[] = [];
+        const params: Record<string, unknown> = { id: room };
+
+        // 更新状态为 ended
+        updates.push("status = 'ended'");
+
+        // 更新结束时间（使用 ended_at 字段名）
+        updates.push("ended_at = @ended_at");
+        params['ended_at'] = new Date().toISOString();
+
+        // 如果表中有 summary 字段，才更新
+        if (columnNames.includes('summary')) {
+          updates.push("summary = @summary");
+          params['summary'] = JSON.stringify(data.summary || {});
+        }
+
+        // 执行更新
+        const sql = `UPDATE live_rooms SET ${updates.join(', ')} WHERE id = @id`;
+        db.prepare(sql).run(params);
+
+        console.log(`[WS] Updated live_rooms for room ${room}:`, params);
+
+      } catch (error) {
+        console.error(`[WS] Database update error for room ${room}:`, error);
+
+        // 如果数据库更新失败，至少尝试更新 status
+        try {
+          db.prepare("UPDATE live_rooms SET status = 'ended', ended_at = ? WHERE id = ?")
+            .run(new Date().toISOString(), room);
+        } catch (e) {
+          console.error('[WS] Fallback update also failed:', e);
+        }
+      }
+
+      // 更新房间状态（内存中的状态）
+      const state = roomState.get(room);
+      if (state) {
+        state.isLive = false;
+      }
+
+      // 发送直播结束通知给房间内所有观众
+      io.to(room).emit('live_ended', {
+        room_id: room,
+        ended_at: new Date().toISOString(),
+        summary: data.summary || {
+          total_viewers: state?.onlineCount || 0,
+          duration: '直播已结束',
+        },
+        message: '主播已结束直播，评论区已关闭',
+      });
+
+      // 禁用房间交互功能
+      io.to(room).emit('room_disabled', {
+        room_id: room,
+        disabled: true,
+        disabled_features: ['send_message', 'send_gift', 'danmaku'],
+        message: '直播已结束，互动功能已关闭',
+      });
+
+      // 更新 roomState
+      if (state) {
+        state.isLive = false;
+      }
+
+      console.log(`[WS] Live ended in room: ${room}`);
+    });
+
+
+    // 获取直播状态
+    socket.on('get_live_status', (data: { room: string }, callback?: Function) => {
+      const db = getDb();
+      const room = data.room;
+
+      try {
+        // 使用正确的字段名查询
+        const liveRoom = db.prepare(
+          "SELECT id, status, started_at, ended_at, online_count, current_product_id FROM live_rooms WHERE id = ?"
+        ).get(room) as Record<string, unknown> | undefined;
+
+        const state = roomState.get(room);
+        const isLive = liveRoom?.status === 'live';
+
+        const status = {
+          room_id: room,
+          is_live: isLive,
+          status: liveRoom?.status || 'unknown',
+          online_count: state?.onlineCount || 0,
+          current_product_id: state?.currentProductId || liveRoom?.current_product_id || '',
+          started_at: liveRoom?.started_at || null,
+          ended_at: liveRoom?.ended_at || null,
+        };
+
+        if (callback) {
+          callback({ code: 0, data: status });
+        } else {
+          socket.emit('live_status', status);
+        }
+
+        console.log(`[WS] Live status for room ${room}:`, status);
+
+      } catch (error) {
+        console.error(`[WS] Error getting live status for room ${room}:`, error);
+
+        const fallbackStatus = {
+          room_id: room,
+          is_live: false,
+          status: 'error',
+          online_count: 0,
+        };
+
+        if (callback) {
+          callback({ code: -1, data: fallbackStatus, message: 'Failed to get status' });
+        } else {
+          socket.emit('live_status', fallbackStatus);
+        }
+      }
     });
   });
 

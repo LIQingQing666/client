@@ -1,5 +1,6 @@
 import '../models/video_model.dart';
 import '../models/video_create_request.dart';
+import 'api_exception.dart';
 import 'dio_client.dart';
 
 final class VideoApi {
@@ -29,9 +30,11 @@ final class VideoApi {
     final response = await client.get<Map<String, dynamic>>(
       '/videos/$id',
     );
-    return VideoDetailResponse.fromJson(
-      response.data!['data'] as Map<String, dynamic>,
-    );
+    final data = response.data?['data'];
+    if (data == null) {
+      throw ClientException('视频不存在或已下架', statusCode: response.statusCode ?? 404);
+    }
+    return VideoDetailResponse.fromJson(data as Map<String, dynamic>);
   }
 
   Future<VideoListResponse> getRecommend({int page = 1, int pageSize = 10}) async {
@@ -120,6 +123,29 @@ final class VideoApi {
 
   Future<void> deleteVideo(String id) async {
     await client.delete('/videos/$id');
+  }
+
+  Future<Map<String, String>> generateAiVideoInfo({
+    required String productName,
+    required String productDescription,
+    required String productCategory,
+    List<String>? productTags,
+  }) async {
+    final response = await client.post<Map<String, dynamic>>(
+      '/videos/ai-video-info',
+      data: {
+        'product_name': productName,
+        'product_description': productDescription,
+        'product_category': productCategory,
+        if (productTags != null && productTags.isNotEmpty) 'product_tags': productTags,
+      },
+    );
+
+    final data = response.data!['data'] as Map<String, dynamic>;
+    return {
+      'title': data['title'] as String,
+      'description': data['description'] as String,
+    };
   }
 }
 

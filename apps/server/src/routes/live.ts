@@ -3,6 +3,8 @@ import { v4 as uuid } from 'uuid';
 import { getDb } from '../db/schema.js';
 import { getIO } from '../websocket/live.js';
 import { requireMerchant } from '../middleware/auth.js';
+import * as dotenv from 'dotenv';
+dotenv.config();
 
 interface LiveRoomRow {
   id: string;
@@ -246,7 +248,7 @@ export async function liveRoutes(app: FastifyInstance) {
     }
 
     const product = db.prepare(
-      'SELECT id, name, cover_url, price, original_price, sales, ai_sales_point FROM products WHERE id = ?'
+      'SELECT * FROM products WHERE id = ?'
     ).get(product_id) as Record<string, unknown> | undefined;
     if (!product) {
       return reply.status(404).send({ code: 404, message: '商品不存在' });
@@ -256,13 +258,20 @@ export async function liveRoutes(app: FastifyInstance) {
       'UPDATE live_rooms SET current_product_id = ?, updated_at = datetime(\'now\') WHERE id = ?'
     ).run(product_id, id);
 
+    const serializedProduct = {
+      ...product,
+      tags: safeJsonParse<string[]>(product.tags as string, []),
+      images: safeJsonParse<string[]>(product.images as string, []),
+      specs: safeJsonParse<unknown[]>(product.specs as string, []),
+    };
+
     try {
       getIO().to(id).emit('explaining_product', {
-        product,
+        product: serializedProduct,
         timestamp: new Date().toISOString(),
       });
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error('[HTTP] 广播讲解商品失败:', err);
     }
 
     return {
@@ -349,7 +358,7 @@ export async function liveRoutes(app: FastifyInstance) {
     }
 
     const product = db.prepare(
-      'SELECT id, name, cover_url, price, original_price, sales, ai_sales_point FROM products WHERE id = ?'
+      'SELECT * FROM products WHERE id = ?'
     ).get(product_id) as Record<string, unknown> | undefined;
 
     if (!product) {
@@ -360,10 +369,21 @@ export async function liveRoutes(app: FastifyInstance) {
       'UPDATE live_rooms SET current_product_id = ?, updated_at = datetime(\'now\') WHERE id = ?'
     ).run(product_id, roomId);
 
-    getIO().to(roomId).emit('explaining_product', {
-      product,
-      timestamp: new Date().toISOString(),
-    });
+    const serializedProduct = {
+      ...product,
+      tags: safeJsonParse<string[]>(product.tags as string, []),
+      images: safeJsonParse<string[]>(product.images as string, []),
+      specs: safeJsonParse<unknown[]>(product.specs as string, []),
+    };
+
+    try {
+      getIO().to(roomId).emit('explaining_product', {
+        product: serializedProduct,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error('[HTTP] 广播讲解商品失败:', err);
+    }
 
     return {
       code: 0,
@@ -428,5 +448,72 @@ export async function liveRoutes(app: FastifyInstance) {
         timestamp: new Date().toISOString(),
       },
     };
+  });
+
+  app.post('/api/live/ai-live-script', async (req, reply) => {
+    try {
+      const { room_title, product_name, product_description, product_category, product_tags } = req.body;
+
+      if (!product_name || !room_title) {
+        reply.status(400).send({ code: 400, message: '参数不完整' });
+        return;
+      }
+
+      const prompt = `你是一个专业的直播带货主播。请根据以下信息生成一段简短的直播讲解文案（50-80字）：
+
+  直播间：${room_title}
+  商品名称：${product_name}
+  商品类目：${product_category}
+  商品描述：${product_description}
+  商品标签：${product_tags?.join('、') || '无'}
+
+  要求：
+  - 口语化，有感染力
+  - 突出商品卖点
+  - 适合直播讲解
+  - 50-80字以内
+  - 直接输出文案，不要加前缀`;
+
+      const response = await fetch('https://api.deepseek.com/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: 'deepseek-chat',
+          messages: [
+            {
+              role: 'system',
+              content: '你是经验丰富的直播带货主播，擅长用简洁有力的语言介绍商品。'
+            },
+            { role: 'user', content: prompt },
+          ],
+          temperature: 0.8,
+          max_tokens: 150,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`AI API 错误: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const script = data.choices[0].message.content.trim();
+
+      return { code: 0, data: { script } };
+
+    } catch (error) {
+      // 降级：生成简单文案
+      const fallbackScript = `${req.body.product_name}，${req.body.product_description?.slice(0, 30) || '品质之选'}。限时优惠中，赶紧下单吧！`;
+
+      return {
+        code: 0,
+        data: {
+          script: fallbackScript,
+          fallback: true
+        }
+      };
+    }
   });
 }

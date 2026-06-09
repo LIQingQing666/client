@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -18,9 +19,10 @@ import '../../widgets/video_comments_sheet.dart';
 import '../../widgets/video_player_widget.dart';
 
 final class FeedPage extends ConsumerStatefulWidget {
-  const FeedPage({super.key, this.initialVideoId});
+  const FeedPage({super.key, this.initialVideoId, this.initialSeekTo});
 
   final String? initialVideoId;
+  final int? initialSeekTo;
 
   @override
   ConsumerState<FeedPage> createState() => _FeedPageState();
@@ -30,6 +32,7 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
   late final PageController _pageController = PageController();
   final ValueNotifier<int> _seekTrigger = ValueNotifier<int>(0);
   String? _pendingJumpVideoId;
+  int? _pendingSeekTo;
   final Map<String, ProductModel?> _productCache = {};
 
   @override
@@ -37,6 +40,7 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
     super.initState();
     if (widget.initialVideoId != null) {
       _pendingJumpVideoId = widget.initialVideoId;
+      _pendingSeekTo = widget.initialSeekTo;
     }
   }
 
@@ -244,57 +248,10 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.all(AppDimens.paddingLg),
-        decoration: const BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(AppDimens.radiusXl)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Center(
-              child: Container(
-                width: 36, height: 4,
-                margin: const EdgeInsets.only(bottom: AppDimens.paddingLg),
-                decoration: BoxDecoration(color: AppColors.textHint, borderRadius: BorderRadius.circular(2)),
-              ),
-            ),
-            CircleAvatar(
-              radius: 36,
-              backgroundColor: AppColors.card,
-              child: Text(
-                video.authorName.isNotEmpty ? video.authorName[0].toUpperCase() : '?',
-                style: const TextStyle(fontSize: 28, color: Colors.white),
-              ),
-            ),
-            const SizedBox(height: AppDimens.paddingMd),
-            Text(video.authorName, style: AppTextStyles.titleLarge),
-            const SizedBox(height: AppDimens.paddingXs),
-            Text('ID: ${video.authorId}', style: AppTextStyles.bodySmall),
-            const SizedBox(height: AppDimens.paddingLg),
-            SizedBox(
-              width: 120,
-              child: ElevatedButton(
-                onPressed: () {
-                  _onFollowTap(video.authorId);
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: ref.read(followProvider).followingIds.contains(video.authorId)
-                      ? AppColors.card
-                      : AppColors.primary,
-                  foregroundColor: ref.read(followProvider).followingIds.contains(video.authorId)
-                      ? AppColors.textSecondary
-                      : Colors.white,
-                ),
-                child: Text(
-                  ref.read(followProvider).followingIds.contains(video.authorId) ? '已关注' : '关注',
-                ),
-              ),
-            ),
-            const SizedBox(height: AppDimens.paddingLg),
-          ],
-        ),
+      builder: (ctx) => _AuthorSheet(
+        authorName: video.authorName,
+        authorAvatar: video.authorAvatar,
+        authorId: video.authorId,
       ),
     );
   }
@@ -310,6 +267,15 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
     final favoriteState = ref.watch(favoriteProvider);
     final isTabActive = tabIndex == 0;
     final currentTab = feedState.tab;
+
+    // When follows change while on the follow tab, reload the list so
+    // newly followed authors' videos appear immediately.
+    ref.listen<FollowState>(followProvider, (prev, next) {
+      if (currentTab == FeedTab.follow &&
+          prev?.followingIds.length != next.followingIds.length) {
+        Future.microtask(() => notifier.loadVideos());
+      }
+    });
 
     if (feedState.isLoading && feedState.videos.isEmpty) {
       return Scaffold(
@@ -340,15 +306,58 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
       );
     }
 
-    // Handle pending jump to specific video
+    // Handle pending jump to specific video (e.g. from favorites).
     if (_pendingJumpVideoId != null && feedState.videos.isNotEmpty) {
       final targetIndex = feedState.videos.indexWhere((v) => v.id == _pendingJumpVideoId);
       if (targetIndex >= 0) {
+        // Found in feed list — jump directly.
+        final seekTo = _pendingSeekTo;
+        _pendingJumpVideoId = null;
+        _pendingSeekTo = null;
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _pageController.jumpToPage(targetIndex);
+          if (seekTo != null && seekTo > 0) {
+            Future.delayed(const Duration(milliseconds: 1200), () {
+              if (mounted) _seekTrigger.value = seekTo;
+            });
+          }
         });
       }
+    }
+
+    // If the pending video is NOT in the feed list, fetch it directly via API
+    // and insert at the front so the user can play it immediately.
+    if (_pendingJumpVideoId != null) {
+      final videoId = _pendingJumpVideoId!;
       _pendingJumpVideoId = null;
+      final seekTo = _pendingSeekTo;
+      _pendingSeekTo = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        try {
+          final api = ref.read(videoApiProvider);
+          final detail = await api.getVideoDetail(videoId);
+          if (!mounted) return;
+          ref.read(feedProvider.notifier).insertVideoAtFront(detail.video);
+          if (detail.products.isNotEmpty && mounted) {
+            setState(() {
+              _productCache[videoId] =
+                  ProductModel.fromJson(detail.products.first);
+            });
+          }
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _pageController.jumpToPage(0);
+              if (seekTo != null && seekTo > 0) {
+                Future.delayed(const Duration(milliseconds: 1200), () {
+                  if (mounted) _seekTrigger.value = seekTo;
+                });
+              }
+            }
+          });
+        } on Exception {
+          // Silently fail — the video will show in the normal feed.
+        }
+      });
     }
 
     if (feedState.videos.isEmpty) {
@@ -423,6 +432,8 @@ final class _FeedPageState extends ConsumerState<FeedPage> {
                     title: video.title,
                     coverUrl: video.coverUrl,
                     authorName: video.authorName,
+                    authorId: video.authorId,
+                    authorAvatar: video.authorAvatar,
                   );
                 },
                 isFavorited: favoriteState.isFavorited(video.id),
@@ -488,6 +499,77 @@ final class _TabButton extends StatelessWidget {
           color: isActive ? AppColors.textPrimary : AppColors.textHint,
         ),
         child: Text(label),
+      ),
+    );
+  }
+}
+
+// ── Author info sheet (reactive follow button) ──
+final class _AuthorSheet extends ConsumerWidget {
+  const _AuthorSheet({
+    required this.authorName,
+    required this.authorAvatar,
+    required this.authorId,
+  });
+
+  final String authorName;
+  final String authorAvatar;
+  final String authorId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Watch reactively — button updates immediately after follow/unfollow.
+    final isF = ref.watch(followProvider).followingIds.contains(authorId);
+
+    return Container(
+      padding: const EdgeInsets.all(AppDimens.paddingLg),
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppDimens.radiusXl)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Center(
+            child: Container(
+              width: 36, height: 4,
+              margin: const EdgeInsets.only(bottom: AppDimens.paddingLg),
+              decoration: BoxDecoration(
+                  color: AppColors.textHint, borderRadius: BorderRadius.circular(2)),
+            ),
+          ),
+          CircleAvatar(
+            radius: 36,
+            backgroundColor: AppColors.card,
+            backgroundImage:
+                isNetworkImageUrl(authorAvatar) ? CachedNetworkImageProvider(authorAvatar) : null,
+            child: !isNetworkImageUrl(authorAvatar)
+                ? Text(authorName.isNotEmpty ? authorName[0].toUpperCase() : '?',
+                    style: const TextStyle(fontSize: 28, color: Colors.white))
+                : null,
+          ),
+          const SizedBox(height: AppDimens.paddingMd),
+          Text(authorName, style: AppTextStyles.titleLarge),
+          const SizedBox(height: AppDimens.paddingXs),
+          Text('ID: $authorId', style: AppTextStyles.bodySmall),
+          const SizedBox(height: AppDimens.paddingLg),
+          SizedBox(
+            width: 120,
+            child: ElevatedButton(
+              onPressed: () async {
+                try {
+                  await ref.read(followProvider.notifier).toggleFollow(authorId);
+                } on Exception {}
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isF ? AppColors.card : AppColors.primary,
+                foregroundColor: isF ? AppColors.textSecondary : Colors.white,
+              ),
+              child: Text(isF ? '已关注' : '关注'),
+            ),
+          ),
+          const SizedBox(height: AppDimens.paddingLg),
+        ],
       ),
     );
   }

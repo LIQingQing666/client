@@ -119,9 +119,27 @@ final class FeedNotifier extends StateNotifier<FeedState> {
   }
 
   Future<void> switchTab(FeedTab tab) async {
-    if (state.tab == tab || state.isLoading) return;
-    state = state.copyWith(tab: tab, videos: [], currentIndex: 0);
+    if (state.tab == tab) return;
+    // Reset isLoading so loadVideos() is not blocked by an in-flight
+    // request from the previous tab (e.g. recommend still loading when
+    // the user switches to follow).  Without this reset the follow tab
+    // would silently show recommend videos after the stale request
+    // completes.
+    state = state.copyWith(tab: tab, videos: [], currentIndex: 0, isLoading: false);
     await loadVideos();
+  }
+
+  void insertVideoAtFront(VideoModel video) {
+    // Don't duplicate if the video is already in the list.
+    final existingIndex = state.videos.indexWhere((v) => v.id == video.id);
+    if (existingIndex >= 0) {
+      state = state.copyWith(currentIndex: existingIndex);
+      return;
+    }
+    state = state.copyWith(
+      videos: [video, ...state.videos],
+      currentIndex: 0,
+    );
   }
 
   void setCurrentIndex(int index) {

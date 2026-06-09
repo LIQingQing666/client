@@ -157,6 +157,14 @@ final class MinePage extends ConsumerWidget {
               _buildDivider(),
               _buildMenuItem(
                 context,
+                icon: Icons.bookmark_outline,
+                title: '我的收藏',
+                subtitle: '收藏的视频和商品',
+                onTap: () => context.pushNamed('favorites'),
+              ),
+              _buildDivider(),
+              _buildMenuItem(
+                context,
                 icon: Icons.mail_outline,
                 title: '消息',
                 subtitle: '查看系统通知和互动消息',

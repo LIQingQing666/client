@@ -127,22 +127,28 @@ extension LiveRoomInfoCopyWith on LiveRoomInfo {
   LiveRoomInfo copyWith({
     String? status,
     String? currentProductId,
+    String? videoUrl,
+    int? onlineCount,
+    int? likeCount,
+    int? heatCount,
   }) {
     return LiveRoomInfo(
       id: id,
       title: title,
       coverUrl: coverUrl,
-      videoUrl: videoUrl,
+      videoUrl: videoUrl ?? this.videoUrl,
       authorId: authorId,
       authorName: authorName,
       authorAvatar: authorAvatar,
-      onlineCount: onlineCount,
+      onlineCount: onlineCount ?? this.onlineCount,
       tags: tags,
       status: status ?? this.status,
       productIds: productIds,
       currentProductId: currentProductId ?? this.currentProductId,
-      heatCount: heatCount,
-      likeCount: likeCount,
+      heatCount: heatCount ?? this.heatCount,
+      likeCount: likeCount ?? this.likeCount,
+      startedAt: startedAt,
+      endedAt: endedAt,
     );
   }
 }

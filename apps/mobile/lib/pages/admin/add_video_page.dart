@@ -45,6 +45,8 @@ final class _AddVideoPageState extends ConsumerState<AddVideoPage> {
   // 提交状态
   bool _isSubmitting = false;
 
+  bool _isGeneratingAi = false;
+
   @override
   void initState() {
     super.initState();
@@ -88,6 +90,71 @@ final class _AddVideoPageState extends ConsumerState<AddVideoPage> {
     } catch (e) {
       if (mounted) {
         setState(() => _isLoadingProducts = false);
+      }
+    }
+  }
+
+  Future<void> _generateAiVideoInfo() async {
+    // 检查是否选择了商品
+    if (_selectedProductIds.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('请先选择关联商品'),
+            backgroundColor: AppColors.warning,
+          ),
+        );
+      }
+      return;
+    }
+
+    setState(() => _isGeneratingAi = true);
+
+    try {
+      // 获取选中的第一个商品
+      final selectedProduct = _availableProducts.firstWhere(
+            (p) => p.id == _selectedProductIds.first,
+      );
+
+      final client = ref.read(dioClientProvider);
+      final api = VideoApi(client: client);
+
+      final result = await api.generateAiVideoInfo(
+        productName: selectedProduct.name,
+        productDescription: selectedProduct.description ?? '',
+        productCategory: selectedProduct.category,
+        productTags: selectedProduct.tags?.cast<String>(),
+      );
+
+      if (mounted) {
+        setState(() {
+          _titleController.text = result['title'] ?? '';
+          _descriptionController.text = result['description'] ?? '';
+          _isGeneratingAi = false;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.auto_awesome, color: Colors.white, size: 18),
+                SizedBox(width: 8),
+                Text('AI 生成成功'),
+              ],
+            ),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isGeneratingAi = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('AI 生成失败: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
       }
     }
   }
@@ -280,14 +347,24 @@ final class _AddVideoPageState extends ConsumerState<AddVideoPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildSectionTitle('基本信息'),
+              // 关联商品
+              _buildSectionTitle('关联商品'),
+              const SizedBox(height: 16),
+              _buildProductSelector(),
+              const SizedBox(height: 24),
+
+              // 基本信息
+              _buildSectionTitle(
+                '基本信息',
+                trailing: _buildAiGenerateButton(),
+              ),
               const SizedBox(height: 16),
               _buildTitleField(),
               const SizedBox(height: 16),
               _buildDescriptionField(),
               const SizedBox(height: 24),
 
-              // 作者信息（只读显示）
+              // 作者信息
               _buildSectionTitle('作者信息'),
               const SizedBox(height: 16),
               _buildAuthorInfoCard(),
@@ -309,11 +386,6 @@ final class _AddVideoPageState extends ConsumerState<AddVideoPage> {
               _buildTagsField(),
               const SizedBox(height: 24),
 
-              _buildSectionTitle('关联商品'),
-              const SizedBox(height: 16),
-              _buildProductSelector(),
-              const SizedBox(height: 32),
-
               _buildSubmitButton(),
               const SizedBox(height: 32),
             ],
@@ -325,13 +397,58 @@ final class _AddVideoPageState extends ConsumerState<AddVideoPage> {
 
   // ========== UI 组件 ==========
 
-  Widget _buildSectionTitle(String title) {
-    return Text(
-      title,
-      style: const TextStyle(
-        fontSize: 16,
-        fontWeight: FontWeight.w600,
-        color: AppColors.textPrimary,
+  Widget _buildSectionTitle(String title, {Widget? trailing}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        if (trailing != null) trailing,
+      ],
+    );
+  }
+
+  Widget _buildAiGenerateButton() {
+    return TextButton.icon(
+      onPressed: _isGeneratingAi || _selectedProductIds.isEmpty
+          ? null
+          : _generateAiVideoInfo,
+      icon: _isGeneratingAi
+          ? const SizedBox(
+        width: 16,
+        height: 16,
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          color: AppColors.primary,
+        ),
+      )
+          : const Icon(Icons.auto_awesome, size: 16),
+      label: Text(
+        _isGeneratingAi ? '生成中...' : 'AI 生成',
+        style: TextStyle(
+          fontSize: 13,
+          color: _isGeneratingAi || _selectedProductIds.isEmpty
+              ? AppColors.textHint
+              : AppColors.primary,
+        ),
+      ),
+      style: TextButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        backgroundColor: AppColors.primary.withValues(alpha: 0.1),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(
+            color: _isGeneratingAi || _selectedProductIds.isEmpty
+                ? AppColors.divider
+                : AppColors.primary.withValues(alpha: 0.3),
+          ),
+        ),
       ),
     );
   }

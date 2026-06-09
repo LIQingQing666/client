@@ -2,6 +2,48 @@ import crypto from 'node:crypto';
 import { FastifyInstance, FastifyRequest } from 'fastify';
 import { getDb } from '../db/schema.js';
 import { requireMerchant } from '../middleware/auth.js';
+import * as dotenv from 'dotenv';
+dotenv.config();
+
+async function generateByAI(
+  name: string,
+  description: string,
+  category: string,
+  tags: string[]
+): Promise<string> {
+  const tagStr = tags.length > 0 ? tags.slice(0, 5).join('、') : '';
+
+  const prompt = `商品：${name}
+类目：${category}
+描述：${description}
+标签：${tagStr}
+
+请为这个商品写一条吸引人的卖点文案（30-60字），突出核心优势。`;
+
+  const response = await fetch('https://api.deepseek.com/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: 'deepseek-chat',
+      messages: [
+        { role: 'system', content: '你是专业电商文案，写简短有吸引力的卖点。' },
+        { role: 'user', content: prompt },
+      ],
+      max_tokens: 150,
+      temperature: 0.8,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`AI API 返回错误: ${response.status}`);
+  }
+
+  const data = await response.json() as any;
+  return data.choices[0].message.content.trim();
+}
 
 interface ProductCreateBody {
   name?: unknown;
@@ -531,12 +573,22 @@ export async function productRoutes(app: FastifyInstance) {
         return;
       }
 
+      // ==== 新增：尝试 AI 生成 ====
+      try {
+        console.log('🤖 正在调用 AI 生成卖点...');
+        const aiResult = await generateByAI(name, description, category, tags);
+        console.log('✅ AI 生成成功:', aiResult);
+        return { code: 0, data: { sales_point: aiResult } };
+      } catch (error) {
+        console.log('⚠️ AI 调用失败，使用模板降级:', error.message);
+      }
+      // ==== 新增结束 ====
+
+      // 降级：原来的模板代码（不动）
       const tagPhrase = tags.length > 0 ? `${tags.slice(0, 3).join(' / ')}` : '';
       const categoryPhrase = category ? `【${category}】` : '';
       const descSentence = description ? `${description}，` : '';
 
-      // Deterministic templates seeded by name length to look "AI-flavored" without
-      // calling out — keeps the demo offline and reproducible.
       const templates = [
         `${categoryPhrase}${name} · ${descSentence}匠心打磨，品质细节经得起放大镜审视${tagPhrase ? `，${tagPhrase}` : ''}。`,
         `${categoryPhrase}${name}：${descSentence}用过的都说真香，限时入手价更友好${tagPhrase ? `（${tagPhrase}）` : ''}。`,

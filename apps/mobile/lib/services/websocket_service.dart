@@ -26,18 +26,32 @@ final class WebSocketService {
   WebSocketState _state = WebSocketState.disconnected;
   WebSocketState get state => _state;
 
+  Stream<Map<String, dynamic>> get liveControlStream =>
+      _eventController.stream.where((event) {
+        final eventName = event['event'] as String? ?? '';
+        return eventName == 'live_ended' ||
+            eventName == 'room_disabled' ||
+            eventName == 'live_status' ||
+            eventName == 'live_started' ||
+            eventName == 'force_leave';
+      });
+
   void _setState(WebSocketState newState) {
     _state = newState;
     _stateController.add(newState);
   }
 
+  Completer<void>? _connectCompleter;
   Future<void> connect(String namespace) async {
     if (_state == WebSocketState.connected ||
         _state == WebSocketState.connecting) {
+      await _connectCompleter?.future;
       return;
     }
 
     _setState(WebSocketState.connecting);
+
+    _connectCompleter = Completer<void>();
 
     final token = _storage.token;
     _socket = io.io(
@@ -46,8 +60,8 @@ final class WebSocketService {
           .setTransports(['websocket'])
           .enableForceNew()
           .setAuth(<String, String>{
-            if (token != null) 'token': token,
-          })
+        if (token != null) 'token': token,
+      })
           .setPath('/socket.io')
           .build(),
     );
@@ -57,6 +71,10 @@ final class WebSocketService {
         _reconnectAttempts = 0;
         _setState(WebSocketState.connected);
         _socket!.emit('join', {'namespace': namespace});
+
+        if (!_connectCompleter!.isCompleted) {
+          _connectCompleter!.complete();
+        }
       })
       ..onDisconnect((_) {
         _setState(WebSocketState.disconnected);
@@ -64,6 +82,11 @@ final class WebSocketService {
       })
       ..onConnectError((err) {
         _setState(WebSocketState.disconnected);
+
+        if (!_connectCompleter!.isCompleted) {
+          _connectCompleter!.completeError(err);
+        }
+
         _scheduleReconnect(namespace);
       })
       ..onError((err) {
@@ -72,6 +95,19 @@ final class WebSocketService {
       ..onAny(_processEvent);
 
     _socket!.connect();
+
+    try {
+      await _connectCompleter!.future.timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          debugPrint('[WS] ⚠️ 连接超时');
+          throw TimeoutException('WebSocket 连接超时');
+        },
+      );
+    } catch (e) {
+      debugPrint('[WS] 连接失败: $e');
+      rethrow;
+    }
   }
 
   void _processEvent(String eventName, dynamic data) {
@@ -139,5 +175,23 @@ final class WebSocketService {
     await disconnect();
     await _stateController.close();
     await _eventController.close();
+  }
+
+  void endLive(String roomId, {Map<String, dynamic>? summary}) {
+    emit('end_live', {
+      'room': roomId,
+      'summary': summary ?? {},
+    });
+  }
+
+  void getLiveStatus(String roomId) {
+    emit('get_live_status', {'room': roomId});
+  }
+
+  void startLive(String roomId, {Map<String, dynamic>? liveInfo}) {
+    emit('start_live', {
+      'room': roomId,
+      'liveInfo': liveInfo ?? {},
+    });
   }
 }

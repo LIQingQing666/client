@@ -1,6 +1,8 @@
 import { FastifyInstance, FastifyRequest } from 'fastify';
 import { getDb } from '../db/schema.js';
 import { requireMerchant } from '../middleware/auth.js';
+import * as dotenv from 'dotenv';
+dotenv.config();
 
 interface PaginationQuery {
   page?: string;
@@ -476,5 +478,83 @@ export async function videoRoutes(app: FastifyInstance) {
     );
     db.prepare('UPDATE videos SET like_count = like_count + 1 WHERE id = ?').run(id);
     return { code: 0, data: { liked: true } };
+  });
+
+  app.post('/api/videos/ai-video-info', async (req, reply) => {
+    try {
+      const { product_name, product_description, product_category, product_tags } = req.body;
+
+      if (!product_name) {
+        reply.status(400).send({ code: 400, message: '商品名称不能为空' });
+        return;
+      }
+
+      const prompt = `基于以下商品信息，生成一个吸引人的短视频标题和描述。
+
+  商品名称：${product_name}
+  商品类目：${product_category}
+  商品描述：${product_description}
+  商品标签：${product_tags?.join('、')}
+
+  要求：
+  - 标题：20字以内，吸引眼球，适合短视频平台
+  - 描述：50-80字，突出卖点，引导购买
+
+  请以JSON格式返回：{"title": "标题", "description": "描述"}`;
+
+      const response = await fetch('https://api.deepseek.com/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: 'deepseek-chat',
+          messages: [
+            { role: 'system', content: '你是短视频内容创作者，擅长写吸引人的标题和描述。' },
+            { role: 'user', content: prompt },
+          ],
+          temperature: 0.8,
+          max_tokens: 200,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`AI API 错误: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const content = data.choices[0].message.content;
+
+      // 解析 AI 返回的 JSON
+      let result;
+      try {
+        result = JSON.parse(content);
+      } catch {
+        // 如果不是标准 JSON，尝试提取
+        const titleMatch = content.match(/标题[：:]\s*["']?(.+?)["']?[\n,]/);
+        const descMatch = content.match(/描述[：:]\s*["']?(.+?)["']?$/);
+        result = {
+          title: titleMatch?.[1] || `${product_name}，真的好用`,
+          description: descMatch?.[1] || `${product_name}，${product_description?.slice(0, 50)}...`,
+        };
+      }
+
+      return { code: 0, data: result };
+
+    } catch (error) {
+      // 降级方案
+      const fallbackTitle = `${req.body.product_name} | 限时优惠，速来抢购`;
+      const fallbackDesc = `${req.body.product_name}，${req.body.product_description?.slice(0, 50) || '品质之选'}。错过今天等一年！`;
+
+      return {
+        code: 0,
+        data: {
+          title: fallbackTitle,
+          description: fallbackDesc,
+          fallback: true
+        }
+      };
+    }
   });
 }

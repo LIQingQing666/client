@@ -20,7 +20,11 @@ final class FollowState {
 }
 
 final class FollowNotifier extends StateNotifier<FollowState> {
-  FollowNotifier({required this.client, required this.storage}) : super(const FollowState());
+  FollowNotifier({required this.client, required this.storage}) : super(const FollowState()) {
+    // Load the real follow list from the server on startup so the UI
+    // shows correct "已关注" / "关注" state immediately.
+    Future.microtask(() => loadFollowing());
+  }
 
   final DioClient client;
   final StorageService storage;
