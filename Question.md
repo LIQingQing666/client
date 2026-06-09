@@ -97,3 +97,92 @@ Widget build(BuildContext context) {
 3. `live_provider.dart` — 可考虑批量更新或 debounce 机制减少高频通知
 
 **购物链路的代码（登录、充值、订单、支付）在 debug 模式下单独运行不会有卡顿问题。**
+
+---
+
+## 附：全项目架构示意图
+
+> 模仿购物支付链路技术方案中的架构图风格，覆盖 Mobile 端和 Server 端所有模块。
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│                     Mobile 端 (Flutter)                                │
+│                                                                        │
+│  用户层 (Pages)            状态管理层 (Providers)         网络层 (APIs)   │
+│  ┌──────────────────┐    ┌────────────────────┐    ┌──────────────┐   │
+│  │  Auth / 登录注册   │    │ authProvider         │    │ AuthApi      │   │
+│  │  LoginPage        │───▶│ (用户身份/Token)      │───▶│              │   │
+│  ├──────────────────┤    ├────────────────────┤    ├──────────────┤   │
+│  │  内容流浏览         │    │ feedProvider         │    │ FeedApi      │   │
+│  │  FeedPage         │───▶│ (视频流/推荐列表)      │───▶│              │   │
+│  │  VideoDetailPage  │    │                     │    │              │   │
+│  ├──────────────────┤    ├────────────────────┤    ├──────────────┤   │
+│  │  直播模块           │    │ liveProvider         │    │ LiveApi      │   │
+│  │  LiveRoomPage     │───▶│ (弹幕/在线人数/商品卡)  │───▶│              │   │
+│  │  DanmakuOverlay   │    │                     │    │              │   │
+│  ├──────────────────┤    ├────────────────────┤    ├──────────────┤   │
+│  │  购物链路 ★        │    │ ★ 购物链路 Providers  │    │ ★ 购物链路 APIs│   │
+│  │  CartPage         │───▶│ CartProvider         │───▶│ CartApi       │   │
+│  │  OrderConfirmPage │    │ OrderNotifier        │    │ OrderApi      │   │
+│  │  PaymentDetailPage│    │ UserNotifier         │    │ RechargeApi   │   │
+│  │  PaymentResultPage│    │ 优惠券 ×4 Providers  │    │              │   │
+│  │  OrderPage        │    └────────────────────┘    └──────┬───────┘   │
+│  │  OrderDetailPage  │                                      │           │
+│  │  RefundReasonPage │                                      │           │
+│  │  RefundSuccessPage│                                      │           │
+│  ├──────────────────┤                                      │ HTTP      │
+│  │  充值 + 客服       │                                      │           │
+│  │  CoinRechargePage │───▶ (状态由 UserNotifier 管理)      │           │
+│  │  RechargeResultPage│                                    │           │
+│  │  CustomerServicePg│───▶ CsProvider → CsApi            │           │
+│  └──────────────────┘                                      │           │
+│                                                            │           │
+│                WebSocket (Socket.IO) ◀──── 实时通信 ───▶   │           │
+└────────────────────────────────────────────────────────────┼───────────┘
+                                                             │
+                                                             │
+┌────────────────────────────────────────────────────────────┼───────────┐
+│                     Server 端 (Node.js + Fastify)            │           │
+│                                                              │           │
+│  Routes 层                  Services 层          Database 层 │           │
+│  ┌────────────────┐    ┌─────────────────┐    ┌──────────┐  │           │
+│  │ auth.ts         │    │ authService      │    │          │  │           │
+│  │ (登录/注册/TK刷新) │───▶│ (JWT签发/验证)     │───▶│          │  │           │
+│  ├────────────────┤    ├─────────────────┤    │  SQLite  │  │           │
+│  │ feed.ts         │    │ recommendService  │    │          │  │◀──────────┘
+│  │ (视频推荐流)      │───▶│ (推荐算法逻辑)      │───▶│ commerce  │
+│  ├────────────────┤    ├─────────────────┤    │  .db     │
+│  │ ★ orders.ts     │    │ ★ 自定义服务       │    │          │
+│  │   recharge.ts   │───▶│   langchain_cs   │    │          │
+│  │   cart.ts       │    │   vector_store   │    │          │
+│  │   customer_svc  │    │   product_docs   │    │          │
+│  │   users.ts      │    └─────────────────┘    └──────────┘
+│  ├────────────────┤
+│  │ live.ts (直播)   │───▶ WebSocket 推送       ┌─────────┐
+│  │ (WS处理/弹幕/人数)│     (无需数据库)          │ Redis   │
+│  └────────────────┘                            │(预留缓存)│
+│                                                └─────────┘
+│  Middleware:
+│    auth.ts → 身份验证 (注册/登录/支付/下单等接口)
+│    error.ts → 统一异常捕获
+└────────────────────────────────────────────────────────────────
+```
+
+### 模块说明
+
+| 模块 | 负责人 | Mobile 页数 | Server 路由数 | 数据库表 |
+|------|--------|-----------|-------------|---------|
+| **★ 购物支付链路** | 赵鹏 | 10 页 | 5 个 | 6 张 (orders/cart/coupons/user_coupons/recharge/users) |
+| 内容流浏览 | 多人 | 2 页 | 1 个 | 1 张 (videos) |
+| 直播互动 | 多人 | 2 页 | 1 个 (WS) | 无 (全内存) |
+| 智能客服 | 赵鹏 | 1 页 | 2 个 | 1 张 (messages) |
+| 认证 | 基础层 | 1 页 | 1 个 | 1 张 (users) |
+
+### 数据流向
+
+```
+浏览内容流 ──▶ 点击商品卡 ──▶ 加购/领券 ──▶ 提交订单 ──▶ 支付 ──▶ 确认收货
+     │              │              │             │          │
+     ▼              ▼              ▼             ▼          ▼
+  Feed模块     商品卡组件      购物车模块      订单模块     支付模块
+  (别人负责)   (共用组件)      (购物链路)     (购物链路)   (购物链路)
