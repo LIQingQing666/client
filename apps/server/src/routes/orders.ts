@@ -18,9 +18,10 @@ export async function orderRoutes(app: FastifyInstance) {
     quantity?: number;
     spec?: string;
     address?: Record<string, string>;
+    coupon_id?: string;
   } }>) => {
     const db = getDb();
-    const { user_id, product_id, quantity = 1, spec = '', address = {} } = req.body;
+    const { user_id, product_id, quantity = 1, spec = '', address = {}, coupon_id } = req.body;
 
     if (!product_id) {
       return { code: 400, message: '商品 ID 不能为空' };
@@ -40,8 +41,21 @@ export async function orderRoutes(app: FastifyInstance) {
 
     // 计算金额
     const totalAmount = (product.price as number) * quantity;
-    const discountAmount = 0;
-    const payAmount = totalAmount;
+
+    // 应用优惠券
+    let discountAmount = 0;
+    if (coupon_id) {
+      const coupon = db.prepare(
+        'SELECT * FROM coupons WHERE id = ? AND status = ?'
+      ).get(coupon_id, 'active') as Record<string, unknown> | undefined;
+
+      if (coupon && totalAmount >= (coupon.min_order as number)) {
+        discountAmount = coupon.amount as number;
+        db.prepare('UPDATE coupons SET used_count = used_count + 1 WHERE id = ?').run(coupon_id);
+      }
+    }
+
+    const payAmount = Math.max(0, totalAmount - discountAmount);
 
     const orderItems = [{
       product_id: product.id,
@@ -93,9 +107,10 @@ export async function orderRoutes(app: FastifyInstance) {
   // POST /api/orders - 创建订单（从购物车结算）
   app.post('/api/orders', async (req: FastifyRequest<{ Body: {
     user_id: string;
-    items: Array<{ product_id: string; spec?: string; quantity: number; cart_item_id?: string }>;
+    items: Array<{ product_id: string; spec?: string; quantity: number; cart_item_id?: string; coupon_discount?: number }>;
     address?: Record<string, string>;
     coupon_id?: string;
+    pay_amount?: number;
   } }>) => {
     const db = getDb();
     const { user_id, items, address = {}, coupon_id } = req.body;
@@ -131,6 +146,7 @@ export async function orderRoutes(app: FastifyInstance) {
         spec: item.spec ?? '',
         quantity: item.quantity,
         subtotal,
+        coupon_discount: item.coupon_discount ?? 0,
       });
 
       // Deduct stock
@@ -139,9 +155,14 @@ export async function orderRoutes(app: FastifyInstance) {
       );
     }
 
-    // Apply coupon
+    // 优先使用客户端传入的实付金额（含优惠券计算），否则走服务端优惠券逻辑
     let discountAmount = 0;
-    if (coupon_id) {
+    let payAmount: number;
+
+    if (req.body.pay_amount !== undefined && typeof req.body.pay_amount === 'number') {
+      payAmount = req.body.pay_amount;
+      discountAmount = Math.max(0, totalAmount - payAmount);
+    } else if (coupon_id) {
       const coupon = db.prepare(
         'SELECT * FROM coupons WHERE id = ? AND status = ?'
       ).get(coupon_id, 'active') as Record<string, unknown> | undefined;
@@ -150,9 +171,10 @@ export async function orderRoutes(app: FastifyInstance) {
         discountAmount = coupon.amount as number;
         db.prepare('UPDATE coupons SET used_count = used_count + 1 WHERE id = ?').run(coupon_id);
       }
+      payAmount = Math.max(0, totalAmount - discountAmount);
+    } else {
+      payAmount = totalAmount;
     }
-
-    const payAmount = Math.max(0, totalAmount - discountAmount);
     const orderId = crypto.randomUUID();
 
     const insertOrder = db.prepare(
@@ -345,10 +367,28 @@ export async function orderRoutes(app: FastifyInstance) {
     const totalAmount = order.total_amount as number;
     const payAmount = order.pay_amount as number;
 
-    // 按比例计算该商品实付金额： refundAmount = (商品单价 * 数量) * (payAmount / totalAmount)
+    // 退款公式（区分商品券和满减券）：
+    // ① 商品券后价格 = 原价×数量 - 商品券折扣（商品独立优惠，全额退回）
+    const itemCouponDiscount = (targetItem.coupon_discount as number) ?? 0;
     const itemSubtotal = productPrice * quantity;
-    const ratio = totalAmount > 0 ? payAmount / totalAmount : 1;
-    const refundAmount = Math.round(itemSubtotal * ratio * 100) / 100;
+    const itemAfterProductCoupon = itemSubtotal - itemCouponDiscount;
+
+    // ② 满减券按各商品券后价比例分摊
+    // 满减总面额 = 商品总额 - 实付金额 - 所有商品券折扣之和
+    const totalProductCouponDiscount = items.reduce(
+      (sum, it) => sum + ((it.coupon_discount as number) ?? 0), 0
+    );
+    const fullReductionAmount = totalAmount - payAmount - totalProductCouponDiscount;
+
+    // 该商品券后价 / 所有商品券后总价 → 满减分摊比例
+    const totalAfterProductCoupon = totalAmount - totalProductCouponDiscount;
+    const fullReductionRatio = totalAfterProductCoupon > 0
+      ? itemAfterProductCoupon / totalAfterProductCoupon
+      : 0;
+    const itemFullReductionShare = fullReductionAmount * fullReductionRatio;
+
+    // ③ 退款 = 商品券后价 - 该商品承担的满减
+    const refundAmount = Math.round((itemAfterProductCoupon - itemFullReductionShare) * 100) / 100;
 
     // 注意：不修改订单 status，订单保持 'completed' 状态不变
     // 退款仅通过 refund_records 表记录

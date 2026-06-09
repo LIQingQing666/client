@@ -140,6 +140,8 @@ final class OrderNotifier extends StateNotifier<OrderState> {
     required List<CartItemModel> items,
     OrderAddress? address,
     String? couponId,
+    double? payAmount,
+    Map<String, double>? itemDiscounts,
   }) async {
     try {
       final result = await api.createOrder(
@@ -147,6 +149,8 @@ final class OrderNotifier extends StateNotifier<OrderState> {
         items: items,
         address: address,
         couponId: couponId,
+        payAmount: payAmount,
+        itemDiscounts: itemDiscounts,
       );
       return result;
     } on ApiException catch (e) {

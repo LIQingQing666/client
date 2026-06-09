@@ -48,6 +48,8 @@ final class OrderApi {
     required List<CartItemModel> items,
     OrderAddress? address,
     String? couponId,
+    double? payAmount,
+    Map<String, double>? itemDiscounts,
   }) async {
     final response = await client.post<Map<String, dynamic>>(
       '/orders',
@@ -58,9 +60,12 @@ final class OrderApi {
           'spec': item.spec,
           'quantity': item.quantity,
           'cart_item_id': item.id,
+          if (itemDiscounts != null && itemDiscounts.containsKey(item.id))
+            'coupon_discount': itemDiscounts[item.id],
         }).toList(),
         'address': address?.toJson() ?? {},
         if (couponId != null) 'coupon_id': couponId,
+        if (payAmount != null) 'pay_amount': payAmount,
       },
     );
     final data = response.data!['data'] as Map<String, dynamic>;
