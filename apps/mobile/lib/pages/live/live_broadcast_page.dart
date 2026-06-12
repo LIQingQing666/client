@@ -188,13 +188,11 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
   void _addSimulatedMessage() {
     final names = ['观众A', '粉丝B', '路人C', '买家D', '新粉E'];
     final contents = ['这个多少钱？', '好看！', '已下单', '支持主播', '质量怎么样？', '有优惠吗？'];
-    _messages.insert(0, LiveMessage(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      userName: names[DateTime.now().millisecond % names.length],
-      content: contents[DateTime.now().millisecond % contents.length],
-      type: 'user',
-    ));
-    if (_messages.length > 50) _messages.removeRange(50, _messages.length);
+    final userName = names[DateTime.now().millisecond % names.length];
+    final content = contents[DateTime.now().millisecond % contents.length];
+    // Use the notifier's simulateMessage which properly creates a new
+    // immutable state — instead of mutating the list in place via ref.watch.
+    ref.read(liveProvider.notifier).simulateMessage(userName, content);
   }
 
   Future<void> _switchProduct(ProductModel product) async {
