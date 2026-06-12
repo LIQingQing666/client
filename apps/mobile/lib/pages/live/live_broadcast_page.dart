@@ -50,6 +50,7 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initVideoPlayer();
       ref.read(liveProvider.notifier).enterRoom(_room.id);
+      ref.read(liveProvider.notifier).checkLiveStatus();
     });
   }
 
@@ -180,19 +181,8 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
     _likeTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       if (mounted) {
         setState(() => _likeCount += (1 + (DateTime.now().millisecond % 10)));
-        if (DateTime.now().millisecond % 3 == 0) _addSimulatedMessage();
       }
     });
-  }
-
-  void _addSimulatedMessage() {
-    final names = ['观众A', '粉丝B', '路人C', '买家D', '新粉E'];
-    final contents = ['这个多少钱？', '好看！', '已下单', '支持主播', '质量怎么样？', '有优惠吗？'];
-    final userName = names[DateTime.now().millisecond % names.length];
-    final content = contents[DateTime.now().millisecond % contents.length];
-    // Use the notifier's simulateMessage which properly creates a new
-    // immutable state — instead of mutating the list in place via ref.watch.
-    ref.read(liveProvider.notifier).simulateMessage(userName, content);
   }
 
   Future<void> _switchProduct(ProductModel product) async {
@@ -258,11 +248,17 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
 
     if (confirm == true && mounted) {
       try {
+        // 1. 调用 API 结束直播
         final api = LiveApi(client: ref.read(dioClientProvider));
         await api.endLive(_room.id);
 
+        // 2. 通知服务器直播已结束（让观众知道）
+        ref.read(liveProvider.notifier).endLive();
+
+        // 3. 离开 WebSocket 房间
         ref.read(liveProvider.notifier).leaveRoom();
 
+        // 4. 返回上一页
         if (mounted) {
           Navigator.pop(context);
         }
@@ -276,6 +272,10 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
     }
   }
 
+  Future<bool> _onWillPop() async {
+    return true;
+  }
+
   @override
   void dispose() {
     _viewerTimer?.cancel();
@@ -283,11 +283,6 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
     _videoController?.pause();
     _videoController?.dispose();
     _videoController = null;
-    try {
-      ref.read(liveProvider.notifier).leaveRoom();
-    } catch (_) {
-      // widget 已销毁，忽略
-    }
     super.dispose();
   }
 
@@ -295,10 +290,9 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
   Widget build(BuildContext context) {
     final state = ref.watch(liveProvider);
 
-    return WillPopScope(
-      onWillPop: () async {
-        await _endLive();
-        return false;
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, _) {
       },
       child: Scaffold(
         backgroundColor: Colors.black,

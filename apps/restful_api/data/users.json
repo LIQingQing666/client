@@ -1,1 +1,0 @@
-[{"userId":"u1","username":"alice","password":"123456","nickname":"Alice","avatar":"https://example.com/avatars/alice.png","token":"token-u1-abc123"},{"userId":"u2","username":"bob","password":"123456","nickname":"Bob","avatar":"https://example.com/avatars/bob.png","token":"token-u2-def456"}]

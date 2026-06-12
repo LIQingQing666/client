@@ -9,7 +9,7 @@ import '../models/product_model.dart';
 import '../models/video_model.dart';
 import '../services/player_pool.dart';
 import '../utils/toast.dart';
-import 'floating_product_card.dart';
+import 'product_floating_card.dart';
 
 final class VideoPlayerWidget extends StatefulWidget {
   const VideoPlayerWidget({
@@ -329,10 +329,18 @@ final class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
 
           // Floating product card (TikTok-style overlay)
           if (widget.product != null)
-            FloatingProductCard(
-              product: widget.product!,
-              onTap: widget.onProductTap ?? () {},
-              disableAutoFade: true,
+            Positioned(
+              left: AppDimens.paddingLg,
+              right: 80,
+              bottom: 200,
+              child: ProductFloatingCard(
+                product: widget.product!,
+                layout: ProductCardLayout.horizontal,
+                autoFade: false,
+                delay: Duration.zero,
+                backgroundColor: Colors.black.withValues(alpha: 0.85),
+                onTap: widget.onProductTap ?? () {},
+              ),
             ),
 
           // Progress bar

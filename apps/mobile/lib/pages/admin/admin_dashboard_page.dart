@@ -134,20 +134,6 @@ final class _DashboardTab extends ConsumerWidget {
           onTap: () => context.pushNamed('playVideo', pathParameters: {'videoId': v.id}),
         )),
         const SizedBox(height: AppDimens.paddingLg),
-        GestureDetector(
-          onTap: () => context.pushNamed('categoryAnalysis'),
-          child: const _SectionTitle(title: '品类分布'),
-        ),
-        const SizedBox(height: AppDimens.paddingSm),
-        ...data.categories.map((c) => _CategoryRow(
-          stat: c,
-          onProductTap: () => context.pushNamed('categoryProducts',
-            pathParameters: {'category': c.category},
-          ),
-          onSalesTap: () => context.pushNamed('categorySales',
-            pathParameters: {'category': c.category},
-          ),
-        )),
       ],
     );
   }
@@ -2020,80 +2006,38 @@ final class _VideoGmvRow extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-      margin: const EdgeInsets.only(bottom: AppDimens.paddingSm),
-      padding: const EdgeInsets.all(AppDimens.paddingMd),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(AppDimens.radiusMd),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        margin: const EdgeInsets.only(bottom: AppDimens.paddingSm),
+        padding: const EdgeInsets.all(AppDimens.paddingMd),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(item.title,
+                      style: AppTextStyles.bodyMedium,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 2),
+                  Text(item.authorName, style: AppTextStyles.bodySmall),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(item.title,
-                    style: AppTextStyles.bodyMedium,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 2),
-                Text(item.authorName, style: AppTextStyles.bodySmall),
+                Text('¥${item.gmv.toStringAsFixed(0)}',
+                    style: AppTextStyles.priceSmall),
+                Text('播放${item.playCount} | 售${item.productSales}',
+                    style: AppTextStyles.bodySmall),
               ],
             ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text('¥${item.gmv.toStringAsFixed(0)}',
-                  style: AppTextStyles.priceSmall),
-              Text('播放${item.playCount} | 售${item.productSales}',
-                  style: AppTextStyles.bodySmall),
-            ],
-          ),
-        ],
-      ),
-    ),
-    );
-  }
-}
-
-final class _CategoryRow extends StatelessWidget {
-  const _CategoryRow({required this.stat, this.onProductTap, this.onSalesTap});
-
-  final CategoryStat stat;
-  final VoidCallback? onProductTap;
-  final VoidCallback? onSalesTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: AppDimens.paddingSm),
-      padding: const EdgeInsets.all(AppDimens.paddingMd),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(AppDimens.radiusMd),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(stat.category, style: AppTextStyles.bodyMedium),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              GestureDetector(
-                onTap: onProductTap,
-                child: Text('${stat.count}件商品',
-                    style: AppTextStyles.bodySmall),
-              ),
-              const Text(' | ', style: AppTextStyles.bodySmall),
-              GestureDetector(
-                onTap: onSalesTap,
-                child: Text('售${stat.totalSales}',
-                    style: AppTextStyles.bodySmall),
-              ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

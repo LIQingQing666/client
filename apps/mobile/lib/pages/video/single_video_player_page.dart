@@ -16,7 +16,7 @@ import '../../provider/favorite_provider.dart';
 import '../../provider/feed_provider.dart';
 import '../../provider/follow_provider.dart';
 import '../../utils/toast.dart';
-import '../../widgets/floating_product_card.dart';
+import '../../widgets/product_floating_card.dart';
 import '../../widgets/product_detail_sheet.dart';
 
 final class SingleVideoPlayerPage extends ConsumerStatefulWidget {
@@ -331,9 +331,16 @@ final class _SingleVideoPlayerPageState
           // Product card
           if (_product != null)
             Positioned(
-              left: AppDimens.paddingLg, bottom: bottomInset + 180,
-              child: FloatingProductCard(
-                product: _product!, onTap: _showProductDetail, disableAutoFade: true,
+              left: AppDimens.paddingLg,
+              right: 80,
+              bottom: bottomInset + 10,
+              child: ProductFloatingCard(
+                product: _product!,
+                layout: ProductCardLayout.horizontal,
+                autoFade: false,
+                delay: Duration.zero,
+                backgroundColor: Colors.black.withValues(alpha: 0.85),
+                onTap: _showProductDetail,
               ),
             ),
         ],

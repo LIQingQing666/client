@@ -8,6 +8,7 @@ import '../../core/app_constants.dart';
 import '../../models/cart_model.dart';
 import '../../models/order_model.dart';
 import '../../provider/cart_provider.dart';
+import '../../provider/coupon_provider.dart';
 import '../../provider/order_provider.dart';
 import '../../utils/toast.dart';
 
@@ -131,10 +132,25 @@ final class _OrderConfirmPageState extends ConsumerState<OrderConfirmPage> {
         ),
       );
     } else {
-      // 购物车结算：走原流程
+      // 购物车结算：计算每个购物车项的商品券折扣
+      final itemCoupons = ref.read(selectedCartItemCouponsProvider);
+      final itemDiscounts = <String, double>{};
+      for (final item in items) {
+        final coupon = itemCoupons[item.id];
+        if (coupon != null) {
+          final itemTotal = item.productPrice * item.quantity;
+          itemDiscounts[item.id] = itemTotal - coupon.getPriceAfterDiscount(itemTotal);
+        } else {
+          itemDiscounts[item.id] = 0;
+        }
+      }
+
       result = await ref.read(orderProvider.notifier).createOrder(
         items: items,
         address: address,
+        couponId: widget.couponIds.isNotEmpty ? widget.couponIds : null,
+        payAmount: widget.payAmount ?? (widget.total - widget.couponDiscount),
+        itemDiscounts: itemDiscounts,
       );
     }
 

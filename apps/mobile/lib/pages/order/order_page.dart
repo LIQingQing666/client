@@ -286,37 +286,46 @@ final class _OrderCard extends ConsumerWidget {
                                               ),
                                             ),
                                           )
-                                        : GestureDetector(
-                                            onTap: () {
-                                              context.pushNamed(
-                                                'refundReason',
-                                                queryParameters: {
-                                                  'order_id': order.id,
-                                                  'product_id': item.productId,
-                                                  'product_name': item.productName,
-                                                  'product_cover': item.productCover,
-                                                  'amount': order.payAmount.toString(),
+                                        : Builder(
+                                            builder: (ctx) {
+                                              // 按比例计算该商品实付金额（与服务端退款计算公式一致）
+                                              final ratio = order.totalAmount > 0
+                                                  ? order.payAmount / order.totalAmount
+                                                  : 1.0;
+                                              final itemPayAmount = (item.subtotal * ratio * 100).round() / 100;
+                                              return GestureDetector(
+                                                onTap: () {
+                                                  context.pushNamed(
+                                                    'refundReason',
+                                                    queryParameters: {
+                                                      'order_id': order.id,
+                                                      'product_id': item.productId,
+                                                      'product_name': item.productName,
+                                                      'product_cover': item.productCover,
+                                                      'amount': itemPayAmount.toString(),
+                                                    },
+                                                  );
                                                 },
+                                                child: Container(
+                                                  padding: const EdgeInsets.symmetric(
+                                                    horizontal: 10,
+                                                    vertical: 3,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    border: Border.all(color: AppColors.error.withOpacity(0.6)),
+                                                    borderRadius: BorderRadius.circular(12),
+                                                  ),
+                                                  child: const Text(
+                                                    '退货/退款',
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      color: AppColors.error,
+                                                      fontWeight: FontWeight.w500,
+                                                    ),
+                                                  ),
+                                                ),
                                               );
                                             },
-                                            child: Container(
-                                              padding: const EdgeInsets.symmetric(
-                                                horizontal: 10,
-                                                vertical: 3,
-                                              ),
-                                              decoration: BoxDecoration(
-                                                border: Border.all(color: AppColors.error.withOpacity(0.6)),
-                                                borderRadius: BorderRadius.circular(12),
-                                              ),
-                                              child: Text(
-                                                '退货/退款',
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: AppColors.error,
-                                                  fontWeight: FontWeight.w500,
-                                                ),
-                                              ),
-                                            ),
                                           ),
                                   ),
                               ],
