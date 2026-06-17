@@ -418,6 +418,20 @@ final class LiveNotifier extends StateNotifier<LiveState> {
     });
   }
 
+  /// Adds a simulated audience message (for the broadcaster demo view).
+  /// Does NOT emit to WebSocket — this is purely a local UI insert.
+  void simulateMessage(String userName, String content) {
+    _addMessage(
+      LiveMessage(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        userName: userName,
+        content: content,
+        type: 'user',
+        timestamp: DateTime.now().toIso8601String(),
+      ),
+    );
+  }
+
   void endLive() {
     if (state.room == null) return;
 

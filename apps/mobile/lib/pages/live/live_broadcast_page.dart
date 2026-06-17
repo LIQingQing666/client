@@ -181,8 +181,19 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
     _likeTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       if (mounted) {
         setState(() => _likeCount += (1 + (DateTime.now().millisecond % 10)));
+        if (DateTime.now().millisecond % 3 == 0) _addSimulatedMessage();
       }
     });
+  }
+
+  void _addSimulatedMessage() {
+    final names = ['观众A', '粉丝B', '路人C', '买家D', '新粉E'];
+    final contents = ['这个多少钱？', '好看！', '已下单', '支持主播', '质量怎么样？', '有优惠吗？'];
+    final userName = names[DateTime.now().millisecond % names.length];
+    final content = contents[DateTime.now().millisecond % contents.length];
+    // Use the notifier's simulateMessage which properly creates a new
+    // immutable state — instead of mutating the list in place via ref.watch.
+    ref.read(liveProvider.notifier).simulateMessage(userName, content);
   }
 
   Future<void> _switchProduct(ProductModel product) async {
