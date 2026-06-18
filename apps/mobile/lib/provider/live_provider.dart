@@ -239,19 +239,16 @@ final class LiveNotifier extends StateNotifier<LiveState> {
               updatedCurrentProduct = products.isNotEmpty ? products.first : null;
             }
           }
-          state = state.copyWith(products: products);
+          state = state.copyWith(products: products, currentProduct: updatedCurrentProduct);
 
         case 'live_ended':
           _handleLiveEnded(event);
-          break;
 
         case 'room_disabled':
           _handleRoomDisabled(event);
-          break;
 
         case 'live_status':
           _handleLiveStatus(event);
-          break;
       }
     } catch (e, stack) {
       debugPrint(stack.toString());
