@@ -54,14 +54,6 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
     });
   }
 
-  List<LiveMessage> get _messages => ref.watch(liveProvider).messages;
-
-  int get _realtimeOnlineCount => ref.watch(liveProvider).onlineCount;
-
-  int get _realtimeLikeCount => ref.watch(liveProvider).likeCount;
-
-  String get _heatCountText => ref.watch(liveProvider).heatCountText;
-
   bool get _isConnected => ref.watch(liveProvider).isConnected;
 
   // 初始化视频播放器
@@ -93,6 +85,7 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
         _videoController!.setLooping(true);
       }
     } catch (e, stackTrace) {
+      debugPrint('视频初始化失败: $e\n$stackTrace');
       if (mounted) {
         setState(() {
           _hasVideoError = true;
@@ -126,10 +119,11 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
         });
       }
     } catch (e) {
+      debugPrint('重新获取房间详情失败: $e');
     }
 
     // 重新初始化播放器
-    _initVideoPlayer();
+    await _initVideoPlayer();
   }
 
   Future<void> _loadProducts() async {
@@ -165,7 +159,7 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
         });
       }
     } catch (e, stackTrace) {
-      debugPrint('加载商品失败: $e');
+      debugPrint('加载商品失败: $e\n$stackTrace');
     }
   }
 
@@ -223,9 +217,9 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
       final script = await api.generateAiLiveScript(
         roomTitle: _room.title,
         productName: product.name,
-        productDescription: product.description ?? '',
+        productDescription: product.description,
         productCategory: product.category,
-        productTags: product.tags?.cast<String>(),
+        productTags: product.tags,
       );
 
       if (mounted) {
@@ -281,10 +275,6 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
         }
       }
     }
-  }
-
-  Future<bool> _onWillPop() async {
-    return true;
   }
 
   @override
@@ -602,75 +592,6 @@ final class _LiveBroadcastPageState extends ConsumerState<LiveBroadcastPage> {
     );
   }
 
-  Widget _buildChatList() {
-    if (_messages.isEmpty) {
-      return Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: const Center(
-          child: Text(
-            '暂无消息',
-            style: TextStyle(color: Colors.white38, fontSize: 12),
-          ),
-        ),
-      );
-    }
-
-    return ListView.builder(
-      reverse: true,
-      itemCount: _messages.length,
-      itemBuilder: (context, index) {
-        final msg = _messages[index];
-        final isSystem = msg.type == 'system';
-        final isProduct = msg.type == 'product';
-        final isGift = msg.type == 'gift';
-
-        Color bgColor;
-        if (isSystem) {
-          bgColor = Colors.orange.withValues(alpha: 0.3);
-        } else if (isProduct) {
-          bgColor = AppColors.primary.withValues(alpha: 0.3);
-        } else if (isGift) {
-          bgColor = Colors.pink.withValues(alpha: 0.3);
-        } else {
-          bgColor = Colors.black54;
-        }
-
-        return Container(
-          margin: const EdgeInsets.only(bottom: 4),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: bgColor,
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: RichText(
-            text: TextSpan(
-              children: [
-                if (!isSystem && !isGift)
-                  TextSpan(
-                    text: '${msg.userName}: ',
-                    style: const TextStyle(
-                      color: Colors.yellow,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                TextSpan(
-                  text: msg.content,
-                  style: TextStyle(
-                    color: (isSystem || isGift) ? Colors.orange : Colors.white,
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   // 底部栏
   Widget _buildBottomBar() {
     final state = ref.watch(liveProvider);
@@ -959,29 +880,6 @@ final class _AiScriptCard extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-final class _AiIcon extends StatelessWidget {
-  const _AiIcon();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 22,
-      height: 22,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-        ),
-        borderRadius: BorderRadius.circular(5),
-      ),
-      child: const Icon(
-        Icons.auto_awesome,
-        color: Colors.white,
-        size: 13,
       ),
     );
   }
